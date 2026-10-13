@@ -9,7 +9,8 @@ const NPC_REUSE = 45;
 
 /* ------------------------------------------------------------------ index */
 function buildQuestIndex() {
-  const Q = { byId: {}, byGiver: {}, byGiverObj: {}, byPrev: {}, itemSrc: {}, goSrc: {}, rewardSrc: {}, support: {}, zoneOf: {} };
+  const Q = { byId: {}, byGiver: {}, byGiverObj: {}, byPrev: {}, itemSrc: {}, goSrc: {}, rewardSrc: {}, vendorSrc: {}, startBy: {}, support: {}, zoneOf: {}, meta: {}, fac: {} };
+  const need = new Set();
   for (const q of G.d.quests) {
     Q.byId[q.id] = q;
     for (const g of q.giver) {
@@ -18,6 +19,8 @@ function buildQuestIndex() {
     }
     if (q.prev > 0) (Q.byPrev[q.prev] = Q.byPrev[q.prev] || []).push(q);
     for (const [it] of q.reward_items.concat(q.choice_items)) (Q.rewardSrc[it] = Q.rewardSrc[it] || []).push(q.id);
+    for (const o of q.objectives) if (o.type === 'Collect') need.add(o.id);
+    if (q.start_item) { need.add(q.start_item); if (!q.giver.length) (Q.startBy[q.start_item] = Q.startBy[q.start_item] || []).push(q); }
   }
   const users = {};
   for (const e in G.d.loot.creatures) { const lid = G.d.loot.creatures[e][6]; if (lid) (users[lid] = users[lid] || []).push(+e); }
@@ -25,7 +28,7 @@ function buildQuestIndex() {
   for (const lid in tabs) {
     const us = users[lid]; if (!us) continue;
     for (const [item, pct, , , quest] of tabs[lid]) {
-      if (!quest) continue;
+      if (!quest && !need.has(item)) continue;           // every drop of an item some quest asks for counts as a source
       const a = Q.itemSrc[item] = Q.itemSrc[item] || [];
       for (const e of us) a.push([e, pct]);
     }
@@ -34,10 +37,21 @@ function buildQuestIndex() {
   if (go) {
     for (const e in go.objects) {
       const lid = go.objects[e][2]; const rows = lid ? go.loot[lid] : null; if (!rows) continue;
-      for (const [item, pct] of rows) (Q.goSrc[item] = Q.goSrc[item] || []).push([+e, pct]);
+      // treasure chests and ore veins are not quest sources (endless loot), small quest objects are
+      const generic = rows.length > 4 || /chest|strongbox|lockbox|footlocker|cache|vein|deposit|coffer/i.test(go.objects[e][0] || '');
+      for (const [item, pct, , , quest] of rows) if (quest || !generic) (Q.goSrc[item] = Q.goSrc[item] || []).push([+e, pct]);
     }
   }
+  const vi = G.d.vendorItems || {};
+  for (const e in vi) for (const [id] of vi[e]) if (need.has(id)) (Q.vendorSrc[id] = Q.vendorSrc[id] || []).push(+e);
   G.q = Q;
+  buildGiverIndex();
+}
+/* every place a quest can be picked up, per map: [{q, x, y, e, obj}] */
+function buildGiverIndex() {
+  const idx = {};
+  for (const q of G.d.quests) for (const s of giverSpawns(q.giver)) (idx[s.map] = idx[s.map] || []).push({ q, s });
+  G.q.giverPts = idx;
 }
 function spawnsOf(entry, mapId) { return (G.spawnMap.get(+entry) || []).filter((s) => s[0] === mapId); }
 function objSpawns(entry) { const o = G.d.objects && G.d.objects.objects[entry]; return o || []; }
@@ -71,35 +85,91 @@ function itemSources(q, id) {
   if (G.q.itemSrc[id] && G.q.itemSrc[id].length) out.push('mob');
   if (G.q.goSrc[id] && G.q.goSrc[id].length) out.push('object');
   if (G.q.rewardSrc[id] && G.q.rewardSrc[id].some((x) => x !== q.id)) out.push('quest');
+  if (G.q.vendorSrc[id] && G.q.vendorSrc[id].length) out.push('vendor');
   return out;
 }
-/* why a quest cannot be automated (null = it can) */
+const OPEN_WORLD = { 0: 1, 1: 1 };
+function npcRank(e) { const h = G.d.hostility.creatures[e]; return h ? h[6] || 0 : 0; }
+function npcMaxLevel(e) { const i = G.mobIdx[e]; return i ? i[3] : 1; }
+/* maps where objective o can be done, and the creatures involved: {maps:Set, mobs:[[entry, pct]], best} */
+function objectiveSources(q, o) {
+  const maps = new Set(); const mobs = [];
+  const addMob = (e, p) => { let any = false; for (const sp of G.spawnMap.get(+e) || []) { maps.add(sp[0]); any = true; } if (any) mobs.push([+e, p]); };
+  const addGo = (e) => { for (const sp of objSpawns(e)) maps.add(sp[0]); };
+  if (o.type === 'Kill' || o.type === 'Use/Interact') { if (o.id < 0) addGo(-o.id); else addMob(o.id, 100); }
+  else if (o.type === 'Collect') {
+    for (const [e, p] of G.q.itemSrc[o.id] || []) addMob(e, p);
+    for (const [e] of G.q.goSrc[o.id] || []) addGo(e);
+    for (const e of G.q.vendorSrc[o.id] || []) for (const sp of G.spawnMap.get(e) || []) maps.add(sp[0]);
+  }
+  return { maps, mobs };
+}
+/* why a quest cannot be automated (null = it can). Also fills G.q.meta[id] = {home, elite, rare} */
+/* quest sorts (negative zone_or_sort) that are not normal leveling quests: battlegrounds, holidays, professions, events */
+const SKIP_SORTS = { '-1': 'epic (raid) quest', '-22': 'holiday quest', '-24': 'profession quest', '-25': 'battleground quest', '-101': 'profession quest', '-121': 'profession quest', '-181': 'profession quest', '-182': 'profession quest', '-201': 'profession quest', '-264': 'profession quest', '-304': 'profession quest', '-324': 'profession quest', '-344': 'legendary quest', '-364': 'Darkmoon Faire quest', '-365': "Ahn'Qiraj war effort", '-366': 'holiday quest', '-367': 'reputation turn-in', '-368': 'world event quest', '-369': 'holiday quest', '-370': 'holiday quest', '-284': 'special event quest' };
+const BG_MAPS = { 30: 1, 489: 1, 529: 1 };
 function questSupport(q) {
   if (q.id in G.q.support) return G.q.support[q.id];
-  let why = null;
-  if (!q.giver.length) why = 'starts from an item';
-  else if (!giverSpawns(q.giver).length) why = 'quest giver not found';
-  else if (!q.turnin.length || !giverSpawns(q.turnin).length) why = 'turn-in not found';
-  else for (const o of q.objectives) {
-    if (o.type === 'Kill' || o.type === 'Use/Interact') {
-      if (o.id < 0) { if (!objSpawns(-o.id).length) { why = 'object to use not found'; break; } }
-      else if (!G.spawnMap.get(o.id)) { why = 'target has no spawns'; break; }
-    } else if (o.type === 'Collect') {
-      if (!itemSources(q, o.id).length) { why = 'item source unknown' + (G.d.go ? '' : ' (run: py build_gamedata.py goquest)'); break; }
-    } else { why = 'needs a spell cast at a place - not automated yet'; break; }
+  let why = null; const meta = { home: null, elite: 0 };
+  if (/^(A )?Donation of /.test(q.title)) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = 'reputation turn-in'); }
+  if (q.zone_or_sort === 3277 || q.zone_or_sort === 3358 || q.zone_or_sort === 2597) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = 'battleground quest'); }
+  if (SKIP_SORTS[q.zone_or_sort]) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = SKIP_SORTS[q.zone_or_sort]); }
+  const open = (list) => list.filter((s) => OPEN_WORLD[s.map]);
+  const givers = giverSpawns(q.giver), turn = giverSpawns(q.turnin);
+  if (!q.giver.length && !(q.start_item && itemSources(q, q.start_item).some((k) => k === 'mob' || k === 'object'))) why = 'starts from an item';
+  else if (q.giver.length && !givers.length) why = 'quest giver not found';
+  else if (q.giver.length && !open(givers).length) why = 'dungeon quest';
+  else if (!q.turnin.length || !turn.length) why = 'turn-in not found';
+  else if (!open(turn).length) why = 'dungeon quest';
+  if (!why) {
+    meta.home = (open(givers)[0] || open(turn)[0]).map;
+    for (const o of q.objectives) {
+      if (o.type !== 'Kill' && o.type !== 'Use/Interact' && o.type !== 'Collect') { why = 'needs a spell cast at a place - not automated yet'; break; }
+      if (o.type === 'Collect' && !itemSources(q, o.id).length) { why = 'item source unknown'; break; }
+      if (o.type === 'Collect' && itemSources(q, o.id).every((k) => k === 'quest' || k === 'start')) continue;
+      const src = objectiveSources(q, o);
+      if (o.type !== 'Collect' && !src.maps.size) { why = o.id < 0 ? 'object to use not found' : 'target has no spawns'; break; }
+      if (o.type === 'Collect' && !src.maps.size) { why = 'item source unknown'; break; }
+      if (![...src.maps].some((m) => OPEN_WORLD[m])) { why = 'dungeon quest'; break; }
+      if (!src.maps.has(meta.home)) { why = 'objectives are on the other continent'; break; }
+      if (src.mobs.length && !(o.type === 'Collect' && (G.q.goSrc[o.id] || G.q.vendorSrc[o.id]))) {
+        // only elite creatures (group quest): remember their level; drops too rare to farm: give up
+        const normal = src.mobs.filter(([e]) => npcRank(e) === 0);
+        if (!normal.length) meta.elite = Math.max(meta.elite, ...src.mobs.map(([e]) => npcMaxLevel(e) + (npcRank(e) >= 2 ? 3 : 0)));
+        if (o.type === 'Collect') { const best = Math.max(...src.mobs.map(([, p]) => p)); if (o.count * 100 / Math.max(0.01, best) > 250) { why = 'drops too rarely'; break; } }
+      }
+    }
   }
-  G.q.support[q.id] = why; return why;
+  G.q.meta[q.id] = meta; G.q.support[q.id] = why; return why;
+}
+function questMeta(q) { if (!(q.id in G.q.meta)) questSupport(q); return G.q.meta[q.id] || {}; }
+/* the quest giver and the turn-in are friendly to this character (not an Alliance quest for a Horde character) */
+function questFactionOk(c, q) {
+  const k = behIndex(c); const cache = G.q.fac[k] = G.q.fac[k] || {};
+  if (q.id in cache) return cache[q.id];
+  const ok = (list) => { if (!list.length) return true; for (const [kind, e] of list) { if (kind !== 'npc') return true; const h = G.d.hostility.creatures[e]; if (!h || h[1][k] === 'F') return true; } return false; };
+  return (cache[q.id] = ok(q.giver) && ok(q.turnin));
 }
 function questAvailable(c, q) {
-  if (c.done[q.id] || c.quests[q.id]) return false;
+  if (c.done[q.id] || c.quests[q.id] || (c.abandoned && c.abandoned[q.id])) return false;
   if (q.races && !(q.races & (1 << (c.race - 1)))) return false;
   if (q.classes && !(q.classes & (1 << (c.cls - 1)))) return false;
   if (c.level < q.min_level) return false;
   if (q.prev > 0 && !c.done[q.prev]) return false;
   if (q.prev < 0 && !c.quests[-q.prev]) return false;
   if (q.exclusive_group > 0) { for (const o of G.d.quests) if (o.exclusive_group === q.exclusive_group && o.id !== q.id && (c.done[o.id] || c.quests[o.id])) return false; }
+  if (!questFactionOk(c, q)) return false;
   return true;
 }
+/* a dropped item that starts a quest: take the quest */
+function itemStartsQuest(c, id) {
+  for (const q of G.q.startBy[id] || []) {
+    if (!questAvailable(c, q) || questSupport(q)) continue;
+    log(itemName(id) + ' starts a quest.'); acceptQuest(c, q); return true;
+  }
+  return false;
+}
+function checkStarterItems(c) { for (const s of c.bags.slice()) if (G.q.startBy[s.id]) itemStartsQuest(c, s.id); }
 function objDone(c, q, i) {
   const o = q.objectives[i]; const a = c.quests[q.id];
   if (o.type === 'Collect') return bagCount(c, o.id) >= o.count;
@@ -107,12 +177,14 @@ function objDone(c, q, i) {
 }
 function questDone(c, q) { if (!c.quests[q.id]) return false; return q.objectives.every((o, i) => objDone(c, q, i)); }
 function availableQuests(c, limit, maxD) {
-  const out = [];
-  for (const q of G.d.quests) {
+  const out = []; const R = maxD || 2000; const seen = new Set();
+  for (const { q, s } of (G.q.giverPts && G.q.giverPts[c.pos.map]) || []) {
+    if (Math.abs(s.x - c.pos.x) > R || Math.abs(s.y - c.pos.y) > R) continue;
     if (q.level < c.level - 6 || q.level > c.level + 4 || q.min_level > c.level) continue;
+    const d = Math.hypot(s.x - c.pos.x, s.y - c.pos.y); if (d > R) continue;
+    if (seen.has(q.id)) { const o = out.find((x) => x.q === q); if (o && d < o.d) { o.d = d; o.s = s; } continue; }
     if (!questAvailable(c, q)) continue;
-    const s = nearestOf(c, giverSpawns(q.giver)); if (!s || s.d > (maxD || 2000)) continue;
-    out.push({ q, d: s.d, s });
+    seen.add(q.id); out.push({ q, d, s: Object.assign({}, s, { d }) });
   }
   out.sort((a, b) => (!!questSupport(a.q) - !!questSupport(b.q)) || a.d - b.d); return out.slice(0, limit || 12);
 }
@@ -205,7 +277,7 @@ function lootGo(c, e) {
     if (quest && !questNeeds(c, item)) continue;
     if (Math.random() * 100 >= pct) continue;
     const n = irnd(mn, mx);
-    if (addItem(c, item, n)) { got.push((n > 1 ? n + ' x ' : '') + itemName(item)); if (quest) onItemGained(c, item); }
+    if (addItem(c, item, n)) { got.push((n > 1 ? n + ' x ' : '') + itemName(item)); if (quest || questNeeds(c, item)) onItemGained(c, item); if (G.q.startBy[item]) itemStartsQuest(c, item); }
   }
   if (got.length) log('Took from ' + objName(e) + ': ' + got.join(', ')); else log(objName(e) + ' was empty.');
   refreshGear();
@@ -231,6 +303,10 @@ function objectiveOptions(c, q, i) {
     const src = {}; for (const [e, p] of G.q.itemSrc[o.id] || []) src[e] = Math.max(src[e] || 0, p);
     mobs(Object.entries(src).map(([e, p]) => [+e, p]));
     gos(G.q.goSrc[o.id] || []);
+    for (const e of G.q.vendorSrc[o.id] || []) for (const sp of G.spawnMap.get(e) || []) {
+      if (sp[0] !== c.pos.map) continue; const b = behOf({ e }, c); if (b === 'A') continue;
+      out.push({ kind: 'vendor', e, x: sp[1], y: sp[2], w: 100, d: Math.hypot(sp[1] - c.pos.x, sp[2] - c.pos.y) });
+    }
   }
   return out;
 }
@@ -238,9 +314,13 @@ function progText(c, q, i) { const ob = q.objectives[i]; const a = c.quests[q.id
 /* pick and pursue one way to progress objective i. returns 'busy' | 'none' | 'blocked' */
 function workObjective(c, q, i, o) {
   const r = rt(c); const ob = q.objectives[i];
+  // no progress on this objective for 12 minutes (targets too strong, always taken, out of reach): give up for now
+  const pk = q.id + ':' + i + ':' + progText(c, q, i);
+  if (o.progKey !== pk) { o.progKey = pk; o.progT = G.gameTime; }
+  if (G.gameTime - o.progT > 720) { o.progT = G.gameTime; o.wt = null; return 'blocked'; }
   let t = o.wt && o.wt.q === q.id && o.wt.i === i ? o.wt : null;
   const valid = (x) => x && (x.kind === 'mob' ? x.m.st === 'alive' && (x.m.banUntil || 0) < G.gameTime :
-    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : goFree(x.e, x.i));
+    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? c.gold >= itemBuy(ob.id) * Math.max(1, ob.count - bagCount(c, ob.id)) : goFree(x.e, x.i));
   if (!valid(t)) {
     t = null;
     const opts = objectiveOptions(c, q, i); let bs = 1e18; let home = null, hd = 1e18;
@@ -249,7 +329,8 @@ function workObjective(c, q, i, o) {
       if (dh < hd) { hd = dh; home = { x: hx, y: hy }; }
       if (!valid(x)) continue;
       if (x.kind === 'mob') {
-        if (!attackable(x.m, c) || dangerous(x.m, c) || x.m.lvl > c.level + 3 || x.m.rank >= 1) continue;
+        if (!attackable(x.m, c) || dangerous(x.m, c) || x.m.lvl > c.level + (c.cfg.style === 'aggressive' ? 3 : c.cfg.style === 'safe' ? 1 : 2)) continue;
+        if (x.m.rank >= 1 && x.m.lvl > c.level - (x.m.rank === 1 ? 3 : 6)) continue;      // elites only when well above them
         let blocked = false; for (const z of r.danger) if (!z.soft && Math.hypot(x.m.x - z.m.x, x.m.y - z.m.y) < z.R) { blocked = true; break; }
         if (blocked) continue;
         const pack = packSize(ensureWorld(c.pos.map), x.m, c);
@@ -272,6 +353,12 @@ function workObjective(c, q, i, o) {
     r.tgt = t.m; const st = approach(c, t.m);
     if (st === 'gone') { o.wt = null; r.tgt = null; }
     return 'busy';
+  }
+  if (t.kind === 'vendor') {
+    if (!goTo(c, t.x, t.y, 3)) { if (r.blocked) { r.blocked = false; o.wt = null; } return 'busy'; }
+    const n = Math.max(1, ob.count - bagCount(c, ob.id)); const price = itemBuy(ob.id) * n;
+    if (c.gold >= price && addItem(c, ob.id, n)) { c.gold -= price; log('Bought ' + n + ' x ' + itemName(ob.id) + ' for ' + money(price) + ' (' + q.title + ').'); onItemGained(c, ob.id); }
+    o.wt = null; return 'busy';
   }
   const tx = t.kind === 'npc' ? t.m.x : t.x, ty = t.kind === 'npc' ? t.m.y : t.y;
   const arrived = goTo(c, tx, ty, 3);
@@ -315,12 +402,17 @@ function updateQuest(c, o, dt) {
   else if (typeof res === 'string' && res[0] === '!') stop(res.slice(1));
 }
 /* one step of doing quest q: accept, work objectives, turn in. returns 'busy' | 'done' | '!message' | {feeder} */
+function phaseTimeout(o, key, secs) {
+  if (o.phaseKey !== key) { o.phaseKey = key; o.phaseT = G.gameTime; }
+  return G.gameTime - o.phaseT > secs;
+}
 function questStep(c, q, o) {
   const r = rt(c);
   if (!c.quests[q.id]) {
     if (!questAvailable(c, q)) return '!"' + q.title + '" is not available (level, race, class or an earlier quest).';
     const s = nearestOf(c, giverSpawns(q.giver)); if (!s) return '!Cannot find the quest giver of "' + q.title + '" on this map.';
     o.phase = 'pick up ' + q.title; o.where = spotName(s);
+    if (phaseTimeout(o, 'p' + q.id, 600 + s.d / RUN_SPEED * 2.5)) { o.phaseKey = null; return '!Could not get to ' + spotName(s) + ' for "' + q.title + '".'; }
     if (goTo(c, s.x, s.y, 3.5)) acceptQuest(c, q);
     else if (r.blocked) { r.blocked = false; return '!Route to ' + spotName(s) + ' is blocked by dangerous creatures.'; }
     return 'busy';
@@ -336,6 +428,7 @@ function questStep(c, q, o) {
   }
   const t = nearestOf(c, giverSpawns(q.turnin)); if (!t) return '!Cannot find where to turn in "' + q.title + '".';
   o.phase = 'turn in ' + q.title; o.where = spotName(t);
+  if (phaseTimeout(o, 't' + q.id, 900 + t.d / RUN_SPEED * 2.5)) { o.phaseKey = null; return '!Could not get to ' + spotName(t) + ' to turn in "' + q.title + '".'; }
   const arrived = goTo(c, t.x, t.y, 3.5);
   if (!arrived && r.blocked) { r.blocked = false; return '!Route to ' + spotName(t) + ' is blocked by dangerous creatures.'; }
   if (arrived) { if (!turnInQuest(c, q)) return '!Bags are too full to receive the rewards of "' + q.title + '".'; return 'done'; }
@@ -382,17 +475,30 @@ function orderQuesting(c, zone) {
   log('Order: quest through ' + c.order.label + '.'); save(); renderOrder();
 }
 function skipped(c, o, id) { return !!(o.skip && o.skip[id] && o.skip[id] >= c.level); }
-function questLevelLimit(c) { return c.cfg.style === 'aggressive' ? 4 : c.cfg.style === 'safe' ? 2 : 3; }
+function questLevelLimit(c) { return c.cfg.style === 'aggressive' ? 4 : c.cfg.style === 'safe' ? 1 : 2; }
 function questingWanted(c, q, o) {
   if (skipped(c, o, q.id)) return false;
   if (questSupport(q)) return false;
-  return q.level <= c.level + questLevelLimit(c);
+  const m = questMeta(q); if (m.elite && c.level < m.elite + 3) return false;     // group quest: wait until well above it
+  if (q.level > c.level + questLevelLimit(c)) return false;
+  return questDoable(c, q, o);
+}
+/* not a copy of a quest already in the log, and items that only come from other quests can be had now */
+function questDoable(c, q, o) {
+  if (!c.quests[q.id]) for (const id in c.quests) { const x = G.q.byId[id]; if (x && x.title === q.title) return false; }
+  for (let i = 0; i < q.objectives.length; i++) {
+    const ob = q.objectives[i]; if (ob.type !== 'Collect' || bagCount(c, ob.id) >= ob.count) continue;
+    const src = itemSources(q, ob.id);
+    if (!src.includes('mob') && !src.includes('object') && !src.includes('vendor') && !src.includes('start') && !feederQuest(c, q, i, o)) return false;
+    if (src.length === 1 && src[0] === 'mob' && ob.count > 3) { let top = 0; for (const [e] of G.q.itemSrc[ob.id] || []) top = Math.max(top, npcMaxLevel(e)); if (top <= grayLevel(c.level)) return false; }
+  }
+  return true;
 }
 function updateQuesting(c, o, dt) {
   const r = rt(c);
   if (r.bagFull || bagFree(c) <= 0) { bagsFull(c, o); return; }
   const zone = o.zones[o.zi];
-  if (!zone) { log('Questing finished: nothing left in ' + o.zones.join(' and ') + '.'); c.order = null; renderOrder(); save(); return; }
+  if (!zone) { if (o.type === 'leveling') { levelingIdle(c, o, dt); return; } log('Questing finished: nothing left in ' + o.zones.join(' and ') + '.'); c.order = null; renderOrder(); save(); return; }
   o.skip = o.skip || {};
   // keep working on the quest in focus
   if (o.fq) {
@@ -403,13 +509,19 @@ function updateQuesting(c, o, dt) {
       const res = questStep(c, q, o);
       if (res === 'done') { o.fq = null; o.wt = null; o.fturn = false; }
       else if (res && res.feeder) { o.fq = res.feeder.id; o.wt = null; }
-      else if (typeof res === 'string' && res[0] === '!') { log(res.slice(1) + ' - skipping it until the next level.'); o.skip[q.id] = c.level; o.fq = null; o.wt = null; }
+      else if (typeof res === 'string' && res[0] === '!') {
+        o.skipN = o.skipN || {}; o.skipN[q.id] = (o.skipN[q.id] || 0) + 1;
+        if (o.skipN[q.id] >= 3 && c.quests[q.id] && !questDone(c, q)) { log(res.slice(1) + ' - giving up on it (abandoned).'); delete c.quests[q.id]; c.abandoned = c.abandoned || {}; c.abandoned[q.id] = 1; }
+        else log(res.slice(1) + ' - skipping it until the next level.');
+        o.skip[q.id] = c.level; o.fq = null; o.wt = null;
+      }
       return;
     }
   }
   o.grindMsg = o.grindMsg || 0;
-  // 1. pick up quests offered right here (the hub we stand in)
-  const near = availableQuests(c, 30, 60).filter((a) => questingWanted(c, a.q, o));
+  // 1. pick up quests offered right here (the hub we stand in); at most 20 quests in the log
+  const full = Object.keys(c.quests).length >= 20;
+  const near = full ? [] : availableQuests(c, 30, 60).filter((a) => questingWanted(c, a.q, o));
   if (near.length) { o.fq = near[0].q.id; o.fpick = true; return; }
   // 2. nearest thing to do: a turn-in or an open objective
   let pick = null, pd = 1e18, turn = false;
@@ -419,6 +531,7 @@ function updateQuesting(c, o, dt) {
       const t = nearestOf(c, giverSpawns(q.turnin)); if (t && t.d < pd) { pd = t.d; pick = q; turn = true; }
       continue;
     }
+    if (o.type === 'leveling' && questMeta(q).elite && c.level < questMeta(q).elite + 3) continue;
     for (let i = 0; i < q.objectives.length; i++) {
       if (objDone(c, q, i)) continue;
       if (feederQuest(c, q, i, o)) { if (pd > 1) { pd = 1; pick = q; turn = false; } continue; }
@@ -427,8 +540,9 @@ function updateQuesting(c, o, dt) {
   }
   if (pick) { o.fq = pick.id; o.fturn = turn; return; }
   // 3. walk to a new quest of this zone
-  const avail = availableQuests(c, 50, 6000).filter((a) => inZone(a.q, zone) && questingWanted(c, a.q, o));
+  const avail = full ? [] : availableQuests(c, 50, 6000).filter((a) => inZone(a.q, zone) && questingWanted(c, a.q, o));
   if (avail.length) { o.fq = avail[0].q.id; o.fpick = true; return; }
+  if (o.type === 'leveling') { levelingIdle(c, o, dt); return; }
   // 4. quests left that need a higher level: grind near them
   const lim = questLevelLimit(c);
   const later = G.d.quests.filter((q) => inZone(q, zone) && !c.done[q.id] && !c.quests[q.id] && !questSupport(q) && !skipped(c, o, q.id) &&
@@ -450,6 +564,8 @@ function renderQuests() {
   const zl = zoneList(c);
   let cur = G.state.settings.questZone && zl.find((z) => z.name === G.state.settings.questZone) ? G.state.settings.questZone : null;
   if (!cur) { const a0 = availableQuests(c, 1)[0]; const zz = a0 && questZoneOf(a0.q); cur = zz ? (zl.find((z) => z.name === zz.sub) ? zz.sub : zz.zone) : (zl[0] || {}).name; }
+  const lv = c.order && c.order.type === 'leveling';
+  h += '<div class="qlevel"><button class="act' + (lv ? ' red' : '') + '" id="qlevel">' + (lv ? 'Stop leveling' : 'Level up to 60 (auto)') + '</button><div class="muted small">Quests zone by zone across the world, travels by flight path, zeppelin and boat, grinds when needed.</div></div>';
   h += '<div class="qauto"><select id="qzone">' + zl.map((z) => '<option value="' + esc(z.name) + '"' + (z.name === cur ? ' selected' : '') + '>' + esc(z.name) + ' (lvl ' + z.lo + '-' + z.hi + ', done ' + z.done + '/' + z.n + ')</option>').join('') + '</select>' +
     '<button class="act" id="qgo">Auto-quest</button></div>';
   const act = Object.keys(c.quests).map((id) => G.q.byId[id]).filter(Boolean);
@@ -464,7 +580,7 @@ function renderQuests() {
     h += '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>' + (done ? 'Turn in' : 'Do it') + '</button> <button class="mini" data-ab="' + q.id + '">Abandon</button></div>';
   }
   h += '<div class="qhead">Available nearby</div>';
-  const av = availableQuests(c, 10);
+  const av = availableQuests(c, 24).filter((a) => !/holiday|battleground|profession|event|Darkmoon|war effort|reputation|raid|legendary|dungeon/.test(questSupport(a.q) || '')).slice(0, 10);
   if (!av.length) h += '<div class="muted small">No quests nearby for your level.</div>';
   for (const { q, d, s } of av) {
     const why = questSupport(q);
@@ -475,6 +591,7 @@ function renderQuests() {
   el.innerHTML = h;
   el.onclick = (ev) => {
     const t = ev.target; if (!t.dataset) return;
+    if (t.id === 'qlevel') { if (c.order && c.order.type === 'leveling') stopOrder(c); else orderLeveling(c); renderQuests(); return; }
     if (t.id === 'qgo') { const z = $('qzone').value; G.state.settings.questZone = z; orderQuesting(c, z); return; }
     if (t.dataset.do) orderQuest(c, +t.dataset.do);
     if (t.dataset.ab) { const q = G.q.byId[t.dataset.ab]; if (q && confirm('Abandon "' + q.title + '"?')) { delete c.quests[q.id]; if (c.order && c.order.type === 'quest' && c.order.qid === q.id) c.order = null; save(); renderQuests(); renderOrder(); } }

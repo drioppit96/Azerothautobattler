@@ -79,14 +79,26 @@ function removeItem(c, id, n) {
   }
   if (bagFree(c) > 0) rt(c).bagFull = false;
 }
+function questWants(c, id) {
+  if (G.q && G.q.startBy[id]) return true;
+  for (const qid in c.quests) { const q = G.q.byId[qid]; if (q && (q.start_item === id || q.objectives.some((o) => o.type === 'Collect' && o.id === id))) return true; }
+  return false;
+}
 function isJunk(c, id) {
-  if (questNeeds(c, id)) return false;
+  if (questWants(c, id)) return false;
   if (itemQuality(id) === 0) return true;
   const r = itemRow(id); const l = lootRow(id);
   const cls = r ? r.c : l ? l[3] : -1, sub = r ? r.s : l ? l[4] : -1;
   if (cls === 15 && sub === 0 && itemQuality(id) <= 1 && !(r && r.sl && r.sl.length)) return true;
   // white (or grey) gear that is no upgrade, when the player allows it
   if (G.state.settings.sellWhiteGear && r && r.sl && r.sl.length && (r.q || 0) <= 1 && !(r.c === 1) && !upgradeFor(c, { id, n: 1 })) return true;
+  // while leveling automatically: everything a player would vendor (no upgrade, not for quests, not food or potions)
+  if (G.state.settings.sellAll !== false && c.order && (c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling')) && r) {
+    if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion')) return false;
+    if (r.c === 1) { if (!r.cs || r.bf) return true; const eq = c.bagSlots.filter(Boolean).map((b) => (itemRow(b.id) || {}).cs || 0); return eq.length >= 4 && r.cs <= Math.min(...eq); }
+    if (r.sl && r.sl.length) return !upgradeFor(c, { id, n: 1 }) && !((r.rl || 0) > c.level && (r.q || 0) >= 2);
+    if (r.c === 12 || r.c === 7 || r.c === 9 || r.c === 5 || r.c === 15 || r.c === 0 || r.c === 13) return true;
+  }
   return false;
 }
 function junkCount(c) { let n = 0; for (const s of c.bags) if (isJunk(c, s.id)) n++; return n; }
@@ -99,6 +111,11 @@ function bagsFull(c, o) {
       log('Bags are full - going to ' + v.name + ' to sell junk.');
       c.order = { type: 'vendor', label: v.name, vx: v.x, vy: v.y, e: v.e, auto: true, resume: o }; r.mv = null; r.tgt = null; renderOrder(); return true;
     }
+  }
+  // leveling on its own: no vendor to reach - throw away the cheapest junk to keep going
+  if (o.type === 'leveling' || (o.resume && o.resume.type === 'leveling')) {
+    const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n);
+    if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 2)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('No vendor in reach - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); if (c.order !== o) c.order = o; o.noSell = false; return true; }
   }
   log('Bags are full - ' + c.name + ' stops.'); c.order = null; r.mv = null; r.tgt = null; renderOrder(); save(); return true;
 }
@@ -199,6 +216,8 @@ function charStats(c) {
   const oh = weaponInfo(c.equip[16]); s.oh = oh && canDualWield(c) ? oh : null;
   s.mhDps = ((s.mh.min + s.mh.max) / 2 + s.ap / 14 * s.mh.speed) / s.mh.speed;
   s.ohDps = s.oh ? ((s.oh.min + s.oh.max) / 2 + s.ap / 14 * s.oh.speed) * 0.5 / s.oh.speed : 0;
+  if (typeof talentStats === 'function') { const a0 = s.armorItems; talentStats(c, s); s.armor += s.armorItems - a0; if (s.hasShield) s.block += s.shieldSpec || 0; }
+  s.ohDps = s.oh ? ((s.oh.min + s.oh.max) / 2 + s.ap / 14 * s.oh.speed) * (s.ohMult || 0.5) / s.oh.speed : 0;
   s.armorReduction = (lvl) => Math.min(0.75, s.armor / (s.armor + 400 + 85 * lvl));
   r.statCache = { v: r.statVer, L: c.level, b: r.buffs ? r.buffs.length : 0, s };
   return s;
@@ -219,13 +238,31 @@ function itemScore(c, inst) {
 /* optional: put on upgrades by itself (off by default - equipping is the player's job) */
 function autoEquip(c) {
   if (!G.state.settings.autoEquip) return;
+  if (rt(c).threats && rt(c).threats.length) { rt(c).equipLater = true; return; }   // after the fight
+  rt(c).equipLater = false;
+  // bigger bags: into an empty bag slot, or instead of the smallest one
+  for (let k = c.bags.length - 1; k >= 0; k--) {
+    const b = c.bags[k]; const it = itemRow(b.id); if (!it || it.c !== 1 || !it.cs || it.bf) continue;
+    const free = c.bagSlots.findIndex((x) => !x);
+    if (free >= 0) { c.bags.splice(k, 1); c.bagSlots[free] = b; log('Equipped bag ' + itemName(b.id) + ' (+' + it.cs + ' slots).'); continue; }
+    let si = -1, sc = Infinity; c.bagSlots.forEach((x, i) => { const cs = (itemRow(x.id) || {}).cs || 0; if (cs < sc) { sc = cs; si = i; } });
+    if (si >= 0 && it.cs > sc) { const old = c.bagSlots[si]; c.bags.splice(k, 1); c.bagSlots[si] = b; c.bags.push(old); log('Swapped ' + itemName(old.id) + ' for the bigger ' + itemName(b.id) + '.'); }
+  }
   for (let k = c.bags.length - 1; k >= 0; k--) { const s = c.bags[k]; const it = itemRow(s.id); if (it && it.sl && it.sl.length && it.c !== 1 && upgradeFor(c, s)) equipFromBag(c, k); }
+}
+function slotScore(c, inst, slot) { const it = itemRow(inst.id); const v = itemScore(c, inst); return slot === 16 && it && it.c === 2 ? v * 0.5 : v; }
+/* how much better the character gets by equipping inst where pickSlot would put it (2H replaces the off hand too) */
+function equipDelta(c, inst) {
+  const it = itemRow(inst.id); const slot = pickSlot(c, it); let out = 0;
+  const cur = c.equip[slot]; if (cur) out += slotScore(c, cur, slot); else out -= 1;
+  if (slot === 15 && it.t === 17 && c.equip[16]) out += slotScore(c, c.equip[16], 16);
+  if (slot === 16) { const mh = c.equip[15] && itemRow(c.equip[15].id); if (mh && mh.t === 17) out += slotScore(c, c.equip[15], 15); }
+  return slotScore(c, inst, slot) - out;
 }
 function upgradeFor(c, inst) {
   const it = itemRow(inst.id); if (!it || !it.sl || !it.sl.length || canEquip(c, inst.id)) return false;
-  const mine = itemScore(c, inst);
-  let worst = Infinity; for (const sl of it.sl) { const cur = c.equip[sl]; const v = cur ? itemScore(c, cur) : -1; if (v < worst) worst = v; }
-  return mine > worst + 0.01;
+  if (it.sl.includes(17) && c.cls === 1) return false;                // bows and guns are not used
+  const d = equipDelta(c, inst); return d > 0.5 + Math.abs(itemScore(c, inst)) * 0.02;
 }
 
 /* ----------------------------------------------------------------- equipping */
@@ -294,6 +331,7 @@ function durabilityLoss(c, pct) {
   if (broke.length) log('Broken (gives no stats until repaired): ' + broke.join(', ') + '.');
   dirty(c);
 }
+function worstDurability(c) { let w = 1; for (const k in c.equip) { const m = maxDur(c.equip[k].id); if (m) w = Math.min(w, c.equip[k].dur / m); } return w; }
 function durabilityPct(c) { let a = 0, b = 0; for (const k in c.equip) { const m = maxDur(c.equip[k].id); if (m) { a += c.equip[k].dur; b += m; } } return b ? a / b : 1; }
 const Q_REPAIR = [0.5, 1, 1.2, 1.5, 2, 2.5, 2.5];
 function repairCost(c) {
@@ -381,10 +419,22 @@ function vendorItems(e) {
   const v = (G.d.vendors || []).find((x) => x.entry === e); return v ? v.items.map((x) => ({ id: x.item, stock: x.stock, price: x.price })) : [];
 }
 function vendorsOnMap(mapId) { return vendorList().filter((v) => v.map === mapId); }
+/* a vendor next to creatures far above the character's level is not an option */
+function vendorSafe(c, v) {
+  const r = rt(c); r.vsafe = r.vsafe || {}; const k = v.e + ':' + Math.round(v.x) + ':' + c.level;
+  if (k in r.vsafe) return r.vsafe[k];
+  let ok = true; const W = ensureWorld(v.map);
+  mobsNear(W, v.x, v.y, 50, (m) => { if (ok && m.st === 'alive' && !m.civ && behOf(m, c) === 'A' && dangerous(m, c) && Math.hypot(m.hx - v.x, m.hy - v.y) < aggroRadius(m, c) + 20) ok = false; });
+  return (r.vsafe[k] = ok);
+}
 function nearestVendor(c, needRepair) {
-  let best = null, bd = 1e18;
-  for (const v of vendorsOnMap(c.pos.map)) { if (needRepair && !v.repair) continue; const b = behOf({ e: v.e }, c); if (b === 'A') continue; const d = Math.hypot(v.x - c.pos.x, v.y - c.pos.y); if (d < bd) { bd = d; best = v; } }
-  return best;
+  const list = [];
+  for (const v of vendorsOnMap(c.pos.map)) { if (needRepair && !v.repair) continue; const b = behOf({ e: v.e }, c); if (b === 'A') continue; list.push([Math.hypot(v.x - c.pos.x, v.y - c.pos.y), v]); }
+  list.sort((a, b) => a[0] - b[0]);
+  const bad = rt(c).badVendor || {};
+  for (const [, v] of list.slice(0, 40)) if (!(bad[v.e] > G.gameTime) && vendorSafe(c, v)) return v;
+  for (const [, v] of list) if (!(bad[v.e] > G.gameTime)) return v;
+  return null;
 }
 function vendorNear(c, range) { const v = nearestVendor(c); return v && Math.hypot(v.x - c.pos.x, v.y - c.pos.y) <= (range || 8) ? v : null; }
 function sellIndex(c, idx) {
@@ -403,6 +453,11 @@ function buyItem(c, id) {
 function sellJunk(c) {
   let total = 0, n = 0;
   for (let i = c.bags.length - 1; i >= 0; i--) { const s = c.bags[i]; if (!isJunk(c, s.id)) continue; total += itemSell(s.id) * s.n; n += s.n; c.bags.splice(i, 1); }
+  // too much food: keep the 3 best stacks of food and of potions
+  for (const kind of ['food', 'potion']) {
+    const idx = c.bags.map((x, i) => ({ x, i, u: useInfo(x.id) })).filter((o) => o.u && o.u.kind === kind && !questWants(c, o.x.id)).sort((a, b) => ((b.u.hi || b.u.tick * b.u.dur || 0) - (a.u.hi || a.u.tick * a.u.dur || 0)));
+    for (const o of idx.slice(3).sort((a, b) => b.i - a.i)) { total += itemSell(o.x.id) * o.x.n; n += o.x.n; c.bags.splice(o.i, 1); }
+  }
   if (n) { c.gold += total; log('Sold ' + n + ' junk item' + (n > 1 ? 's' : '') + ' for ' + money(total) + '.'); fx(c.pos.x, c.pos.y, '+' + money(total), '#ffd866'); }
   rt(c).bagFull = false; save(); refreshGear(); return n;
 }
@@ -413,9 +468,20 @@ function autoSellNearVendor(c) {
   r.lastSell = G.gameTime;
   if (junkCount(c)) sellJunk(c);
   if (G.state.settings.autoRepair && v.repair && repairCost(c)) repairAll(c);
-  autoBuyBags(c, v);
+  autoBuyBags(c, v); autoBuyGear(c, v);
 }
 /* buy the biggest bag this vendor sells into an empty bag slot, keeping some money (player-like) */
+/* buy equipment upgrades a vendor sells, spending at most a third of the money (while leveling automatically) */
+function autoBuyGear(c, v) {
+  if (!v || !G.state.settings.autoEquip || !c.order || !(c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling'))) return;
+  for (const x of vendorItems(v.e)) {
+    const it = itemRow(x.id); if (!it || !it.sl || !it.sl.length || it.c === 1) continue;
+    const price = itemBuy(x.id); if (price > c.gold / 3 || bagFree(c) <= 0) continue;
+    const inst = makeInst(x.id, 1); if (!upgradeFor(c, inst)) continue;
+    c.gold -= price; c.bags.push(inst); log('Bought ' + itemName(x.id) + ' for ' + money(price) + ' (an upgrade).');
+    autoEquip(c);
+  }
+}
 function autoBuyBags(c, v) {
   if (!G.state.settings.autoBuyBags || !v) return;
   for (let k = 0; k < 4; k++) {
@@ -434,13 +500,23 @@ function orderVendor(c, v, auto) {
 }
 function orderRepair(c) { const v = nearestVendor(c, true); if (!v) { log('No repair vendor known on this map.'); return; } orderVendor(c, v, true); c.order.repair = true; }
 function updateVendor(c, o, dt) {
+  o.t0 = o.t0 || G.gameTime;
+  if (G.gameTime - o.t0 > 600) {     // 10 minutes and still not there: try another vendor
+    const r = rt(c); r.badVendor = r.badVendor || {}; r.badVendor[o.e] = G.gameTime + 3600; log('Cannot get to ' + o.label + ' - trying another vendor.');
+    const res = o.resume; c.order = res || null; if (res) { res.noSell = false; bagsFull(c, res); } renderOrder(); return;
+  }
   const ok = goTo(c, o.vx, o.vy, 3);
-  if (rt(c).blocked) { rt(c).blocked = false; log('Route to the vendor is blocked.'); c.order = null; renderOrder(); return; }
+  if (rt(c).blocked) {
+    rt(c).blocked = false; log('Route to ' + o.label + ' is blocked.');
+    const r = rt(c); r.badVendor = r.badVendor || {}; r.badVendor[o.e] = G.gameTime + 3600;
+    c.order = o.resume || null; if (o.resume && (r.bagFull || bagFree(c) <= 0)) bagsFull(c, o.resume);
+    renderOrder(); return;
+  }
   if (!ok) return;
   if (o.auto || G.state.settings.autoSellJunk) sellJunk(c);
   const vv = vendorList().find((x) => x.e === o.e);
   if ((o.repair || G.state.settings.autoRepair) && repairCost(c)) { if (vv && vv.repair) repairAll(c); }
-  autoBuyBags(c, vv);
+  autoBuyBags(c, vv); autoBuyGear(c, vv);
   log('At ' + o.label + '.');
   c.order = o.resume || null; if (o.resume) { o.resume.wait = 0; o.resume.noSell = junkCount(c) === 0 && bagFree(c) <= 0; }
   renderOrder(); if (!o.resume && !G.headless) openSheet('vendor');

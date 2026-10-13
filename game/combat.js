@@ -34,11 +34,15 @@ function initMob(m) {
   else { m.maxhp = fbHp(m.lvl, rank); const d = fbDmg(m.lvl, rank); m.dmin = d[0]; m.dmax = d[1]; m.armor = fbArmor(m.lvl); m.atk = 2.0; }
   m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5);
 }
+/* creatures of world events (Scourge invasion, Ahn'Qiraj war, holidays): not part of the normal world */
+const EVENT_MOBS = [[15414, 15424], [15591, 15591], [15685, 15692], [15730, 15730], [15740, 15811], [16136, 16143], [16172, 16172], [16230, 16230], [16255, 16255], [16285, 16310], [16356, 16401], [16419, 16438], [16995, 16995]];
+function eventMob(e) { for (const [a, b] of EVENT_MOBS) if (e >= a && e <= b) return true; return false; }
 function ensureWorld(mapId) {
   if (G.world[mapId]) return G.world[mapId];
   if (typeof loadGrid === 'function') loadGrid(mapId);
   const list = [], grid = new Map(), W = { id: mapId, list, grid, active: new Set(), dead: [] };
   for (const [e, lst] of G.spawnList) {
+    if (eventMob(e)) continue;
     for (const s of lst) {
       if (s[0] !== mapId) continue;
       const m = { e, info: G.mobIdx[e] || null, hx: s[1], hy: s[2], z: s[3], rmin: s[7] || 300, rmax: s[8] || s[7] || 300 };
@@ -54,9 +58,12 @@ function mobsNear(W, x, y, r, fn) {
   const c0 = cell(x - r), c1 = cell(x + r), r0 = cell(y - r), r1 = cell(y + r);
   for (let cx = c0; cx <= c1; cx++) for (let cy = r0; cy <= r1; cy++) { const a = W.grid.get(gk(cx, cy)); if (a) for (const m of a) fn(m); }
 }
-function aggroRadius(m, c) { return clamp(m.aggro - (c.level - m.lvl), 5, 45); }
+const AGGRO_SCALE = 0.7;         // aggro ranges are 30% smaller than on the server (less chain pulling)
+function aggroRadius(m, c) { return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_SCALE, 4, 32); }
 function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
 function dangerous(m, c) { return effLevel(m) - c.level >= 4; }
+/* a creature some race is friendly with: a town guard or citizen of the other faction (not for grinding) */
+function factionNpc(m) { const h = G.d.hostility.creatures[m.e]; return !!(h && h[1].indexOf('F') >= 0); }
 function attackable(m, c) { const b = behOf(m, c); return (b === 'A' || b === 'N') && !m.civ && m.st === 'alive'; }
 function grayLevel(level) { const r = G.d.xp.levels[level - 1]; return r ? r.gray_level : 0; }
 
@@ -83,6 +90,8 @@ function gainXp(c, xp, why) {
   for (;;) {
     const need = (G.d.xp.levels[c.level - 1] || {}).xp_to_next; if (!need || c.xp < need || c.level >= MAX_LEVEL) break;
     c.xp -= need; c.level++; dirty(c); const s = charStats(c); c.hp = s.maxHp; learnAbilities(c);
+    if (typeof checkStarterItems === 'function') checkStarterItems(c);
+    if (typeof onLevelTalents === 'function') onLevelTalents(c);
     log('*** ' + c.name + ' reached level ' + c.level + '! ***'); fx(c.pos.x, c.pos.y, 'LEVEL ' + c.level, '#ffe14d');
     if (c.level === 20 && (c.cls === 1 || c.cls === 3)) log('You can now dual wield one-handed weapons.');
     if (c.level === 10 && c.cls === 4) log('You can now dual wield one-handed weapons.');
@@ -115,11 +124,13 @@ function lootMob(c, m) {
   for (const [item, pct, mn, mx, quest] of rows) {
     if (quest && !questNeeds(c, item)) continue;
     if (Math.random() * 100 >= pct) continue;
+    if (G.q.startBy[item] && (bagCount(c, item) || G.q.startBy[item].every((q) => c.done[q.id] || c.quests[q.id]))) continue;   // one quest starter is enough
     const n = irnd(mn, mx); const before = c.bags.length;
     if (addItem(c, item, n)) {
       const inst = c.bags.length > before ? c.bags[c.bags.length - 1] : null;
       got.push((n > 1 ? n + ' x ' : '') + itemName(item, inst && inst.id === item ? inst : null));
-      if (quest) onItemGained(c, item);
+      if (quest || questNeeds(c, item)) onItemGained(c, item);
+      if (G.q.startBy[item]) itemStartsQuest(c, item);
       if (inst && inst.id === item && upgradeFor(c, inst)) log('Possible upgrade: ' + itemName(item, inst) + ' (open the character sheet to equip it).');
     } else { log('Bags are full - left ' + itemName(item) + ' behind.'); }
   }
@@ -157,7 +168,7 @@ function mobDamage(m, c, s, mods) {
 function mobTick(W, m, dt, now) {
   const c = m.tgt;
   if (m.st === 'chase') {
-    if (!c || c.hp <= 0 || rt(c).ghost || c.pos.map !== W.id) return evade(W, m);
+    if (!c || c.hp <= 0 || rt(c).ghost || rt(c).flying || rt(c).riding || c.pos.map !== W.id) return evade(W, m);
     mobAuraTick(W, m, dt); if (m.st !== 'chase') return;
     const mods = mobMods(m);
     const dh = Math.hypot(m.x - m.hx, m.y - m.hy);
@@ -184,6 +195,7 @@ function mobTick(W, m, dt, now) {
         const r = rt(c);
         if (h.t === 'dodge' || h.t === 'parry' || h.t === 'block' || h.blocked) r.revWindow = now + 5;
         if (h.t === 'hit') {
+          hitTakenTalents(c, h);
           c.hp -= h.d; fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
           if (c.cls === 1) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
@@ -224,6 +236,7 @@ function killMob(c, m) {
   lootMob(c, m);
   onKill(c, m);
   if (c.order && c.order.type === 'grind') c.order.kills = (c.order.kills || 0) + 1;
+  if (c.order && c.order.type === 'leveling' && c.order.grind) c.order.grind.kills = (c.order.grind.kills || 0) + 1;
   const r = rt(c); if (r.tgt === m) r.tgt = null;
   c.rage = c.rage; save();
 }
@@ -237,12 +250,26 @@ function charDie(c, killer) {
   log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + '.');
   fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30');
   const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) evade(W, m);
-  if (c.order && c.order.type === 'questing' && c.order.fq) {
+  if (c.order && c.order.type === 'vendor' && c.order.resume) c.order = c.order.resume;     // the walk to a vendor belongs to the order behind it
+  if (c.order && c.order.type === 'leveling') {
+    const o = c.order; o.deaths = (o.deaths || 0) + 1;
+    // three deaths in 15 minutes: this area is too much right now - leave the zone for a level
+    o.recentDeaths = (o.recentDeaths || []).filter((t) => G.gameTime - t < 900).concat([G.gameTime]);
+    if (o.recentDeaths.length >= 3 && o.zones && o.zones[0]) {
+      log('Died ' + o.recentDeaths.length + ' times in a short while - leaving ' + o.zones[0] + ' for now.');
+      o.avoid = o.avoid || {}; o.avoid[o.zones[0]] = c.level; o.recentDeaths = [];
+      if (o.grind) o.badSpots = (o.badSpots || []).concat([{ map: c.pos.map, x: o.grind.cx, y: o.grind.cy }]);
+      o.mode = 'pick'; o.fq = null; o.wt = null; o.grind = null; o.trip = null;
+    }
+    if (o.mode === 'grind') { o.gdeaths = (o.gdeaths || 0) + 1; if (o.gdeaths >= 2) { log('Died twice at this grinding spot - looking for another place.'); o.badSpots = (o.badSpots || []).concat([{ map: c.pos.map, x: o.grind.cx, y: o.grind.cy }]).slice(-30); o.mode = 'pick'; o.grind = null; o.gdeaths = 0; } }
+    else if (o.fq) { o.qdeaths = o.qdeaths || {}; o.qdeaths[o.fq] = (o.qdeaths[o.fq] || 0) + 1; if (o.qdeaths[o.fq] >= 2) { const q = G.q.byId[o.fq]; log('Died twice on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; } }
+    else if (o.mode === 'travel' && o.deaths % 3 === 0 && o.zones[0]) { log('Keeps dying on the way to ' + o.zones[0] + ' - choosing again.'); o.avoid = o.avoid || {}; o.avoid[o.zones[0]] = c.level + 1; o.mode = 'pick'; o.trip = null; }
+  } else if (c.order && c.order.type === 'questing' && c.order.fq) {
     const o = c.order; o.qdeaths = o.qdeaths || {}; o.qdeaths[o.fq] = (o.qdeaths[o.fq] || 0) + 1;
     if (o.qdeaths[o.fq] >= 3) { const q = G.q.byId[o.fq]; log('Died 3 times on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; }
   } else if (c.order && c.order.type !== 'questing') { c.order.deaths = (c.order.deaths || 0) + 1; if (c.order.deaths >= 3) { log('Died 3 times on this order - it is too dangerous. Order cancelled.'); c.order = null; } }
   durabilityLoss(c, 0.1);
-  r.saved = c.order; r.ghost = { corpse }; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; c.order = null; c.rage = 0; r.mv = null; r.resting = false;
+  r.saved = c.order; c.resume = c.order; r.ghost = { corpse }; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; c.order = null; c.rage = 0; r.mv = null; r.resting = false; r.flying = null; r.riding = null;
   const gy = nearestGraveyard(c);
   if (gy) { c.pos.x = gy[3]; c.pos.y = gy[4]; log('Released at ' + gy[1] + '. Running back to the corpse ...'); }
   const p = planPath(c, corpse); r.ghost.path = p.pts; r.ghost.idx = 1;
@@ -262,7 +289,7 @@ function safeSpot(c, x, y) {
   return best;
 }
 function revive(c, how) {
-  const r = rt(c); r.ghost = null; const s = charStats(c); c.hp = Math.round(s.maxHp * 0.5);
+  const r = rt(c); r.ghost = null; delete c.resume; const s = charStats(c); c.hp = Math.round(s.maxHp * 0.5);
   if (how === 'spirit') { durabilityLoss(c, 0.25); log(c.name + ' was resurrected by the spirit healer (extra 25% durability loss).'); }
   else log(c.name + ' is back among the living.');
   r.resting = true;   // catch the breath before going on
@@ -295,7 +322,7 @@ function ghostStep(c, dt) {
 }
 function resumeOrder(c, o) {
   if (o.type === 'travel') orderTravel(c, o.target, o.label);
-  else { c.order = o; o.state = null; o.wait = 0; o.wt = null; }
+  else { c.order = o; o.state = null; o.wait = 0; o.wt = null; if (o.type === 'leveling' && o.mode === 'travel' && o.trip) { o.trip = planTrip(c, o.trip.dest); if (!o.trip) o.mode = 'pick'; } }
 }
 
 /* ------------------------------------------------------------ char combat */
@@ -311,14 +338,15 @@ function regenStep(c, dt) {
     if (s.hp5) c.hp = Math.min(s.maxHp, c.hp + s.hp5 * 0.4);
     if (r.outT > 5 || r.resting) { const per = Math.max(1, s.spi * 0.25) * (r.resting ? 2.5 : 1); c.hp = Math.min(s.maxHp, c.hp + per); }
   }
-  if (r.outT > 6) c.rage = Math.max(0, c.rage - 1.5 * dt);
+  if (r.outT > 6) c.rage = Math.max(0, c.rage - 1.5 * dt * (talentRank(c, 'Anger Management') ? 0.7 : 1));
   if (c.hp > s.maxHp) c.hp = s.maxHp;
 }
 /* sitting down: below cfg.sitAt % health when no enemy is near; eat food below cfg.eatAt %; stand at cfg.standAt % */
 function restStep(c) {
   const r = rt(c); const cfg = c.cfg; const max = charStats(c).maxHp; const pct = c.hp / max * 100;
   if (r.resting) {
-    if (pct >= Math.min(100, cfg.standAt) - 0.01 || (cfg.standAt >= 100 && c.hp >= max)) { r.resting = false; r.eating = null; return false; }
+    const to = r.restFull ? 100 : cfg.standAt;
+    if (pct >= Math.min(100, to) - 0.01 || (to >= 100 && c.hp >= max)) { r.resting = false; r.eating = null; r.restFull = false; return false; }
     if (!r.eating && cfg.eatAt > 0 && pct < cfg.eatAt) autoEat(c);
     return true;
   }
@@ -343,7 +371,7 @@ function scanThreats(c) {
 /* social aggro: only creatures that attack on sight (red) help each other; neutral (yellow) ones never join in */
 function callHelp(W, m, c) {
   if (behOf(m, c) !== 'A') return;
-  mobsNear(W, m.x, m.y, 10, (o) => { if (o !== m && o.st === 'alive' && o.tmpl === m.tmpl && behOf(o, c) === 'A' && !o.civ) engage(o, c); });
+  mobsNear(W, m.x, m.y, 8, (o) => { if (o !== m && o.st === 'alive' && o.tmpl === m.tmpl && Math.hypot(o.x - m.x, o.y - m.y) <= 8 && behOf(o, c) === 'A' && !o.civ) engage(o, c); });
 }
 function threatsOf(c) {
   const W = G.world[c.pos.map]; const out = []; if (!W) return out;
@@ -357,7 +385,8 @@ function playerSwing(c, m, s, w, opts) {
   let d = rnd(w.min, w.max) + (s.ap + apVs(s, m)) / 14 * spd;
   if (opts.pct) d *= opts.pct / 100;
   d += opts.bonus || 0;
-  if (opts.off) d *= 0.5;
+  if (opts.name === 'Cleave') d += (opts.bonus || 0) * 0.4 * talentRank(c, 'Improved Cleave');
+  if (opts.off) d *= s.ohMult || 0.5;
   const diff = m.lvl - c.level;
   const dw = s.oh && !opts.yellow ? 19 : 0;
   let roll = Math.random() * 100;
@@ -367,13 +396,42 @@ function playerSwing(c, m, s, w, opts) {
   const mm = mobMods(m); const arm = Math.max(0, m.armor + mm.armor);
   d *= 1 - clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
   d *= s.dmgDone;
-  let crit = false; if (Math.random() * 100 < s.crit - Math.max(0, diff) * 0.2) { d *= 2; crit = true; }
+  let critCh = s.crit - Math.max(0, diff) * 0.2; if (opts.name === 'Overpower') critCh += 25 * talentRank(c, 'Improved Overpower');
+  let crit = false; if (Math.random() * 100 < critCh) { d *= opts.yellow ? 2 + 0.1 * talentRank(c, 'Impale') : 2; crit = true; }
   d = Math.max(1, Math.round(d));
   m.hp -= d; onMobDamaged(m);
   fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
-  if (c.cls === 1 && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
+  if (c.cls === 1 && !opts.yellow) { c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level)); if (Math.random() < 0.08 * talentRank(c, 'Unbridled Wrath')) c.rage = Math.min(100, c.rage + 1); }
+  if (c.cls === 1 && c.talents) meleeTalentProcs(c, m, s, w, d, crit, opts);
   procs(c, m, s, w, opts.off ? 16 : 15);
   return d;
+}
+/* talents that react to a melee hit of the character */
+function meleeTalentProcs(c, m, s, w, d, crit, opts) {
+  const r = rt(c);
+  if (crit) {
+    const dw = talentRank(c, 'Deep Wounds');
+    if (dw && m.hp > 0) { const avg = ((s.mh.min + s.mh.max) / 2) * 0.2 * dw; addMobAura(c, m, { n: 'Deep Wounds', dur: 12000 }, { au: 3, lo: Math.max(1, Math.round(avg / 4)), amp: 3000 }); }
+    const fl = talentRank(c, 'Flurry'); if (fl) r.flurry = { n: 3, haste: [0, 0.1, 0.15, 0.2, 0.25, 0.3][fl] };
+  }
+  if (!opts.extra && w && w.it && m.hp > 0) {
+    const sub = w.it.s;
+    if ((sub === 7 || sub === 8) && Math.random() < 0.01 * talentRank(c, 'Sword Specialization')) { fx(c.pos.x, c.pos.y, 'Sword Specialization', '#ffe9a8'); playerSwing(c, m, s, w, { extra: true }); }
+    if ((sub === 4 || sub === 5) && Math.random() < 0.012 * talentRank(c, 'Mace Specialization')) addMobAura(c, m, { n: 'Mace Stun Effect', dur: 3000 }, { au: 12, lo: 0 });
+  }
+  if (opts.name === 'Hamstring' && Math.random() < 0.05 * talentRank(c, 'Improved Hamstring')) addMobAura(c, m, { n: 'Improved Hamstring', dur: 5000 }, { au: 26, lo: 0 });
+  // Sweeping Strikes: the same damage on a second enemy fighting us
+  const sw = (r.buffs || []).find((b) => b.sweep > 0 && b.until > G.gameTime);
+  if (sw && !opts.sweep) {
+    const other = attackersOf(c).find((x) => x !== m && x.hp > 0 && inMelee(c, x));
+    if (other) { sw.sweep--; other.hp -= d; onMobDamaged(other); fx(other.x, other.y, '' + d, '#ffd23a'); if (other.hp <= 0) killMob(c, other); if (sw.sweep <= 0) sw.until = 0; }
+  }
+}
+/* talents that react to the character being hit */
+function hitTakenTalents(c, h) {
+  if (!h.crit || c.cls !== 1 || !c.talents) return;
+  const en = talentRank(c, 'Enrage'); if (en) addBuff(c, { n: 'Enrage', dur: 12000 }, { au: 79, mi: 1, lo: 5 * en });
+  const bc = talentRank(c, 'Blood Craze'); if (bc) addBuff(c, { n: 'Blood Craze', dur: 6000 }, { au: 161, mi: 0, lo: Math.round(charStats(c).maxHp * bc / 100 * 5 / 6) });
 }
 function apVs(s, m) { let v = 0; const t = m.info ? m.info[5] : 0; for (const [mask, add] of s.apVs) if (t && (mask & (1 << (t - 1)))) v += add; return v; }
 function procs(c, m, s, w, slot) {
@@ -398,9 +456,10 @@ function fightStep(c, m, dt) {
   if (m.hp <= 0 || m.st === 'dead') return;
   r.swingT -= dt;
   if (r.swingT <= 0) {
-    r.swingT += s.mh.speed;
+    const fl = r.flurry && r.flurry.n > 0 ? r.flurry : null; if (fl) fl.n--;
+    r.swingT += s.mh.speed / (fl ? 1 + fl.haste : 1);
     const q = r.queued; r.queued = null;
-    const cost = q && q.sp.pw && q.sp.pw[0] === 1 ? q.sp.pw[1] : 0;
+    const cost = q ? abilityCost(c, q.sp, q.name) : 0;
     if (q && c.rage >= cost && abilityUsable(c, q.name).ok) {
       c.rage -= cost; const bonus = (q.sp.ef[0] || {}).lo || 0;
       playerSwing(c, m, s, s.mh, { bonus, yellow: true, name: q.name }); fx(c.pos.x, c.pos.y, q.name, '#ffe9a8');
@@ -495,7 +554,7 @@ function pickTarget(c, o) {
   mobsNear(W, cx, cy, R + 20, (m) => {
     if (m.st !== 'alive' || !attackable(m, c) || (m.banUntil || 0) > G.gameTime) return;
     if (o.entries && !o.entries.has(m.e)) return;
-    if (!o.entries) { if (m.lvl <= gray && c.level > 1) return; if (m.info && m.info[5] === 8) return; if (m.info && (m.info[5] === 11)) return; }
+    if (!o.entries) { if (m.lvl <= gray && c.level > 1) return; if (m.info && m.info[5] === 8) return; if (m.info && (m.info[5] === 11)) return; if (m.info && m.info[5] === 7 && behOf(m, c) === 'N') return; if (factionNpc(m)) return; }
     if (dangerous(m, c) || m.lvl > c.level + (o.entries ? 3 : 2)) return;
     if (m.rank >= 1) return;
     if (Math.hypot(m.hx - cx, m.hy - cy) > R) return;
@@ -513,9 +572,29 @@ function pickTarget(c, o) {
 }
 function packSize(W, m, c) { let n = 0; mobsNear(W, m.hx, m.hy, 25, (o) => { if (o !== m && o.st === 'alive' && attackable(o, c) && behOf(o, c) === 'A' && Math.hypot(o.x - m.x, o.y - m.y) < Math.max(10, aggroRadius(o, c) + 2)) n++; }); return n; }
 /* approach & attack one chosen mob; returns 'moving' | 'engaged' | 'gone' */
+/* expected health lost killing m (and the creatures that would join), from both sides' damage per second */
+function fightCost(c, m) {
+  const s = charStats(c); const W = ensureWorld(c.pos.map);
+  const arm = Math.max(0, m.armor); const red = clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
+  const myDps = Math.max(1, (s.mhDps + s.ohDps) * (1 - red) * s.dmgDone * 1.3);
+  const hit = Math.max(0.3, 1 - (s.dodge + s.parry + s.block) / 100 - 0.05);
+  const mobDps = ((m.dmin + m.dmax) / 2) * (1 - s.armorReduction(m.lvl)) * s.dmgTaken * hit / Math.max(0.8, m.atk);
+  const pack = c.cfg && c.cfg.style === 'aggressive' ? packSize(W, m, c) : Math.min(2, packSize(W, m, c));
+  let cost = mobDps * (m.hp / myDps);
+  if (pack) cost += pack * mobDps * (m.hp / myDps + m.maxhp / myDps * 0.5);
+  return cost;
+}
 function approach(c, m) {
   if (!m || m.st !== 'alive') return 'gone';
   const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
+  const r0 = rt(c);
+  if (!r0.threats.length && d > MELEE_RANGE + 1 && d < 60) {
+    const need = fightCost(c, m) * 1.2 + charStats(c).maxHp * 0.08;
+    if (c.hp < need) {
+      if (c.hp >= charStats(c).maxHp * 0.98) { m.banUntil = G.gameTime + 90; return 'gone'; }     // too strong even when full
+      r0.resting = true; r0.restFull = true; r0.mv = null; if (c.cfg.eatAt > 0) autoEat(c); return 'moving';
+    }
+  }
   if (d <= MELEE_RANGE + 1) { engage(m, c); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); return 'engaged'; }
   if (d <= 25 && tryOpener(c, m)) return 'moving';
   goTo(c, m.x, m.y, MELEE_RANGE);
@@ -538,7 +617,7 @@ function updateGrind(c, o, dt) {
     r.tgt = pickTarget(c, oo); o.loneWait = oo.loneWait;
     if (!r.tgt) {
       if (!o.wait) { o.wait = 1; log(c.cfg.style === 'safe' ? 'Waiting for a creature that stands alone ...' : 'No suitable creatures nearby - waiting for respawns.'); }
-      if (Math.hypot(c.pos.x - o.cx, c.pos.y - o.cy) > 25) { goTo(c, o.cx, o.cy, 15); if (rt(c).blocked) { rt(c).blocked = false; log('Cannot reach the grinding area safely - grinding here instead.'); o.cx = c.pos.x; o.cy = c.pos.y; } }
+      if (Math.hypot(c.pos.x - o.cx, c.pos.y - o.cy) > 25) { goTo(c, o.cx, o.cy, 15); if (rt(c).blocked) { rt(c).blocked = false; if (o.noFallback) { o.failed = true; return; } log('Cannot reach the grinding area safely - grinding here instead.'); o.cx = c.pos.x; o.cy = c.pos.y; } }
       return;
     }
     o.wait = 0;
@@ -551,10 +630,12 @@ function updateGrind(c, o, dt) {
 function updateChar(c, dt) {
   const r = rt(c);
   if (r.ghost) { ghostStep(c, dt); return; }
+  if (r.flying) { flyStep(c, dt); return; }
+  if (r.riding) { rideStep(c, dt); return; }
   regenStep(c, dt);
   if (r.charging) { chargeStep(c, dt); return; }
   r.scanT -= dt;
-  if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); }
+  if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); taxiDiscover(c); if (r.equipLater && !threatsOf(c).length) autoEquip(c); }
   const threats = threatsOf(c); r.threats = threats;
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
@@ -577,6 +658,7 @@ function updateChar(c, dt) {
   } else if (o.type === 'grind') updateGrind(c, o, dt);
   else if (o.type === 'quest') updateQuest(c, o, dt);
   else if (o.type === 'questing') updateQuesting(c, o, dt);
+  else if (o.type === 'leveling') updateLeveling(c, o, dt);
   else if (o.type === 'vendor' || o.type === 'sell') updateVendor(c, o, dt);
 }
 function replanTravel(c, o) {

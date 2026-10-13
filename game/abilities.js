@@ -11,6 +11,14 @@ const CLASS_META = {
     'Execute': { st: 'bz', modes: ['off', 'spam'], def: { mode: 'spam' } },
     'Overpower': { st: 'b', modes: ['off', 'spam'], def: { mode: 'spam' } },
     'Revenge': { st: 'd', modes: ['off', 'spam'], def: { mode: 'spam' } },
+    'Last Stand': { st: '', modes: ['off', 'emergency'], def: { mode: 'emergency', p: 20 } },
+    'Death Wish': { st: '', modes: ['off', 'spam', 'emergency', 'multi'], def: { mode: 'multi', p: 2 } },
+    'Sweeping Strikes': { st: 'b', modes: ['off', 'multi', 'spam'], def: { mode: 'multi', p: 2 } },
+    'Mortal Strike': { st: '', modes: ['off', 'spam'], def: { mode: 'spam' } },
+    'Bloodthirst': { st: '', modes: ['off', 'spam'], def: { mode: 'spam' } },
+    'Shield Slam': { st: '', modes: ['off', 'spam'], def: { mode: 'spam' }, shield: true },
+    'Concussion Blow': { st: '', modes: ['off', 'spam', 'emergency'], def: { mode: 'spam' } },
+    'Piercing Howl': { st: '', modes: ['off', 'flee', 'multi'], def: { mode: 'flee' } },
     'Retaliation': { st: 'b', modes: ['off', 'emergency'], def: { mode: 'emergency', p: 40 } },
     'Intimidating Shout': { st: '', modes: ['off', 'emergency', 'multi'], def: { mode: 'emergency', p: 25 } },
     'Shield Wall': { st: 'd', modes: ['off', 'emergency'], def: { mode: 'emergency', p: 20 }, shield: true },
@@ -51,7 +59,7 @@ const PLAYSTYLES = {
   balanced: 'Balanced - avoids creatures far above its level, prefers lone targets but will fight packs.',
   safe: 'Safe - walks around every hostile aggro range, only pulls targets standing alone, one at a time, and avoids area attacks that would pull more.',
 };
-function defaultCfg() { return { style: 'balanced', sitAt: 70, standAt: 100, eatAt: 60, potionAt: 30, stance: 'b', rules: [] }; }
+function defaultCfg() { return { style: 'balanced', sitAt: 70, standAt: 100, eatAt: 60, potionAt: 30, stance: 'b', rules: [], autoTalents: true, talentBuild: 'arms' }; }
 
 /* ------------------------------------------------------------- learning */
 function classAbilityList(cls) {
@@ -62,9 +70,16 @@ function classAbilityList(cls) {
     const sp = G.d.spells.spells[id];
     if (!sp.cls || !sp.cls.includes(cls) || !sp.lv) continue;
     const src = sp.src || [];
-    if (!src.includes('class') || src.includes('talent')) continue;
+    if (!src.includes('class')) continue;
     if ((sp.fl || []).some((f) => f === 'passive' || f === 'hidden' || f === 'ranged')) continue;
     (groups[sp.n] = groups[sp.n] || []).push(Object.assign({ id: +id }, sp));
+  }
+  // abilities that come from talents: rank 1 is the talent's own spell
+  const TA = typeof classTalents === 'function' ? classTalents(cls).abil : {};
+  for (const n in TA) {
+    const sp0 = spellRow(TA[n].ranks[0]); if (!sp0) continue;
+    const l = (groups[n] || []).filter((x) => x.id !== TA[n].ranks[0]);
+    groups[n] = [Object.assign({}, sp0, { id: TA[n].ranks[0], lv: Math.max(10, (TA[n].row || 0) * 5 + 10), talent: true })].concat(l.filter((x) => /Rank [2-9]/.test(x.r || '')));
   }
   const out = {};
   for (const n in groups) {
@@ -73,9 +88,14 @@ function classAbilityList(cls) {
   }
   G.abilCache[cls] = out; return out;
 }
-function knownRank(c, name) { const l = classAbilityList(c.cls)[name]; if (!l) return null; let b = null; for (const s of l) if (s.lv <= c.level) b = s; return b; }
+function knownRank(c, name) {
+  const l = classAbilityList(c.cls)[name]; if (!l) return null;
+  if (typeof classTalents === 'function' && classTalents(c.cls).abil[name] && !talentRank(c, name)) return null;
+  let b = null; for (const s of l) if (s.lv <= c.level || (s.talent && talentRank(c, name))) { if (!b || s.lv >= b.lv) b = s; } return b;
+}
 function learnAbilities(c, quiet) {
   const list = classAbilityList(c.cls); const meta = CLASS_META[c.cls] || {}; c.known = c.known || {};
+  for (const n in c.known) if (!knownRank(c, n) && list[n]) delete c.known[n];
   const order = Object.keys(meta); const learned = [];
   for (const n in list) {
     const sp = knownRank(c, n); if (!sp) continue;
@@ -94,7 +114,7 @@ function learnAbilities(c, quiet) {
 function guessMode(sp) { const k = sp.s && sp.s.kind; if (k === 'dot') return 'debuff'; if (k === 'damage') return 'spam'; return 'off'; }
 function upcomingAbilities(c) {
   const out = []; const list = classAbilityList(c.cls);
-  for (const n in list) for (const s of list[n]) if (s.lv > c.level) { out.push({ n, lv: s.lv, r: s.r, id: s.id, isNew: !c.known || !c.known[n] }); break; }
+  for (const n in list) { if (typeof classTalents === 'function' && classTalents(c.cls).abil[n] && !talentRank(c, n)) continue; for (const s of list[n]) if (s.lv > c.level) { out.push({ n, lv: s.lv, r: s.r, id: s.id, isNew: !c.known || !c.known[n] }); break; } }
   return out.sort((a, b) => a.lv - b.lv);
 }
 
@@ -103,9 +123,9 @@ function mobAura(m, key) { if (!m.auras) return null; for (const a of m.auras) i
 function addMobAura(c, m, sp, e) {
   m.auras = (m.auras || []).filter((a) => a.until > G.gameTime);
   const key = sp.n; let a = m.auras.find((x) => x.key === key && x.au === e.au);
-  const dur = sp.dur && sp.dur > 0 ? sp.dur / 1000 : 10;
-  if (!a) { a = { key, au: e.au, val: e.lo, stacks: 0, src: c, t: 0 }; m.auras.push(a); }
-  a.until = G.gameTime + dur; a.val = e.lo; a.src = c;
+  const tm = auraTalentMods(c, sp.n, sp.dur && sp.dur > 0 ? sp.dur / 1000 : 10, e.lo); const dur = tm.dur;
+  if (!a) { a = { key, au: e.au, val: tm.val, stacks: 0, src: c, t: 0 }; m.auras.push(a); }
+  a.until = G.gameTime + dur; a.val = tm.val; a.src = c;
   if (sp.stack) a.stacks = Math.min(sp.stack, a.stacks + 1); else a.stacks = 1;
   if (e.au === 3) { a.every = (e.amp || 3000) / 1000; a.t = 0; }
   if (e.au === 7 || e.au === 12) { a.brk = G.gameTime + 1; }
@@ -122,6 +142,7 @@ function mobMods(m) {
     else if (a.au === 12) o.stun = true;
     else if (a.au === 7) o.fear = true;
     else if (a.au === 33 || a.au === 31) o.snare *= Math.max(0.2, 1 + a.val / 100);
+    else if (a.au === 26) o.snare = 0;
     else if (a.au === 67) o.disarm = true;
   }
   return o;
@@ -147,7 +168,7 @@ function abilityReady(c, name, sp) {
   const r = rt(c); const now = G.gameTime;
   if ((r.cd[name] || 0) > now) return false;
   if (sp.gcd && r.gcdUntil > now) return false;
-  const cost = sp.pw && sp.pw[0] === 1 ? sp.pw[1] : 0;
+  const cost = abilityCost(c, sp, name);
   if (cost > c.rage) return false;
   if (sp.pw && sp.pw[0] === 4294967294 && c.hp <= baseStats(c).maxHp * (sp.pw[2] || 0) / 100 + 5) return false;
   return true;
@@ -161,18 +182,20 @@ function abilityUsable(c, name) {
   if (!shieldOk(c, name)) return { ok: false, why: 'needs a shield' };
   return { ok: true, sp };
 }
-function spendCost(c, sp) {
+function spendCost(c, sp, name) {
   if (!sp.pw) return;
-  if (sp.pw[0] === 1) c.rage = Math.max(0, c.rage - sp.pw[1]);
+  if (sp.pw[0] === 1) c.rage = Math.max(0, c.rage - abilityCost(c, sp, name));
   else if (sp.pw[0] === 4294967294) c.hp -= Math.round(baseStats(c).maxHp * (sp.pw[2] || 0) / 100);
 }
 function startCooldown(c, name, sp) {
-  const r = rt(c); const cd = (sp.cd || sp.catcd || 0) / 1000;
+  const r = rt(c); const cd = abilityCooldown(c, sp, name);
   if (cd) r.cd[name] = G.gameTime + cd;
   if (sp.gcd) r.gcdUntil = G.gameTime + sp.gcd / 1000;
 }
 function areaTargets(c, rad, engagedOnly) {
   const W = ensureWorld(c.pos.map); const out = [];
+  // creatures fighting us can be far from their spawn point (the grid is by spawn point): take them from the threat list
+  if (engagedOnly) { for (const m of threatsOf(c)) if (Math.hypot(m.x - c.pos.x, m.y - c.pos.y) <= rad) out.push(m); return out; }
   mobsNear(W, c.pos.x, c.pos.y, rad + 20, (m) => {
     if (m.st !== 'alive' && m.st !== 'chase') return;
     if (behOf(m, c) === 'F' || behOf(m, c) === 'X' || m.civ) return;
@@ -182,8 +205,11 @@ function areaTargets(c, rad, engagedOnly) {
   return out;
 }
 /* apply all effects of a spell; returns true when something happened */
+const PHYS_FLAT = { 'Bloodthirst': 1, 'Shield Slam': 1, 'Revenge': 1, 'Pummel': 1, 'Hamstring': 1, 'Shield Bash': 1, 'Intercept Stun': 1 };
 function applySpell(c, sp, tgt, ctx) {
   ctx = ctx || {}; const s = charStats(c); let did = false; let weaponDone = false;
+  if (sp.n === 'Last Stand') { const add = Math.round(s.maxHp * 0.3); addBuff(c, Object.assign({}, sp, { dur: 20000 }), { au: 34, mi: 0, lo: add }); c.hp += add; return true; }
+  if (sp.n === 'Sweeping Strikes') { addBuff(c, Object.assign({}, sp, { dur: 20000 }), { au: 0, mi: 0, lo: 0 }); const b = rt(c).buffs.find((x) => x.name === 'Sweeping Strikes'); if (b) b.sweep = 5; return true; }
   for (const e of sp.ef || []) {
     const area = e.k === 'area_enemy';
     const targets = area ? areaTargets(c, AOE_RADIUS, true) : tgt ? [tgt] : [];   // area attacks only hit what already fights you
@@ -201,6 +227,17 @@ function applySpell(c, sp, tgt, ctx) {
         break;
       }
       case 2: {
+        if (c.cls === 1 && (PHYS_FLAT[sp.n] || sp.sc === 0) && !area && tgt) {
+          // physical abilities with a fixed amount: they can miss, be dodged, crit and are reduced by armor
+          let base = e.lo + Math.random() * Math.max(0, (e.hi || e.lo) - e.lo);
+          if (sp.n === 'Bloodthirst') base = s.ap * e.lo / 100;
+          if (sp.n === 'Shield Slam') base += s.blockValue;
+          const d = playerSwing(c, tgt, s, { min: 0, max: 0, speed: 0 }, { bonus: base, yellow: true, name: sp.n });
+          if (tgt.st === 'alive') engage(tgt, c);
+          if (d > 0 && sp.n === 'Revenge' && Math.random() < 0.15 * talentRank(c, 'Improved Revenge')) addMobAura(c, tgt, { n: 'Revenge Stun', dur: 3000 }, { au: 12, lo: 0 });
+          if (tgt.hp <= 0) killMob(c, tgt);
+          did = true; break;
+        }
         for (const m of targets) {
           if (m.st === 'dead') continue;
           const lo = e.lo, hi = Math.max(e.lo, e.hi || e.lo);
@@ -223,7 +260,12 @@ function applySpell(c, sp, tgt, ctx) {
         if (e.k === 'self' || e.k === 'friend') { addBuff(c, sp, e); did = true; }
         else for (const m of targets) { if (m.st === 'dead') continue; addMobAura(c, m, sp, e); if (m.st === 'alive') engage(m, c); did = true; }
         break;
-      case 30: if (e.mi === 1 || e.mi == null) { c.rage = Math.min(100, c.rage + e.lo / 10); did = true; } break;
+      case 30: if (e.mi === 1 || e.mi == null) {
+        let add = e.lo / 10;
+        if (sp.n === 'Charge') add += 3 * talentRank(c, 'Improved Charge');
+        if (sp.n === 'Bloodrage') add += 2 * talentRank(c, 'Improved Bloodrage');
+        c.rage = Math.min(100, c.rage + add); did = true;
+      } break;
       case 64: if (e.tr) { const t2 = spellRow(e.tr); if (t2) { applySpell(c, Object.assign({}, t2, { n: t2.n }), e.k === 'self' ? null : tgt, ctx); did = true; } } break;
       default: break;
     }
@@ -232,11 +274,11 @@ function applySpell(c, sp, tgt, ctx) {
 }
 function addBuff(c, sp, e) {
   const r = rt(c); r.buffs = (r.buffs || []).filter((b) => b.until > G.gameTime);
-  const dur = sp.dur && sp.dur > 0 ? sp.dur / 1000 : 10;
+  const tm = auraTalentMods(c, sp.n, sp.dur && sp.dur > 0 ? sp.dur / 1000 : 10, e.lo); const dur = tm.dur;
   let b = r.buffs.find((x) => x.name === sp.n);
   if (!b) { b = { name: sp.n, auras: [], until: 0 }; r.buffs.push(b); }
   b.until = G.gameTime + dur;
-  if (!b.auras.some((a) => a[0] === e.au && a[1] === e.mi)) b.auras.push([e.au, e.mi, e.lo]);
+  const ex = b.auras.find((a) => a[0] === e.au && a[1] === e.mi); if (ex) ex[2] = tm.val; else b.auras.push([e.au, e.mi, tm.val]);
   if (e.au === 4 && sp.n === 'Retaliation') b.retaliation = 30;
   if (e.au === 24) { b.energize = e.lo / 10; b.every = (e.amp || 1000) / 1000; b.t = 0; }
   dirty(c);
@@ -271,7 +313,13 @@ function ruleTarget(c, rule, sp, tgt) {
     case 'lowrage': return att.length && c.rage < (rule.p || 20) ? c : null;
     case 'buff': return att.length && buffLeft(c, sp.n) < 8 ? c : null;
     case 'emergency': return att.length && hpPct < (rule.p || 30) ? (selfOnly ? c : tgt) : null;
-    case 'multi': return att.length >= (rule.p || 2) ? (selfOnly || area ? c : tgt) : null;
+    case 'multi': {
+      if (att.length < (rule.p || 2)) return null;
+      // a debuff-only shout (Demoralizing Shout, Piercing Howl ...): only when someone fighting us does not have it yet
+      const debuffOnly = (sp.ef || []).length && (sp.ef || []).every((e) => (e.t === 6 || e.t === 35) && e.k !== 'self' && e.k !== 'friend');
+      if (debuffOnly && !att.some((m) => inMelee(c, m) && !mobAura(m, sp.n))) return null;
+      return selfOnly || area ? c : tgt;
+    }
     case 'flee': return tgt && tgt.fleeing && !mobAura(tgt, sp.n) ? tgt : null;
     case 'stack': { if (!tgt) return null; const a = mobAura(tgt, sp.n); return !a || a.stacks < (rule.p || 1) || a.until - G.gameTime < 3 ? tgt : null; }
     case 'debuff': {
@@ -298,7 +346,7 @@ function useAbilities(c, tgt) {
       if (rule.mode === 'spam') ok = true;
       else if (rule.mode === 'rage') ok = c.rage >= (rule.p || 0);
       else if (rule.mode === 'multi') ok = attackersOf(c).length >= (rule.p || 2) && c.rage >= (rule.r || 0);
-      const cost = sp.pw && sp.pw[0] === 1 ? sp.pw[1] : 0;
+      const cost = abilityCost(c, sp, rule.n);
       if (ok && c.rage >= cost) r.queued = { name: rule.n, sp };
       continue;
     }
@@ -307,8 +355,10 @@ function useAbilities(c, tgt) {
     const mob = t === c ? tgt : t;
     const melee = sp.rng && sp.rng[1] <= 6;
     if (melee && !inMelee(c, mob)) continue;
-    spendCost(c, sp); startCooldown(c, rule.n, sp);
+    spendCost(c, sp, rule.n); startCooldown(c, rule.n, sp);
     applySpell(c, sp, mob);
+    if (rule.n === 'Slam') r.swingT = Math.max(r.swingT, 1.5 - 0.1 * talentRank(c, 'Improved Slam')) + charStats(c).mh.speed * 0.5;
+    if (rule.n === 'Berserker Rage' && talentRank(c, 'Improved Berserker Rage')) c.rage = Math.min(100, c.rage + 5 * talentRank(c, 'Improved Berserker Rage'));
     if (rule.n === 'Overpower') r.opWindow = 0;
     if (rule.n === 'Revenge') r.revWindow = 0;
     fx(c.pos.x, c.pos.y, rule.n, '#ffe9a8');
@@ -322,7 +372,7 @@ function tryOpener(c, m) {
     const rule = c.cfg.rules.find((x) => x.n === n); if (!rule || rule.mode !== 'opener') continue;
     const u = abilityUsable(c, n); if (!u.ok || !abilityReady(c, n, u.sp)) continue;
     const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d < 8 || d > 25) continue;
-    spendCost(c, u.sp); startCooldown(c, n, u.sp);
+    spendCost(c, u.sp, n); startCooldown(c, n, u.sp);
     rt(c).charging = { m, sp: u.sp, name: n };
     fx(c.pos.x, c.pos.y, n, '#ffe9a8');
     return true;

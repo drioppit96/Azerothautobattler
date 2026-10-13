@@ -143,9 +143,11 @@ function migrate(c) {
   if (c._gear) { for (const k in c._gear.equip) c.equip[k] = makeInst(c._gear.equip[k], 1); for (const [id, n] of c._gear.bags) addItem(c, id, n); delete c._gear; }
   for (const k in c.equip) c.equip[k] = normInst(c.equip[k]);
   for (const s of c.bags) { const m = maxDur(s.id); if (m && s.dur == null) s.dur = m; }
-  c.cfg = Object.assign(defaultCfg(), c.cfg || {});
+  c.cfg = Object.assign(defaultCfg(), c.cfg || {}); c.talents = c.talents || {}; c.taxi = c.taxi || {};
+  if (c.resume && !c.order) { c.order = c.resume; c.hp = null; } delete c.resume;      // was dead when the game closed
   if (G.state && G.state.settings) { if (G.state.settings.autoEat === false) c.cfg.eatAt = 0; if (G.state.settings.autoPotion === false) c.cfg.potionAt = 0; }
   learnAbilities(c, !c._new); delete c._new;
+  if (c.cfg.autoTalents !== false && talentFree(c) > 0) autoTalents(c, true);
   dirty(c);
 }
 function active() { return G.state.characters.find((c) => c.id === G.state.activeId); }
@@ -158,6 +160,7 @@ function baseStats(c) {
   return { str: s[0], agi: s[1], sta: s[2], int: s[3], spi: s[4], maxHp: hp, power: cs ? cs[1] : 0 };
 }
 function save() {
+  if (G.state) G.state.gameTime = G.gameTime;       // order timers are in game time: keep the clock across sessions
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.state, (k, v) => (k === 'rt' || k === '_set' ? undefined : v))); } catch (e) { /* ignore */ }
 }
 function loadSave() {
@@ -268,20 +271,25 @@ function renderChar() {
   if (c.hp == null || c.hp > s.maxHp) c.hp = s.maxHp;
   let status = 'Idle';
   if (r.ghost) status = 'Ghost - running to the corpse';
+  else if (r.flying) status = 'Flying to ' + G.d.taxi.nodes[r.flying.to].n;
+  else if (r.riding) status = 'Travelling on ' + r.riding.name;
   else if (r.fleeing) status = 'Fleeing';
   else if (r.threats && r.threats.length) status = 'In combat: ' + (r.tgt && r.tgt.info ? r.tgt.info[1] : '...');
   else if (r.resting) status = 'Resting';
   else if (c.order) status = 'Working on an order';
-  $('charCard').innerHTML =
+  if (!$('charTop')) $('charCard').innerHTML = '<div id="charTop"></div><div id="unitframes"></div><div id="charStats"></div>';
+  $('charTop').innerHTML =
     '<h3>Character</h3><div class="name" id="cname" title="Click to rename" style="cursor:pointer">' + esc(c.name) + '</div>' +
     '<div class="sub">Level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + ' &middot; ' + status + '</div>' +
     '<div class="bar hp"><i style="width:' + (100 * Math.max(0, c.hp) / s.maxHp) + '%"></i><span>' + Math.round(c.hp) + ' / ' + s.maxHp + '</span></div>' +
     '<div class="bar rage"><i style="width:' + c.rage + '%"></i><span>Rage ' + Math.round(c.rage) + ' / 100</span></div>' +
-    '<div class="bar xp"><i style="width:' + (100 * c.xp / xpNext) + '%"></i><span>XP ' + c.xp + ' / ' + xpNext + '</span></div>' +
+    '<div class="bar xp"><i style="width:' + (100 * c.xp / xpNext) + '%"></i><span>XP ' + c.xp + ' / ' + xpNext + '</span></div>';
+  $('charStats').innerHTML =
     '<div class="stats"><div>Strength <b>' + s.str + '</b></div><div>Agility <b>' + s.agi + '</b></div><div>Stamina <b>' + s.sta + '</b></div>' +
     '<div>Intellect <b>' + s.int + '</b></div><div>Spirit <b>' + s.spi + '</b></div><div>Armor <b>' + Math.round(s.armor) + '</b></div>' +
     '<div>Attack power <b>' + s.ap + '</b></div><div>Crit <b>' + s.crit.toFixed(1) + '%</b></div></div>' +
     '<div class="kv" style="margin-top:6px"><span>Money</span><span style="color:#ffd866">' + money(c.gold) + '</span></div>';
+  renderUnitFrames();
   $('cname').onclick = () => { const n = prompt('Name:', c.name); if (n && n.trim()) { c.name = n.trim().slice(0, 20); save(); renderChar(); } };
 }
 function orderText(c) {
@@ -289,7 +297,8 @@ function orderText(c) {
   if (o.type === 'travel') return { t: 'Travel to ' + o.label, d: Math.round(Math.max(0, o.total - o.done)) + ' yd left (' + o.via + ')' };
   if (o.type === 'grind') return { t: 'Grind ' + o.label, d: 'Radius ' + o.radius + ' yd' + (o.entries ? ', only ' + mobName(o.entries[0]) : '') };
   if (o.type === 'quest') return { t: 'Quest: ' + o.label, d: (o.phase || '') + (o.where ? ' - ' + o.where : '') };
-  if ((o.type === 'questing' || o.type === 'quest') && o.wobj && G.q.byId[o.wobj[0]] && active().quests[o.wobj[0]] && o.phase === G.q.byId[o.wobj[0]].title) { const q = G.q.byId[o.wobj[0]]; const ob = q.objectives[o.wobj[1]]; o.where = (ob.type === 'Collect' ? 'collect ' : ob.id < 0 ? 'use ' : 'kill ') + ob.name + ' ' + progText(active(), q, o.wobj[1]); }
+  if ((o.type === 'questing' || o.type === 'quest' || o.type === 'leveling') && o.wobj && G.q.byId[o.wobj[0]] && active().quests[o.wobj[0]] && o.phase === G.q.byId[o.wobj[0]].title) { const q = G.q.byId[o.wobj[0]]; const ob = q.objectives[o.wobj[1]]; o.where = (ob.type === 'Collect' ? 'collect ' : ob.id < 0 ? 'use ' : 'kill ') + ob.name + ' ' + progText(active(), q, o.wobj[1]); }
+  if (o.type === 'leveling') return levelingText(c, o);
   if (o.type === 'questing') { const q = o.fq && G.q.byId[o.fq]; return { t: 'Questing: ' + (o.zones[o.zi] || 'done'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') }; }
   if (o.type === 'sell' || o.type === 'vendor') return { t: 'Vendor: ' + o.label, d: o.resume ? 'Selling junk, then back to work' : 'Walking to the vendor' };
   return { t: o.type, d: '' };
@@ -652,6 +661,7 @@ async function boot() {
     try { G.d.cstats = await J('../gamedata/creature_stats.json'); } catch (e) { G.d.cstats = null; console.warn('creature_stats.json not found - using estimated creature health and damage'); }
     try { G.d.vendorItems = await J('../gamedata/vendor_items.json'); } catch (e) { G.d.vendorItems = null; }
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }
+    try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }
     try { G.d.go = await J('../gamedata/go_data.json'); } catch (e) { G.d.go = null; console.warn('go_data.json not found - quests with objects are not automated (run: py build_gamedata.py goquest)'); }
     G.d.graveyards = DATA.graveyards;
     G.spawnList = Object.entries(G.d.spawns.spawns).map(([e, l]) => [+e, l]);
@@ -677,11 +687,12 @@ async function boot() {
     G.state = loadSave();
     if (!G.state || !G.state.characters || !G.state.characters.length) {
       const c = newCharacter('Throg', 2, 1);
-      G.state = { version: 1, activeId: c.id, characters: [c], settings: { speed: 1, autoSellJunk: false, chainQuests: true } };
+      G.state = { version: 1, activeId: c.id, characters: [c], settings: { speed: 1, autoSellJunk: true, autoEquip: true, chainQuests: true } };
       save();
     }
+    G.gameTime = G.state.gameTime || 0;
     G.state.characters.forEach(migrate);
-    for (const [k, v] of [['autoBuyBags', true], ['sellWhiteGear', true], ['chainQuests', true], ['autoEat', true], ['autoPotion', true], ['autoRepair', true]]) if (G.state.settings[k] === undefined) G.state.settings[k] = v;
+    for (const [k, v] of [['autoEquip', true], ['autoSellJunk', true], ['autoBuyBags', true], ['sellWhiteGear', true], ['chainQuests', true], ['autoEat', true], ['autoPotion', true], ['autoRepair', true]]) if (G.state.settings[k] === undefined) G.state.settings[k] = v;
     bindInput(); resize(); try { new ResizeObserver(() => resize()).observe($('mapwrap')); } catch (e) { /* old browser */ }
     const c = active();
     goToCharacter();

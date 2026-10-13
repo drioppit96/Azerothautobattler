@@ -290,6 +290,28 @@ def main():
                 n_ic += 1
     log("Icons: %d" % n_ic)
 
+    # ------------------------------------------------------------ unit frame + talent art, small portraits
+    for sub in ("TargetingFrame", "CharacterFrame"):
+        src = os.path.join(root, "ui", sub)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(web, "ui", sub), dirs_exist_ok=True)
+    comp = os.path.join(root, "ui", "composed")
+    if os.path.isdir(comp):
+        os.makedirs(os.path.join(web, "ui", "composed"), exist_ok=True)
+        for f in os.listdir(comp):
+            if f.startswith("TalentFrame__"):
+                shutil.copy(os.path.join(comp, f), os.path.join(web, "ui", "composed", f))
+    ti = os.path.join(gd, "talent_icons")
+    if os.path.isdir(ti):
+        shutil.copytree(ti, os.path.join(web, "gamedata", "talent_icons"), dirs_exist_ok=True)
+    sdir = os.path.join(root, "portraits", "small")
+    if os.path.isdir(sdir):
+        os.makedirs(os.path.join(web, "portraits", "small"), exist_ok=True)
+        for e in ents:
+            f = os.path.join(sdir, e + ".png")
+            if os.path.isfile(f):
+                shutil.copy(f, os.path.join(web, "portraits", "small", e + ".png"))
+
     # ------------------------------------------------------------ game files + PWA
     gsrc = os.path.join(root, "game")
     for f in os.listdir(gsrc):

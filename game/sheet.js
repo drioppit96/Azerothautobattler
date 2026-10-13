@@ -87,6 +87,8 @@ function renderSheet() {
   if (!SH.open) return; const c = active();
   $('sheetTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === SH.tab));
   $('sheetTitle').textContent = c.name + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
+  $('sheet').classList.toggle('wide', SH.tab === 'talents');
+  if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
@@ -160,6 +162,7 @@ function bindSheet() {
     if (e.target.id === 'sheetClose') { closeSheet(); return; }
     const c = active();
     if (behaviourClick(e)) return;
+    if (SH.tab === 'talents' && talentClick(e)) return;
     const g = e.target.closest('[data-go]'); if (g) { if (g.dataset.go === 'v') orderVendor(c); else orderRepair(c); closeSheet(); return; }
     const va = e.target.closest('[data-vact]'); if (va) { if (va.dataset.vact === 'junk') sellJunk(c); else repairAll(c); renderSheet(); return; }
     const bb = e.target.closest('[data-buyb]'); if (bb) { buyItem(c, +bb.dataset.buyb); renderSheet(); return; }
@@ -167,7 +170,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', behaviourChange);
+  sh.addEventListener('change', (e) => { if (!talentChange(e)) behaviourChange(e); });
   sh.addEventListener('dblclick', (e) => {
     const el = e.target.closest('[data-idx],[data-slot]'); if (!el) return; const c = active();
     if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id); if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }
@@ -176,6 +179,8 @@ function bindSheet() {
   });
   sh.addEventListener('mousemove', (e) => {
     if (!$('iact').hidden) return;
+    const tl = e.target.closest('[data-tal]');
+    if (tl) { const tip = $('itip'); tip.innerHTML = talentTip(active(), tl.dataset.tal); tip.hidden = false; const r = tip.getBoundingClientRect(); let x = e.clientX + 16, y = e.clientY + 12; if (x + r.width > window.innerWidth - 4) x = e.clientX - r.width - 16; if (y + r.height > window.innerHeight - 4) y = window.innerHeight - r.height - 4; tip.style.left = x + 'px'; tip.style.top = y + 'px'; return; }
     const el = e.target.closest('[data-idx],[data-slot],[data-bag],[data-buy]');
     if (!el) { hideItemTip(); return; } showItemTip(e, instFromEl(el));
   });
@@ -184,6 +189,7 @@ function bindSheet() {
     if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
     if (e.key === 'c' || e.key === 'C' || e.key === 'b' || e.key === 'B') { if (SH.open && SH.tab === 'char') closeSheet(); else openSheet('char'); }
     if (e.key === 'Escape' && SH.open) closeSheet();
+    if (e.key === 'n' || e.key === 'N') { if (SH.open && SH.tab === 'talents') closeSheet(); else openSheet('talents'); }
   });
 }
 
@@ -197,12 +203,13 @@ function renderGearCard() {
     '<div class="kv"><span>Durability</span><b' + (dur < 0.3 ? ' style="color:#ff6a5a"' : '') + '>' + Math.round(dur * 100) + '%</b></div>' +
     '<div class="kv"><span>Money</span><b>' + moneyHtml(c.gold) + '</b></div>' +
     (upgrades ? '<div class="kv"><span>Upgrades in bags</span><b style="color:#1eff00">' + upgrades + '</b></div>' : '') +
-    '<div class="btnrow"><button class="act" id="btnSheet">Character &amp; bags (C)</button><button class="mini" id="btnVendor">' + (v ? 'Vendor' : 'Go to vendor') + '</button><button class="mini" id="btnRepair">Repair</button></div>' +
+    (talentFree(c) > 0 ? '<div class="kv"><span>Talent points</span><b style="color:#1eff00">' + talentFree(c) + ' free</b></div>' : '') +
+    '<div class="btnrow"><button class="act" id="btnSheet">Character &amp; bags (C)</button><button class="mini" id="btnTal">Talents (N)</button><button class="mini" id="btnVendor">' + (v ? 'Vendor' : 'Go to vendor') + '</button><button class="mini" id="btnRepair">Repair</button></div>' +
     '<label class="chk"><input type="checkbox" data-set="autoEquip"' + (st.autoEquip ? ' checked' : '') + '> Equip upgrades automatically</label>' +
     '<label class="chk"><input type="checkbox" data-set="autoBuyBags"' + (st.autoBuyBags ? ' checked' : '') + '> Buy bags at vendors when there is a free bag slot</label>' +
     '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" id="lnkBeh">Behaviour</a></div>' +
     '<label class="chk"><input type="checkbox" data-set="autoRepair"' + (st.autoRepair ? ' checked' : '') + '> Repair automatically at vendors</label>';
-  $('btnSheet').onclick = () => openSheet('char');
+  $('btnSheet').onclick = () => openSheet('char'); $('btnTal').onclick = () => openSheet('talents');
   $('btnVendor').onclick = () => { if (vendorNear(c)) openSheet('vendor'); else orderVendor(c); };
   $('btnRepair').onclick = () => { const vv = vendorNear(c); if (vv && vv.repair) { repairAll(c); } else orderRepair(c); };
   el.querySelectorAll('[data-set]').forEach((i) => { i.onchange = () => { st[i.dataset.set] = i.checked; save(); }; });
@@ -232,7 +239,7 @@ function behaviourHtml(c) {
   cfg.rules.forEach((rule, i) => {
     const id = c.known[rule.n]; const sp = id ? spellRow(id) : null; const meta = (CLASS_META[c.cls] || {})[rule.n] || { modes: ['off', 'spam'] };
     const u = abilityUsable(c, rule.n);
-    const cost = sp && sp.pw && sp.pw[0] === 1 ? sp.pw[1] + ' rage' : '';
+    const cost = sp && sp.pw && sp.pw[0] === 1 ? abilityCost(c, sp, rule.n) + ' rage' : '';
     const cd = sp && (sp.cd || sp.catcd) ? ((sp.cd || sp.catcd) / 1000) + 's cd' : '';
     h += '<div class="arow' + (rule.mode === 'off' ? ' off' : '') + '">' + spellIcon(sp) +
       '<div class="aname"><b>' + esc(rule.n) + '</b> <span class="muted small">' + esc(sp && sp.r ? sp.r : '') + '</span><div class="small muted">' + [cost, cd].filter(Boolean).join(', ') + (u.ok ? '' : ' <span style="color:#e6b93c">' + esc(u.why) + '</span>') + '</div></div>' +
@@ -269,7 +276,7 @@ function renderAbar() {
   for (const rule of items) {
     const sp = spellRow(c.known[rule.n]); if (!sp) continue; const u = abilityUsable(c, rule.n);
     const cdLeft = Math.max(0, (r.cd[rule.n] || 0) - G.gameTime); const cdTot = (sp.cd || sp.catcd || 0) / 1000;
-    const cost = sp.pw && sp.pw[0] === 1 ? sp.pw[1] : 0;
+    const cost = abilityCost(c, sp, rule.n);
     const dim = !u.ok || cost > c.rage;
     h += '<div class="ab' + (dim ? ' dim' : '') + (r.queued && r.queued.name === rule.n ? ' q' : '') + '" title="' + esc(rule.n + ' - ' + MODE_TEXT[rule.mode] + (MODE_HAS_P[rule.mode] ? ' ' + rule.p : '')) + '">' + spellIcon(sp) +
       (cdLeft > 0 && cdTot ? '<i style="height:' + Math.round(100 * cdLeft / cdTot) + '%"></i><b>' + Math.ceil(cdLeft) + '</b>' : '') + '</div>';
