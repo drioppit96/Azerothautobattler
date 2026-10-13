@@ -301,23 +301,34 @@ function updateTrainer(c, o, dt) {
   startInteract(c, 'Training', () => { trainAt(c, o.e, o.skill); renderOrder(); }, 1.5);
   renderOrder();
 }
-function routeOf(c) { return profState(c).route; }
-function orderPatrol(c) {
-  const R = routeOf(c); if (!R || R.pts.length < 2) { log('Set at least two checkpoints for the gathering route first.'); return; }
-  if (!c.prof.skills[182] && !c.prof.skills[186] && !c.prof.skills[SKINNING]) log('No gathering profession yet - the route is walked anyway (learn Herbalism, Mining or Skinning at a trainer).');
+/* two routes: 'gather' (herbs, ore) and 'grind' (creatures along the way, no gathering) */
+const ROUTE_KIND = { gather: { key: 'route', name: 'Gathering route', color: 'rgba(120,230,120,.9)', dot: '#1c3a1c', ring: '#9cf09c', text: '#d8ffd8' },
+  grind: { key: 'routeGrind', name: 'Grinding route', color: 'rgba(255,120,100,.9)', dot: '#3a1c1c', ring: '#ff9c8c', text: '#ffe0d8' } };
+function routeOf(c, kind) { return profState(c)[ROUTE_KIND[kind || 'gather'].key] || null; }
+function setRoute(c, kind, R) { profState(c)[ROUTE_KIND[kind || 'gather'].key] = R; }
+function orderPatrol(c, kind) {
+  kind = kind || 'gather'; const K = ROUTE_KIND[kind];
+  const R = routeOf(c, kind); if (!R || R.pts.length < 2) { log('Set at least two checkpoints for the ' + K.name.toLowerCase() + ' first.'); return; }
+  if (kind === 'gather' && !c.prof.skills[182] && !c.prof.skills[186] && !c.prof.skills[SKINNING]) log('No gathering profession yet - the route is walked anyway (learn Herbalism, Mining or Skinning at a trainer).');
   let best = 0, bd = 1e9; R.pts.forEach((p, i) => { const d = Math.hypot(p.x - c.pos.x, p.y - c.pos.y); if (d < bd) { bd = d; best = i; } });
   const trip = R.map !== c.pos.map || bd > 400 ? planTrip(c, { map: R.map, x: R.pts[best].x, y: R.pts[best].y }) : null;
-  if (R.map !== c.pos.map && !trip) { log('Cannot find a way to the gathering route.'); return; }
-  c.order = { type: 'patrol', i: best, laps: 0, gathered: 0, trip, started: G.gameTime, label: 'gathering route' };
+  if (R.map !== c.pos.map && !trip) { log('Cannot find a way to the ' + K.name.toLowerCase() + '.'); return; }
+  c.order = { type: 'patrol', kind, i: best, laps: 0, gathered: 0, kills: 0, trip, started: G.gameTime, label: K.name.toLowerCase() };
   rt(c).mv = null; rt(c).tgt = null;
-  log('Order: walk the gathering route (' + R.pts.length + ' checkpoints).'); save(); renderOrder();
+  log('Order: walk the ' + K.name.toLowerCase() + ' (' + R.pts.length + ' checkpoints).'); save(); renderOrder();
 }
 function updatePatrol(c, o, dt) {
-  const r = rt(c); const R = routeOf(c);
+  const r = rt(c); const kind = o.kind || 'gather'; const R = routeOf(c, kind);
   if (!R || R.pts.length < 2) { c.order = null; renderOrder(); return; }
   if (r.bagFull || bagFree(c) <= 0) { bagsFull(c, o); return; }
-  if (o.trip) { const st = tripStep(c, o.trip); if (st === 'busy') return; if (st === 'fail') { log('Could not reach the gathering route.'); c.order = null; renderOrder(); return; } o.trip = null; }
-  if (gatherStep(c, o, NODE_SEE)) return;
+  if (o.trip) { const st = tripStep(c, o.trip); if (st === 'busy') return; if (st === 'fail') { log('Could not reach the ' + ROUTE_KIND[kind].name.toLowerCase() + '.'); c.order = null; renderOrder(); return; } o.trip = null; }
+  if (kind === 'gather' && gatherStep(c, o, NODE_SEE)) return;
+  if (kind === 'grind') {
+    // creatures near the route: the nearest one that is worth it, then on along the route
+    if (r.tgt && (r.tgt.st !== 'alive' || (r.tgt.banUntil || 0) > G.gameTime)) r.tgt = null;
+    if (!r.tgt && G.gameTime - (o.lookT || -9) > 0.5) { o.lookT = G.gameTime; const oo = { cx: c.pos.x, cy: c.pos.y, radius: o.radius || 45, loneWait: o.loneWait }; r.tgt = pickTarget(c, oo); o.loneWait = oo.loneWait; }
+    if (r.tgt) { const st = approach(c, r.tgt); if (st === 'gone') r.tgt = null; return; }
+  }
   const p = R.pts[o.i % R.pts.length];
   if (goTo(c, p.x, p.y, 3) || r.blocked) {
     if (r.blocked) { r.blocked = false; log('Checkpoint ' + (o.i + 1) + ' cannot be reached - skipping it.'); }
@@ -326,55 +337,68 @@ function updatePatrol(c, o, dt) {
   }
 }
 function patrolText(c, o) {
-  const R = routeOf(c);
-  return { t: 'Gathering route', d: (o.trip ? tripText(o.trip) : 'checkpoint ' + ((o.i % (R ? R.pts.length : 1)) + 1) + '/' + (R ? R.pts.length : 0)) + ', lap ' + (o.laps + 1) + ', ' + (o.gathered || 0) + ' nodes gathered' + (o.node ? ' - going to ' + objName(o.node.e) : '') };
+  const kind = o.kind || 'gather'; const R = routeOf(c, kind);
+  const where = o.trip ? tripText(o.trip) : 'checkpoint ' + ((o.i % (R ? R.pts.length : 1)) + 1) + '/' + (R ? R.pts.length : 0);
+  if (kind === 'grind') { const t = rt(c).tgt; return { t: 'Grinding route', d: where + ', lap ' + (o.laps + 1) + ', ' + (o.kills || 0) + ' kills' + (t && t.info ? ' - fighting ' + t.info[1] : '') }; }
+  return { t: 'Gathering route', d: where + ', lap ' + (o.laps + 1) + ', ' + (o.gathered || 0) + ' nodes gathered' + (o.node ? ' - going to ' + objName(o.node.e) : '') };
+}
+/* the buttons next to Stop: start the route, or set it up when there is none */
+function routeButton(c, kind) {
+  const R = routeOf(c, kind); const K = ROUTE_KIND[kind];
+  if (R && R.pts.length >= 2) { if (G.routeEdit) { G.routeEdit = null; renderRouteBar(); } orderPatrol(c, kind); } else routeEditStart(kind);
 }
 
 /* ------------------------------------------------------------------ route editing on the map */
-function routeEditStart() {
-  const c = active(); const P = profState(c);
-  if (!P.route || P.route.map !== G.map.map) P.route = { map: G.map.map, pts: [], open: false };
-  G.routeEdit = true; closeSheet(); renderRouteBar(); log('Click the map to add checkpoints to the gathering route.');
+function routeEditStart(kind) {
+  kind = kind || 'gather'; const c = active();
+  if (G.map.world || G.map.cont || G.map.dmap) goToCharacter();
+  const R = routeOf(c, kind);
+  if (!R || R.map !== G.map.map) setRoute(c, kind, { map: G.map.map, pts: [], open: false });
+  G.routeEdit = kind; closeSheet(); renderRouteBar(); log('Click the map to add checkpoints to the ' + ROUTE_KIND[kind].name.toLowerCase() + '.');
 }
 function routeAddPoint(w) {
-  const c = active(); const R = profState(c).route;
-  if (!R || R.map !== G.map.map) { profState(c).route = { map: G.map.map, pts: [], open: false }; }
+  const c = active(); const kind = typeof G.routeEdit === 'string' ? G.routeEdit : 'gather';
+  const R = routeOf(c, kind);
+  if (!R || R.map !== G.map.map) setRoute(c, kind, { map: G.map.map, pts: [], open: false });
   if (!passable(G.map.map, w.x, w.y)) { log('Cannot walk there.'); return; }
-  profState(c).route.pts.push({ x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 }); save(); renderRouteBar();
+  routeOf(c, kind).pts.push({ x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 }); save(); renderRouteBar();
 }
 function renderRouteBar() {
   let el = $('routebar');
   if (!G.routeEdit) { if (el) el.hidden = true; return; }
   if (!el) { el = document.createElement('div'); el.id = 'routebar'; $('mapwrap').appendChild(el); el.onclick = routeBarClick; }
-  const R = routeOf(active()); const n = R ? R.pts.length : 0;
+  const kind = typeof G.routeEdit === 'string' ? G.routeEdit : 'gather';
+  const R = routeOf(active(), kind); const n = R ? R.pts.length : 0;
   el.hidden = false;
-  el.innerHTML = '<b>Gathering route</b> - click the map to add checkpoints (' + n + ')' +
+  el.innerHTML = '<b>' + ROUTE_KIND[kind].name + '</b> - click the map to add checkpoints (' + n + ')' +
     '<label class="chk"><input type="checkbox" data-ropen' + (R && R.open ? ' checked' : '') + '> walk back and forth</label>' +
     '<button class="mini" data-r="undo"' + (n ? '' : ' disabled') + '>Undo</button><button class="mini" data-r="clear"' + (n ? '' : ' disabled') + '>Clear</button>' +
     '<button class="mini" data-r="done">Done</button><button class="act" data-r="start"' + (n >= 2 ? '' : ' disabled') + '>Start route</button>';
 }
 function routeBarClick(e) {
-  const c = active(); const R = routeOf(c);
+  const c = active(); const kind = typeof G.routeEdit === 'string' ? G.routeEdit : 'gather'; const R = routeOf(c, kind);
   if (e.target.dataset && e.target.dataset.ropen != null) { if (R) R.open = e.target.checked; save(); return; }
   const b = e.target.closest('[data-r]'); if (!b) return; const a = b.dataset.r;
   if (a === 'undo' && R) R.pts.pop();
   if (a === 'clear' && R) R.pts = [];
   if (a === 'done') G.routeEdit = false;
-  if (a === 'start') { G.routeEdit = false; orderPatrol(c); }
-  save(); renderRouteBar();
+  if (a === 'start') { G.routeEdit = false; orderPatrol(c, kind); }
+  save(); renderRouteBar(); renderOrder();
 }
 
 /* ------------------------------------------------------------------ drawing */
 function drawProfOverlay(ctx, m) {
   const c = active(); if (!c.prof) return;
-  const R = c.prof.route;
-  if (R && R.map === m.map && R.pts.length && (G.routeEdit || (c.order && c.order.type === 'patrol') || G.state.settings.showRoute !== false)) {
-    ctx.save(); ctx.setLineDash([7, 5]); ctx.strokeStyle = 'rgba(120,230,120,.9)'; ctx.lineWidth = 2.2; ctx.beginPath();
+  for (const kind in ROUTE_KIND) {
+    const R = routeOf(c, kind); const K = ROUTE_KIND[kind];
+    const busy = c.order && c.order.type === 'patrol' && (c.order.kind || 'gather') === kind;
+    if (!R || R.map !== m.map || !R.pts.length || !(G.routeEdit === kind || busy || G.state.settings.showRoute !== false)) continue;
+    ctx.save(); ctx.setLineDash([7, 5]); ctx.strokeStyle = K.color; ctx.lineWidth = 2.2; ctx.beginPath();
     R.pts.forEach((p, i) => { const [x, y] = w2s(p.x, p.y); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
     if (!R.open && R.pts.length > 2) { const [x, y] = w2s(R.pts[0].x, R.pts[0].y); ctx.lineTo(x, y); }
     ctx.stroke(); ctx.setLineDash([]);
     ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center';
-    R.pts.forEach((p, i) => { const [x, y] = w2s(p.x, p.y); ctx.fillStyle = '#1c3a1c'; ctx.strokeStyle = '#9cf09c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#d8ffd8'; ctx.fillText(String(i + 1), x, y + 3.5); });
+    R.pts.forEach((p, i) => { const [x, y] = w2s(p.x, p.y); ctx.fillStyle = K.dot; ctx.strokeStyle = K.ring; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.fillStyle = K.text; ctx.fillText(String(i + 1), x, y + 3.5); });
     ctx.textAlign = 'start'; ctx.restore();
   }
   if (G.state.settings.showNodes === false) return;
@@ -429,7 +453,7 @@ function professionsHtml(c) {
     h += '<div class="small muted">Colors: <span class="rc-orange">orange</span> always raises the skill, <span class="rc-yellow">yellow</span> usually, <span class="rc-green">green</span> rarely, <span class="rc-grey">grey</span> never.</div></div>';
   }
   // gathering
-  const R = P.route; const nf = Object.keys(P.found).length;
+  const R = routeOf(c, 'gather'); const nf = Object.keys(P.found).length;
   h += '<div class="sgroup"><h5>Gathering route</h5><div class="small">' + (R && R.pts.length ? R.pts.length + ' checkpoints on ' + (R.map === 0 ? 'Eastern Kingdoms' : 'Kalimdor') + (R.open ? ', walked back and forth' : ', walked in a loop') : 'No route yet.') + '</div>' +
     '<div class="pbtns"><button class="mini" data-proute="edit">Edit route on the map</button><button class="mini" data-proute="clear"' + (R && R.pts.length ? '' : ' disabled') + '>Clear route</button><button class="act" data-proute="start"' + (R && R.pts.length >= 2 ? '' : ' disabled') + '>Start route</button></div>' +
     '<div class="small muted">The character walks from checkpoint to checkpoint and gathers every herb or ore it can (within ' + NODE_SEE + ' yards), fights what attacks it, skins its kills (Skinning) and sells junk when the bags are full. Nodes are hidden on the map until gathered once (' + nf + ' found so far).</div>' +
@@ -445,9 +469,9 @@ function professionsClick(e) {
   if (d.punlearn) { if (confirm('Forget ' + profName(+d.punlearn) + ' and all its recipes?')) unlearnProfession(c, +d.punlearn); renderSheet(); return true; }
   if (d.pcraft) { craft(c, d.pcraft, 1); renderSheet(); return true; }
   if (d.pcraftall) { craft(c, d.pcraftall, 999); renderSheet(); return true; }
-  if (d.proute === 'edit') { routeEditStart(); return true; }
+  if (d.proute === 'edit') { routeEditStart('gather'); return true; }
   if (d.proute === 'clear') { profState(c).route = null; save(); renderSheet(); return true; }
-  if (d.proute === 'start') { orderPatrol(c); closeSheet(); return true; }
+  if (d.proute === 'start') { orderPatrol(c, 'gather'); closeSheet(); return true; }
   return false;
 }
 function professionsChange(e) {

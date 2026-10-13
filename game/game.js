@@ -325,12 +325,21 @@ function renderOrder() {
     h += '<div><b>' + esc(tx.t) + '</b></div><div class="muted">' + esc(tx.d) + '</div>';
     if (o.type === 'travel') { const left = Math.max(0, o.total - o.done); h += '<div class="muted">about ' + fmtTime(left / c.speed / speed) + '</div><div class="bar xp" style="margin:8px 0"><i style="width:' + (100 * o.done / Math.max(1, o.total)) + '%"></i></div>'; }
     if (o.type === 'grind') h += '<div class="muted">Kills so far: ' + (o.kills || 0) + '</div>';
-    h += '<button class="act red" id="btnStop" style="margin-top:8px">Stop</button>';
+  }
+  {
+    // Stop, and the two routes: start them (or set them up first) - the pencil edits the route on the map
+    const gr = typeof routeOf === 'function' ? routeOf(c, 'gather') : null, ki = typeof routeOf === 'function' ? routeOf(c, 'grind') : null;
+    const on = (k) => o && o.type === 'patrol' && (o.kind || 'gather') === k;
+    h += '<div class="obtns">' + (o ? '<button class="act red" id="btnStop">Stop</button>' : '') +
+      '<span class="obtn' + (on('gather') ? ' on' : '') + '"><button class="mini" data-oroute="gather" title="' + (gr && gr.pts.length >= 2 ? 'Walk the gathering route: herbs, ore, skinning' : 'Set up a gathering route on the map') + '">&#127807; Gather</button><button class="mini" data-oedit="gather" title="Edit the gathering route on the map">&#9998;</button></span>' +
+      '<span class="obtn' + (on('grind') ? ' on' : '') + '"><button class="mini" data-oroute="grind" title="' + (ki && ki.pts.length >= 2 ? 'Walk the grinding route and fight the creatures along it' : 'Set up a grinding route on the map') + '">&#9876; Grind</button><button class="mini" data-oedit="grind" title="Edit the grinding route on the map">&#9998;</button></span></div>';
   }
   h += '<div style="margin-top:10px"><label class="chk"><input type="checkbox" id="autoSell"' + (G.state.settings.autoSellJunk ? ' checked' : '') + '> Auto-sell junk (grey and vendor trash): when near a vendor, and when bags are full</label>' +
     '<label class="chk"><input type="checkbox" id="sellWhite"' + (G.state.settings.sellWhiteGear ? ' checked' : '') + '> Count white gear that is no upgrade as junk</label></div>';
   $('orderCard').innerHTML = h;
   const b = $('btnStop'); if (b) b.onclick = () => stopOrder(c);
+  $('orderCard').querySelectorAll('[data-oroute]').forEach((x) => { x.onclick = () => { routeButton(c, x.dataset.oroute); renderOrder(); }; });
+  $('orderCard').querySelectorAll('[data-oedit]').forEach((x) => { x.onclick = () => routeEditStart(x.dataset.oedit); });
   const a = $('autoSell'); if (a) a.onchange = () => { G.state.settings.autoSellJunk = a.checked; save(); };
   const sw = $('sellWhite'); if (sw) sw.onchange = () => { G.state.settings.sellWhiteGear = sw.checked; save(); refreshGear(); };
 }
@@ -384,6 +393,7 @@ function showMenu(sx, sy, sel) {
     '<button data-a="travel">Travel here</button>' +
     '<button data-a="grind">Grind around here</button>' + extra +
     '<button data-a="route">Add a gathering route checkpoint here</button>' +
+    '<button data-a="kroute">Add a grinding route checkpoint here</button>' +
     '<button data-a="close" style="color:#9a8f77">Cancel</button>';
   m.hidden = false; G.menuOpen = true;
   const w = $('mapwrap').clientWidth, h = $('mapwrap').clientHeight;
@@ -391,7 +401,7 @@ function showMenu(sx, sy, sel) {
   m.onclick = (ev) => {
     const a = ev.target.dataset && ev.target.dataset.a; if (!a) return;
     if (a === 'travel') orderTravel(c, target, label);
-    else if (a === 'route') { if (!G.routeEdit) routeEditStart(); routeAddPoint(target); }
+    else if (a === 'route' || a === 'kroute') { const k = a === 'route' ? 'gather' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
     else if (a === 'grind') orderGrind(c, target.x, target.y, 100, null, 'around ' + (sel.kind === 'ground' ? label : title));
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));

@@ -8,6 +8,8 @@ const UF = {
   portrait: { x: 128, y: 8, d: 57 }, name: { x: 7, y: 17, w: 114, h: 14 },
   hp: { x: 7, y: 36, w: 112, h: 7 }, pw: { x: 7, y: 47, w: 114, h: 7 }, level: { x: 182, y: 60 },
   maxEnemies: 5,
+  /* buff / debuff icons under the bars, like the target frame of the game: 5 in a row, the time left below each */
+  aura: { y: 56, d: 22, gap: 2, row: 32, perRow: 5 },
 };
 const RACE_PORTRAIT = { 1: 'Human', 2: 'Orc', 3: 'Dwarf', 4: 'NightElf', 5: 'Scourge', 6: 'Tauren', 7: 'Gnome', 8: 'Troll' };
 const REACTION_BG = { A: 'rgba(200,30,20,.75)', N: 'rgba(210,180,20,.7)', F: 'rgba(30,170,40,.7)', X: 'rgba(110,110,120,.7)' };
@@ -35,7 +37,10 @@ function ufMake(s, mirror) {
   el._pwt = box('uftxt', { x: UF.pw.x, y: UF.pw.y - 2 }, UF.pw.w, UF.pw.h + 4);
   const lv = document.createElement('div'); lv.className = 'uflvl';
   lv.style.left = ((mirror ? UF.w - UF.level.x : UF.level.x) * s - 12) + 'px'; lv.style.top = (UF.level.y * s - 7) + 'px'; el.appendChild(lv); el._lv = lv;
-  el._auras = document.createElement('div'); el._auras.className = 'ufauras'; el._auras.style.left = X({ x: UF.name.x, w: UF.name.w }) + 'px'; el._auras.style.top = (UF.pw.y + UF.pw.h + 2) * s + 'px'; el.appendChild(el._auras);
+  const A = UF.aura; const aw = A.perRow * A.d + (A.perRow - 1) * A.gap;
+  el._auras = document.createElement('div'); el._auras.className = 'ufauras'; el._auras.style.left = X({ x: UF.name.x, w: aw }) + 'px'; el._auras.style.top = A.y * s + 'px'; el._auras.style.width = aw * s + 'px';
+  if (mirror) el._auras.style.justifyContent = 'flex-end';
+  el.appendChild(el._auras); el._rows = 0;
   return el;
 }
 function ufSet(el, k, v, fn) { if (el['_v' + k] !== v) { el['_v' + k] = v; fn(v); } }
@@ -67,15 +72,16 @@ function renderUnitFrames() {
     me._cb.hidden = !r.cast; if (r.cast) { me._cb.firstChild.style.width = Math.min(100, 100 * r.cast.t / Math.max(0.01, r.cast.total)) + '%'; me._cb.lastChild.textContent = r.cast.name; }
   });
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
-  ufSet(me, 'auras', (r.buffs || []).filter((b) => b.until > G.gameTime).map((b) => b.name).join(','), (v) => { me._auras.innerHTML = v ? v.split(',').map((n) => '<i title="' + esc(n) + '">' + ufAuraIcon(n) + '</i>').join('') : ''; });
+  ufAuras(me, ufPlayerAuras(c, r));
   // the creatures it fights: current target first
   const list = []; if (r.tgt && r.tgt.st !== 'dead' && (r.tgt.tgt === c || (r.threats || []).length === 0)) list.push(r.tgt);
   for (const m of r.threats || []) if (!list.includes(m)) list.push(m);
   const shown = list.slice(0, UF.maxEnemies);
   while (box._en.length < shown.length) { const e = ufMake(se, false); e.classList.add('ufenemy'); box.appendChild(e); box._en.push(e); e.onclick = () => { if (e._mob) { G.selected = { kind: 'mob', mob: e._mob }; renderInfo(G.selected); } }; }
+  let y = ufSlot(me) * sp + 6;
   box._en.forEach((e, i) => {
     const m = shown[i]; e.style.display = m ? '' : 'none'; e._mob = m || null; if (!m) return;
-    e.style.top = Math.round(UF.h * sp + 6 + i * (UF.h * se + 3)) + 'px';
+    e.style.top = Math.round(y) + 'px';
     const info = m.info; const beh = behOf(m, c);
     ufSet(e, 'id', m, () => {
       e._bg.style.backgroundImage = 'url(' + ufFrameTexture(m.rank) + ')';
@@ -90,19 +96,51 @@ function renderUnitFrames() {
     const hpPct = Math.max(0, Math.round(100 * m.hp / m.maxhp));
     ufSet(e, 'hp', hpPct, (v) => { e._hpi.style.width = v + '%'; e._hpt.textContent = v + '%'; });
     ufSet(e, 'tgt', m === r.tgt, (v) => e.classList.toggle('target', v));
-    const au = (m.auras || []).filter((a) => a.until > G.gameTime).map((a) => a.key + (a.stacks > 1 ? ' x' + a.stacks : '')).join(',');
-    ufSet(e, 'auras', au, (v) => { e._auras.innerHTML = v ? v.split(',').map((n) => '<i title="' + esc(n) + '">' + ufAuraIcon(n.replace(/ x\d+$/, '')) + '</i>').join('') : ''; });
+    ufAuras(e, ufMobAuras(m));
+    y += ufSlot(e) * se + 3;
   });
-  const hE = shown.length ? 6 + shown.length * (UF.h * se + 3) : 0, hP = UF.h * sp;
-  box.style.height = Math.ceil(hP + hE) + 'px';
+  box.style.height = Math.ceil(shown.length ? y : ufSlot(me) * sp) + 'px';
   me.style.top = '0px';
+}
+/* height of a frame with its rows of auras (in texture pixels) */
+function ufSlot(el) { return el._rows ? Math.max(UF.h, UF.aura.y + el._rows * UF.aura.row) : UF.h; }
+/* time left like the game: 25m, 2h, 45s */
+function ufTime(t) { if (t == null || t > 7200 * 4) return ''; if (t >= 3600) return Math.ceil(t / 3600) + 'h'; if (t >= 60) return Math.ceil(t / 60) + 'm'; return Math.ceil(t) + 's'; }
+/* the character's buffs (and a few debuffs) */
+function ufPlayerAuras(c, r) {
+  const now = G.gameTime; const out = [];
+  for (const b of r.buffs || []) if (b.until > now) out.push({ n: b.name, ic: b.ic, left: b.until - now, k: b.kind || 'buff' });
+  if (r.bandage) out.push({ n: 'First Aid (' + r.bandage.name + ')', ic: r.bandage.ic || 'spell_holy_heal', left: r.bandage.left, k: 'buff' });
+  if (r.eating) out.push({ n: 'Food', ic: 'inv_misc_food_14', left: r.eating.left, k: 'buff' });
+  if (r.drinking) out.push({ n: 'Drink', ic: 'inv_drink_07', left: r.drinking.left, k: 'buff' });
+  if (r.icd && r.icd.bandaged > now) out.push({ n: 'Recently Bandaged', ic: 'inv_misc_bandage_09', left: r.icd.bandaged - now, k: 'debuff' });
+  return out;
+}
+/* what the character put on a creature (one icon per spell) */
+function ufMobAuras(m) {
+  const now = G.gameTime; const out = []; const seen = {};
+  for (const a of m.auras || []) {
+    if (a.until <= now) continue; const o = seen[a.key];
+    if (o) { o.left = Math.max(o.left, a.until - now); o.st = Math.max(o.st, a.stacks || 1); continue; }
+    out.push(seen[a.key] = { n: a.key, left: a.until - now, st: a.stacks || 1, k: 'debuff' });
+  }
+  return out;
+}
+function ufAuras(el, list) {
+  const key = list.map((a) => a.n + '|' + ufTime(a.left) + '|' + (a.st || 1) + '|' + a.k).join(',');
+  ufSet(el, 'auras', key, () => {
+    el._rows = Math.ceil(list.length / UF.aura.perRow);
+    el._auras.innerHTML = list.map((a) => '<i class="' + a.k + '" title="' + esc(a.n + (a.left && a.left < 7200 * 4 ? ' - ' + ufTime(a.left) + ' left' : '')) + '"><span>' +
+      (a.ic ? '<img src="../icons/' + esc(a.ic.toLowerCase()) + '.jpg" alt="" onerror="this.style.visibility=\'hidden\'">' : ufAuraIcon(a.n)) +
+      (a.st > 1 ? '<b>' + a.st + '</b>' : '') + '</span><em>' + ufTime(a.left) + '</em></i>').join('');
+  });
 }
 /* a small icon for a buff / debuff by spell name (from the spell data), or its first letter */
 function ufAuraIcon(name) {
   G.auraIcon = G.auraIcon || {};
   if (!(name in G.auraIcon)) {
     let ic = null; const sp = G.d.spells && G.d.spells.spells;
-    if (sp) for (const id in sp) if (sp[id].n === name && sp[id].ic) { ic = sp[id].ic; break; }
+    if (sp) for (const id in sp) if (sp[id].n === name && sp[id].ic && sp[id].ic !== 'temp') { ic = sp[id].ic; break; }
     G.auraIcon[name] = ic;
   }
   const ic = G.auraIcon[name];

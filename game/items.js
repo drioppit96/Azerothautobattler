@@ -98,6 +98,7 @@ function isJunk(c, id) {
   // while leveling automatically: everything a player would vendor (no upgrade, not for quests, not food or potions)
   if (G.state.settings.sellAll !== false && c.order && (c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling')) && r) {
     if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion' || useInfo(id).kind === 'drink')) return false;
+    if (typeof consKeep === 'function' && consKeep(c, id)) return false;
     if (r.c === 6 && c.cls === 3) return false;                       // arrows and bullets
     if (r.c === 1) { if (!r.cs || r.bf) return true; const eq = c.bagSlots.filter(Boolean).map((b) => (itemRow(b.id) || {}).cs || 0); return eq.length >= 4 && r.cs <= Math.min(...eq); }
     if (r.sl && r.sl.length) return !upgradeFor(c, { id, n: 1 }) && !((r.rl || 0) > c.level && (r.q || 0) >= 2);
@@ -130,7 +131,7 @@ function spellRow(id) { return G.d.spells.spells[id] || null; }
 /* add one aura [type, misc, value] to a stat block */
 function applyAura(s, au, mi, v) {
   switch (au) {
-    case 29: if (mi === -1 || mi == null) { for (const k of AURA_STAT) s[k] += v; } else if (AURA_STAT[mi]) s[AURA_STAT[mi]] += v; break;
+    case 29: if (mi === -1) { for (const k of AURA_STAT) s[k] += v; } else if (AURA_STAT[mi]) s[AURA_STAT[mi]] += v; break;
     case 99: s.ap += v; break;
     case 124: s.rap += v; break;
     case 52: s.crit += v; break;
@@ -151,6 +152,7 @@ function applyAura(s, au, mi, v) {
     case 87: s.dmgTaken *= 1 + v / 100; break;
     case 79: s.dmgDone *= 1 + v / 100; break;
     case 55: s.shit += v; break;
+    case 9001: s.wBonus += v; break;           // sharpening stone / weightstone (weapon damage)
     default: return false;
   }
   return true;
@@ -185,7 +187,7 @@ function charStats(c) {
   const b = baseStats(c);
   const s = { str: b.str, agi: b.agi, sta: b.sta, int: b.int, spi: b.spi, ap: 0, rap: 0, crit: 0, hit: 0, dodge: 0, parry: 0, block: 0, blockValue: 0,
     def: c.level * 5, armorItems: 0, armorBonus: 0, res: { holy: 0, fire: 0, nature: 0, frost: 0, shadow: 0, arcane: 0 }, sd: 0, heal: 0, mp5: 0, hp5: 0,
-    hpBonus: 0, manaBonus: 0, apVs: [], scrit: 0, shit: 0, procs: [], unknown: [], dmgDone: 1, dmgTaken: 1 };
+    hpBonus: 0, manaBonus: 0, apVs: [], scrit: 0, shit: 0, procs: [], unknown: [], dmgDone: 1, dmgTaken: 1, wBonus: 0 };
   for (const slot in c.equip) {
     const inst = c.equip[slot]; if (!inst || isBroken(inst)) continue;
     const it = itemRow(inst.id); if (!it) continue;
@@ -222,6 +224,7 @@ function charStats(c) {
   s.hasShield = !!(off && off.c === 4 && off.s === 6 && !isBroken(c.equip[16]));
   if (s.hasShield) { s.block += 5 + (s.def - c.level * 5) * 0.04; s.blockValue += Math.floor(s.str / 20); } else { s.block = 0; s.blockValue = 0; }
   s.mh = (c.form && typeof formWeapon === 'function' && formWeapon(c)) || weaponInfo(c.equip[15]) || { min: 1, max: 2, speed: 2.0, name: 'Fists', school: 0 };
+  if (s.wBonus && !c.form && c.equip[15]) s.mh = Object.assign({}, s.mh, { min: s.mh.min + s.wBonus, max: s.mh.max + s.wBonus });
   const oh = weaponInfo(c.equip[16]); s.oh = oh && canDualWield(c) && !c.form ? oh : null;
   s.mhDps = ((s.mh.min + s.mh.max) / 2 + s.ap / 14 * s.mh.speed) / s.mh.speed;
   s.ohDps = s.oh ? ((s.oh.min + s.oh.max) / 2 + s.ap / 14 * s.oh.speed) * 0.5 / s.oh.speed : 0;
@@ -373,7 +376,7 @@ function useInfo(id) {
       if (e.t === 6 && e.au === 84) { const amp = (e.amp || 3000) / 1000; return { kind: 'food', tick: e.lo, every: amp, dur: (sp.dur || 18000) / 1000, sp, combat: false }; }
       if (e.t === 6 && e.au === 20) { const amp = (e.amp || 3000) / 1000; return { kind: 'food', pct: e.lo, every: amp, dur: (sp.dur || 18000) / 1000, sp, combat: false }; }
       if (e.t === 6 && e.au === 85 && sp.n && /drink/i.test(sp.n)) return { kind: 'drink', sp };
-      if (e.t === 30 || (e.t === 6 && e.au === 24)) return { kind: 'drink', sp };
+      if (e.t === 6 && e.au === 24 && /drink/i.test(sp.n || '')) return { kind: 'drink', sp };
     }
     return { kind: 'other', sp };
   }
@@ -395,7 +398,8 @@ function useItem(c, idx, auto) {
   } else if (u.kind === 'drink') {
     if (inCombat) return false; log('Drinking ' + itemName(inst.id) + '.'); r.resting = true;
     if (typeof drinkValue === 'function') r.drinking = { tick: drinkValue(inst.id) / 9, left: 18 };
-  } else { if (!auto) log(itemName(inst.id) + ': ' + (u.sp ? u.sp.n : 'nothing happens') + ' (not simulated yet).'); return false; }
+  } else if (typeof consInfo === 'function' && consInfo(inst.id)) return useConsumable(c, idx, auto ? 'rule' : undefined);
+  else { if (!auto) log(itemName(inst.id) + ': ' + (u.sp ? u.sp.n : 'nothing happens') + ' (not simulated yet).'); return false; }
   inst.n--; if (inst.n <= 0) c.bags.splice(idx, 1);
   save(); refreshGear(); return true;
 }

@@ -210,6 +210,7 @@ function mobTick(W, m, dt, now) {
           if (c.cls === 1 || (c.cls === 11 && c.form === 'bear')) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
           if (r.cast && !r.cast.ch && c.cls !== 1) r.cast.t = Math.max(0, r.cast.t - 0.5);      // spell pushback
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
+          if (r.bandage) bandageHit(c);
           autoPotion(c);
         } else fx(c.pos.x, c.pos.y, h.t, '#cfc6b0');
         const ret = (r.buffs || []).find((b) => b.retaliation && b.until > now);
@@ -249,7 +250,7 @@ function killMob(c, m) {
   lootMob(c, m);
   onKill(c, m);
   if (c.prof) onKillProf(c, m);
-  if (c.order && c.order.type === 'grind') c.order.kills = (c.order.kills || 0) + 1;
+  if (c.order && (c.order.type === 'grind' || c.order.type === 'patrol')) c.order.kills = (c.order.kills || 0) + 1;
   if (c.order && c.order.type === 'leveling' && c.order.grind) c.order.grind.kills = (c.order.grind.kills || 0) + 1;
   const r = rt(c); if (r.tgt === m) r.tgt = null;
   c.rage = c.rage; save();
@@ -355,6 +356,7 @@ function regenStep(c, dt) {
   if (r.buffs && r.buffs.length) { const n = r.buffs.length; r.buffs = r.buffs.filter((b) => b.until > G.gameTime); if (r.buffs.length !== n) dirty(c); }
   buffStep(c, dt);
   if (r.eating) eatStep(c, dt);
+  if (r.bandage) bandageStep(c, dt);
   if (c.cls !== 1) { hotStep(c, dt); drinkStep(c, dt); }
   r.regenT += dt;
   while (r.regenT >= 2) {
@@ -486,6 +488,7 @@ function procs(c, m, s, w, slot) {
 function fightStep(c, m, dt) {
   const r = rt(c); const s = charStats(c);
   r.outT = 0; r.resting = false; r.eating = null; r.drinking = null;
+  if (typeof consumablesFight === 'function') { consumablesFight(c, m); if (r.bandage) return; }
   const dx = m.x - c.pos.x, dy = m.y - c.pos.y, d = Math.hypot(dx, dy);
   c.pos.o = Math.atan2(dx, dy);
   const want = c.cls === 1 ? MELEE_RANGE : combatRange(c, m);
@@ -699,6 +702,7 @@ function updateChar(c, dt) {
   r.scanT -= dt;
   if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); taxiDiscover(c); if (r.equipLater && !threatsOf(c).length) autoEquip(c); }
   const threats = threatsOf(c); r.threats = threats;
+  if (threats.length && !r.inFight) r.fightStart = G.gameTime; r.inFight = threats.length > 0;
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
   if (c.pet) petStep(c, dt);
@@ -713,6 +717,7 @@ function updateChar(c, dt) {
     r.mv = null; fightStep(c, r.tgt, dt); return;
   }
   if (r.interact) { if (interactStep(c, dt)) return; }
+  if (typeof consumablesOoc === 'function' && consumablesOoc(c)) return;
   if (restStep(c)) return;
   if (c.cls !== 1 && oocStep(c)) return;
   if (c.prof && profStep(c)) return;

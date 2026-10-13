@@ -130,7 +130,8 @@ function showItemMenu(ev, ref) {
   if (ref.where === 'bag') {
     if (it && it.c === 1 && it.cs) acts.push(['bag', 'Equip bag']);
     else if (it && it.sl && it.sl.length) { const why = canEquip(c, inst.id); acts.push(['equip', why ? 'Equip (' + why + ')' : 'Equip', !!why]); if (it.t === 13 && canDualWield(c)) { acts.push(['equip15', 'Equip in main hand']); acts.push(['equip16', 'Equip in off hand']); } }
-    const u = useInfo(inst.id); if (u && u.kind !== 'other') acts.push(['use', u.kind === 'potion' ? 'Drink potion' : u.kind === 'food' ? 'Eat' : 'Use']);
+    const u = useInfo(inst.id); const cu = typeof consInfo === 'function' && consInfo(inst.id);
+    if (u && (u.kind !== 'other' || cu)) acts.push(['use', u.kind === 'potion' ? 'Drink potion' : u.kind === 'food' ? 'Eat' : cu && cu.kind === 'bandage' ? 'Apply bandage' : cu && cu.kind === 'weapon' ? 'Apply to weapon' : cu && cu.kind === 'bomb' ? 'Throw' : 'Use']);
     const v = vendorNear(c); acts.push(['sell', v ? 'Sell for ' + money(itemSell(inst.id) * inst.n) : 'Sell (go to a vendor first)', !v || !itemSell(inst.id)]);
     acts.push(['destroy', 'Destroy']);
   } else if (ref.where === 'eq') acts.push(['unequip', 'Take off']);
@@ -165,6 +166,7 @@ function bindSheet() {
     if (e.target.id === 'sheetClose') { closeSheet(); return; }
     const c = active();
     if (behaviourClick(e)) return;
+    if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
     if (SH.tab === 'talents' && talentClick(e)) return;
     if (SH.tab === 'prof' && professionsClick(e)) return;
     const g = e.target.closest('[data-go]'); if (g) { if (g.dataset.go === 'v') orderVendor(c); else orderRepair(c); closeSheet(); return; }
@@ -242,6 +244,7 @@ function behaviourHtml(c) {
   if (c.pet) h += '<div class="sgroup"><h5>Pet</h5><div class="small">' + esc(c.pet.name) + ' - level ' + c.level + ', ' + (c.pet.dead ? 'dead (revive it)' : Math.round(c.pet.hp) + ' / ' + c.pet.maxhp + ' health') + (PET_KINDS[c.pet.kind] && PET_KINDS[c.pet.kind].tank ? ' - holds the attention of the creatures' : '') + '</div></div>';
   const stances = Object.keys(STANCES).filter((n) => c.known && c.known[n]);
   if (stances.length) h += '<div class="sgroup"><h5>Stance</h5><select data-cfgs="stance">' + stances.map((n) => '<option value="' + STANCES[n] + '"' + (cfg.stance === STANCES[n] ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> <span class="small muted">Abilities that need another stance are skipped.</span></div>';
+  if (typeof consumablesHtml === 'function') h += consumablesHtml(c);
   h += '<div class="sgroup"><h5>Abilities - checked from the top, the first that fits is used</h5>';
   if (!cfg.rules.length) h += '<div class="muted small">No abilities yet.</div>';
   cfg.rules.forEach((rule, i) => {
@@ -273,6 +276,7 @@ function genericModes(c, sp) {
 }
 function behaviourChange(e) {
   const t = e.target; const c = active(); if (!c || !c.cfg) return;
+  if (typeof consumablesChange === 'function' && consumablesChange(e)) return;
   if (t.dataset.cfg) { c.cfg[t.dataset.cfg] = +t.value; if (t.dataset.cfg === 'standAt' && c.cfg.standAt <= c.cfg.sitAt) c.cfg.standAt = Math.min(100, c.cfg.sitAt + 10); }
   else if (t.dataset.cfgs) { c.cfg[t.dataset.cfgs] = t.value; if (t.dataset.cfgs === 'stance') { dirty(c); log('Switched to ' + STANCE_NAME[t.value] + '.'); } }
   else if (t.dataset.rmode != null) { const r = c.cfg.rules[+t.dataset.rmode]; r.mode = t.value; const m = ((CLASS_META[c.cls] || {})[r.n] || {}).def || {}; if (MODE_HAS_P[r.mode] && !r.p) r.p = m.p || (r.mode === 'multi' ? 2 : r.mode === 'rage' ? 40 : 30); }
