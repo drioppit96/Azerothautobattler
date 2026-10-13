@@ -286,6 +286,13 @@ function safePath(c, from, to, road) {
   return out;
 }
 function orderTravel(c, target, label) {
+  // somewhere on another map (another continent, or out of a dungeon): the way out first, then ships, zeppelins and flights
+  if (target.map != null && target.map !== c.pos.map) {
+    const inDg = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map);
+    c.order = { type: 'travel', label: label || 'a point', target: { x: target.x, y: target.y, map: target.map }, cross: true, path: [], idx: 1, total: 0, done: 0, via: inDg ? 'out of the dungeon first' : 'ships and flights' };
+    if (!inDg) { const t = planTrip(c, c.order.target); if (!t) { c.order = null; log('No way to ' + (label || 'there') + ' found.'); renderOrder(); return; } c.order.trip = t; }
+    log('Order: travel to ' + c.order.label + ' (' + c.order.via + ').'); rt(c).mv = null; save(); renderOrder(); return;
+  }
   const p = planPath(c, target);
   c.order = { type: 'travel', label: label || 'a point', target: { x: target.x, y: target.y }, path: p.pts, idx: 1, total: p.total, done: 0, via: p.via };
   log('Order: travel to ' + c.order.label + ' (' + Math.round(p.total) + ' yd, ' + fmtTime(p.total / c.speed / Math.max(1, G.state.settings.speed || 1)) + ', ' + p.via + ').');
@@ -304,6 +311,7 @@ function renderChar() {
 }
 function orderText(c) {
   const o = c.order; if (!o) return null;
+  if (o.type === 'travel' && o.cross) return { t: 'Travel to ' + o.label, d: o.leaving ? 'walking to the way out of the dungeon' : o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : o.via };
   if (o.type === 'travel') return { t: 'Travel to ' + o.label, d: Math.round(Math.max(0, o.total - o.done)) + ' yd left (' + o.via + ')' };
   if (o.type === 'grind') return { t: 'Grind ' + o.label, d: 'Radius ' + o.radius + ' yd' + (o.entries ? ', only ' + mobName(o.entries[0]) : '') };
   if (o.type === 'quest') return { t: 'Quest: ' + o.label, d: (o.phase || '') + (o.where ? ' - ' + o.where : '') };
@@ -379,6 +387,28 @@ function showMenu(sx, sy, sel) {
   else { target = { x: sel.x, y: sel.y }; const [a, b] = mapCoords(G.map, sel.x, sel.y); title = 'Position ' + a + ', ' + b; label = 'position ' + a + ', ' + b; }
   let extra = '';
   const acts = {};
+  // a dungeon map while the character is outside: go there (the dungeon's own buttons), not to these coordinates
+  const dmap = G.map.dmap && c.pos.map !== G.map.map ? G.map.dungeon : null;
+  const away = !dmap && G.map.map !== c.pos.map;            // another continent, or the world outside while in a dungeon
+  target.map = G.map.map;
+  if (dmap) {
+    const low = c.level < dmap.lmin - (dmap.kind === 'raid' ? 0 : 3);
+    m.innerHTML = '<h4>' + esc(dmap.name) + '</h4>' +
+      '<button data-a="dgrun"' + (low ? ' disabled' : '') + '>Run it with a group of ' + dmap.players + '</button>' +
+      '<button data-a="dgsolo"' + (low ? ' disabled' : '') + '>Run it alone</button>' +
+      '<button data-a="dggo">Travel to the entrance</button>' +
+      '<button data-a="close" style="color:#9a8f77">Cancel</button>';
+    m.hidden = false; G.menuOpen = true;
+    const w = $('mapwrap').clientWidth, h = $('mapwrap').clientHeight;
+    m.style.left = Math.min(sx + 6, w - 220) + 'px'; m.style.top = Math.max(4, Math.min(sy + 6, h - 160)) + 'px';
+    m.onclick = (ev) => {
+      const a = ev.target.dataset && ev.target.dataset.a; if (!a) return;
+      if (a === 'dgrun' || a === 'dgsolo') orderDungeon(c, dmap, a === 'dgrun');
+      else if (a === 'dggo') dungeonTravel(c, dmap);
+      hideMenu();
+    };
+    return;
+  }
   if (sel.kind === 'mob') {
     const i = sel.mob.info;
     if (sel.mob.st !== 'dead' && (sel.mob.beh === 'A' || sel.mob.beh === 'N') && !sel.mob.civ) { extra += '<button data-a="grindtype">Grind this kind of creature (' + esc(title) + ')</button>'; }
@@ -390,8 +420,8 @@ function showMenu(sx, sy, sel) {
     for (const q of ready) extra += '<button data-a="quest:' + q.id + '">Turn in: ' + esc(q.title) + '</button>';
   }
   m.innerHTML = '<h4>' + esc(title) + '</h4>' +
-    '<button data-a="travel">Travel here</button>' +
-    '<button data-a="grind">Grind around here</button>' + extra +
+    '<button data-a="travel">Travel here' + (away ? (isDungeonMap(c.pos.map) ? ' (out of the dungeon first)' : ' (ships and flights)') : '') + '</button>' +
+    (away ? '' : '<button data-a="grind">Grind around here</button>' + extra) +
     '<button data-a="route">Add a gathering route checkpoint here</button>' +
     '<button data-a="kroute">Add a grinding route checkpoint here</button>' +
     '<button data-a="close" style="color:#9a8f77">Cancel</button>';
@@ -589,6 +619,7 @@ function bindInput() {
     const d = G.drag; G.drag = null; if (!d || d.moved) return;
     const [sx, sy] = pos(e);
     if (e.button === 2) return;
+    const ex = !G.routeEdit && dungeonExitHit(sx, sy); if (ex) { dungeonExitClick(ex); return; }
     const dh = !G.routeEdit && dungeonHit(sx, sy); if (dh) { openDungeon(dh); return; }
     if (G.map.world || G.map.cont) { const h = navHit(sx, sy); if (h && h.def) { const w = s2w(sx, sy); setMap(h.def); } return; }
     if (G.routeEdit) { const w0 = s2w(sx, sy); if (inMap(G.map, w0.x, w0.y)) routeAddPoint(w0); return; }
@@ -615,8 +646,9 @@ function bindInput() {
       if (G.drag.moved) { G.ox = G.drag.ox + sx - G.drag.x; G.oy = G.drag.oy + sy - G.drag.y; $('follow').checked = false; }
     }
     if (e.pointerType === 'touch') return;
-    G.dgHover = G.drag && G.drag.moved ? null : dungeonHit(sx, sy);
-    if (G.dgHover) { const tip = $('tip'); tip.innerHTML = dungeonTip(G.dgHover); tip.hidden = false; tip.style.left = (sx + 14) + 'px'; tip.style.top = (sy + 14) + 'px'; cv.style.cursor = 'pointer'; G.navHover = null; return; }
+    const exh = G.drag && G.drag.moved ? null : dungeonExitHit(sx, sy);
+    G.dgHover = exh || (G.drag && G.drag.moved ? null : dungeonHit(sx, sy));
+    if (G.dgHover) { const tip = $('tip'); tip.innerHTML = exh ? dungeonExitTip(exh) : dungeonTip(G.dgHover); tip.hidden = false; tip.style.left = (sx + 14) + 'px'; tip.style.top = (sy + 14) + 'px'; cv.style.cursor = 'pointer'; G.navHover = null; return; }
     if (G.map.world || G.map.cont) {
       G.navHover = G.drag && G.drag.moved ? null : navHit(sx, sy); const tip = $('tip');
       if (G.navHover) { tip.innerHTML = navTip(G.navHover); tip.hidden = false; tip.style.left = (sx + 14) + 'px'; tip.style.top = (sy + 14) + 'px'; cv.style.cursor = G.navHover.def ? 'pointer' : 'default'; }

@@ -44,7 +44,44 @@ function dungeonsOnMap(m) {
   if (m.world || m.dmap) return [];
   return dungeonList().filter((d) => d.entrance && d.entrance.map === m.map && inMap(m, d.entrance.x, d.entrance.y));
 }
+/* the ways out of a dungeon (where the portal puts you in), on the floor this map shows */
+function dungeonExitsOn(m) {
+  if (!m || !m.dmap) return [];
+  const d = m.dungeon; return (d.enter || []).map((e, i) => ({ d, e, i })).filter((x) => dungeonFloorAt(d, x.e.x, x.e.y, x.e.z).n === m.floor.n);
+}
+function drawDungeonExits(ctx, m) {
+  const list = dungeonExitsOn(m); if (!list.length) return;
+  ctx.save(); ctx.textAlign = 'center';
+  for (const x of list) {
+    const [sx, sy] = w2s(x.e.x, x.e.y); const hov = G.dgHover && G.dgHover.e === x.e; const R = 11; const col = '#6fe3ff';
+    ctx.shadowColor = col; ctx.shadowBlur = hov ? 18 : 10; ctx.fillStyle = '#0d1a22'; ctx.strokeStyle = col; ctx.lineWidth = hov ? 3 : 2.2;
+    ctx.beginPath(); ctx.arc(sx, sy, R, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let a = 0; a < 9.5; a += 0.3) { const rr = R * 0.75 * a / 9.5; const px = sx - Math.cos(a) * rr, py = sy + Math.sin(a) * rr; if (a) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+    ctx.stroke();
+    ctx.font = 'bold 12px Segoe UI'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#bff3ff';
+    const t = 'Exit' + ((x.d.enter || []).length > 1 && x.e.name && x.e.name !== x.d.name ? ' - ' + x.e.name.replace(x.d.name + ' ', '') : '');
+    ctx.strokeText(t, sx, sy - R - 5); ctx.fillText(t, sx, sy - R - 5);
+  }
+  ctx.restore();
+}
+function dungeonExitHit(sx, sy) {
+  let best = null, bd = 15 * 15;
+  for (const x of dungeonExitsOn(G.map)) { const [px, py] = w2s(x.e.x, x.e.y); const dd = (px - sx) ** 2 + (py - sy) ** 2; if (dd < bd) { bd = dd; best = x; } }
+  return best;
+}
+function zoneNameAt(p) { const m = G.maps.find((q) => !q.world && !q.cont && !q.dmap && q.map === p.map && inMap(q, p.x, p.y)); return m ? m.name : ''; }
+function dungeonExitTip(x) {
+  const c = active(); const inside = c.pos.map === x.d.map; const z = x.d.entrance ? zoneNameAt(x.d.entrance) : '';
+  return '<b>Way out of ' + esc(x.d.name) + '</b>' + (z ? '<br>to ' + esc(z) : '') + '<br><span class="muted">' + (inside ? 'Click to walk out of the dungeon' : 'The entrance puts you in here') + '</span>';
+}
+function dungeonExitClick(x) {
+  const c = active();
+  if (c.pos.map === x.d.map) orderLeaveDungeon(c, x.e);
+  G.selected = { kind: 'dungeon', d: x.d }; renderInfo(G.selected);
+}
 function drawDungeonMarks(ctx, m) {
+  if (m.dmap) { drawDungeonExits(ctx, m); return; }
   const list = dungeonsOnMap(m); if (!list.length) return;
   const c = active(); const R = m.cont ? 7 : 10;
   ctx.save(); ctx.textAlign = 'center';
@@ -94,12 +131,20 @@ function dungeonInfoHtml(d) {
   const low = c.level < d.lmin - (d.kind === 'raid' ? 0 : 3);
   h += '<div class="dgbtns">';
   if (!G.map.dmap || G.map.dungeon !== d) h += '<button class="mini" data-dg="map">Open the dungeon map</button>';
-  if (running) h += '<button class="act red" data-dg="leave">Leave the dungeon</button>';
-  else h += '<button class="act" data-dg="run"' + (low ? ' disabled title="Needs level ' + (d.lmin - (d.kind === 'raid' ? 0 : 3)) + '"' : '') + '>' + (here ? 'Clear it' : 'Run it') + ' with a group of ' + d.players + '</button>' +
+  const leaving = running && o.phase === 'leaving';
+  if (running || here) h += '<button class="act red" data-dg="leave"' + (leaving ? ' disabled' : '') + '>' + (leaving ? 'Walking to the exit...' : 'Leave the dungeon (walk to the exit)') + '</button>';
+  if (!running) h += '<button class="act" data-dg="run"' + (low ? ' disabled title="Needs level ' + (d.lmin - (d.kind === 'raid' ? 0 : 3)) + '"' : '') + '>' + (here ? 'Clear it' : 'Run it') + ' with a group of ' + d.players + '</button>' +
     '<button class="mini" data-dg="solo"' + (low ? ' disabled' : '') + '>Run it alone</button>' +
     (!here && d.entrance ? '<button class="mini" data-dg="go">Travel to the entrance</button>' : '');
   h += '</div><label class="chk"><input type="checkbox" data-dgset="dgFullClear"' + (G.state.settings.dgFullClear ? ' checked' : '') + '> Kill every creature (otherwise: the bosses and what is in the way)</label>';
   return h;
+}
+/* only walk (fly, sail) to the entrance */
+function dungeonTravel(c, d) {
+  if (!d.entrance) return;
+  if (isDungeonMap(c.pos.map)) { orderTravel(c, d.entrance, 'the entrance of ' + d.name); return; }
+  const t = planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y });
+  if (t) { c.order = { type: 'dungeon', map: d.map, phase: 'travel', trip: t, onlyTravel: true, label: d.name }; rt(c).mv = null; log('Order: travel to ' + d.name + '.'); save(); renderOrder(); } else log('No way to ' + d.name + ' found.');
 }
 function dungeonInfoClick(e, d) {
   const b = e.target.closest('[data-dg],[data-dgfloor]'); const c = active();
@@ -110,8 +155,8 @@ function dungeonInfoClick(e, d) {
   if (a === 'map') openDungeon(d);
   else if (a === 'run') orderDungeon(c, d, true);
   else if (a === 'solo') orderDungeon(c, d, false);
-  else if (a === 'go' && d.entrance) { const t = planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }); if (t) { c.order = { type: 'dungeon', map: d.map, phase: 'travel', trip: t, onlyTravel: true, label: d.name }; log('Order: travel to ' + d.name + '.'); save(); renderOrder(); } else log('No way to ' + d.name + ' found.'); }
-  else if (a === 'leave') leaveDungeon(c, 'Left ' + d.name + '.');
+  else if (a === 'go') dungeonTravel(c, d);
+  else if (a === 'leave') orderLeaveDungeon(c);
   renderInfo(G.selected); return true;
 }
 
@@ -318,6 +363,7 @@ function drawParty(ctx, m) {
 function orderDungeon(c, d, group) {
   const min = d.lmin - (d.kind === 'raid' ? 0 : 3);
   if (c.level < min) { log(d.name + ' needs level ' + min + '.'); return; }
+  if (isDungeonMap(c.pos.map) && c.pos.map !== d.map) { log('Leave ' + dungeonByMap(c.pos.map).name + ' first.'); return; }
   const o = { type: 'dungeon', map: d.map, label: d.name, group: !!group, phase: c.pos.map === d.map ? 'inside' : 'travel', started: G.gameTime, kills: 0, bossKills: 0, resume: c.order && c.order.type === 'leveling' ? c.order : null };
   if (o.phase === 'travel') {
     o.trip = d.entrance ? planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }) : null;
@@ -350,8 +396,56 @@ function leaveDungeon(c, msg) {
   if ($('follow').checked) goToCharacter();
   save(); renderOrder();
 }
+/* walking out: to the nearest way out (or the one given), then out through the portal to the entrance */
+function dungeonNearestExit(c, d) {
+  let best = null, bd = Infinity;
+  for (const e of d.enter || []) { const p = dungeonPath(c, c.pos, { x: e.x, y: e.y, z: e.z }); const L = p.noPath ? 1e6 + Math.hypot(e.x - c.pos.x, e.y - c.pos.y) : p.total; if (L < bd) { bd = L; best = e; } }
+  return best;
+}
+function orderLeaveDungeon(c, exit, msg) {
+  const d = dungeonByMap(c.pos.map); if (!d) return;
+  let o = c.order;
+  if (!o || o.type !== 'dungeon' || o.map !== d.map) { o = { type: 'dungeon', map: d.map, label: d.name, group: !!rt(c).party, phase: 'inside', started: G.gameTime, entered: G.gameTime, kills: 0, bossKills: 0, resume: null }; c.order = o; }
+  o.phase = 'leaving'; o.exit = exit || dungeonNearestExit(c, d); o.leaveT = G.gameTime; o.leaveMsg = msg || 'Left ' + d.name + '.'; o.target = null;
+  rt(c).mv = null; log('Walking to the exit of ' + d.name + '.'); save(); renderOrder(); if (G.selected && G.selected.kind === 'dungeon') renderInfo(G.selected);
+}
+/* one step of walking to the way out; true once outside */
+function dungeonExitStep(c, o, d) {
+  const e = o.exit || (o.exit = dungeonNearestExit(c, d)); const r = rt(c);
+  o.leaveT = o.leaveT || G.gameTime;
+  const there = !e || goTo(c, e.x, e.y, 4, e.z);
+  // stuck (or far too long): out anyway, like using the hearthstone
+  if (!there && !r.blocked && G.gameTime - o.leaveT < 600) return false;
+  r.blocked = false; dungeonPortalOut(c, d); return true;
+}
+/* through the portal: from inside to the entrance outside */
+function dungeonPortalOut(c, d) {
+  const r = rt(c);
+  if (d.entrance) c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o };
+  r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = [];
+  if ($('follow').checked) goToCharacter();
+}
+/* a travel order to another map that starts inside a dungeon, or needs ships and flights (from orderTravel) */
+function travelCross(c, o) {
+  if (isDungeonMap(c.pos.map) && c.pos.map !== o.target.map) {
+    const d = dungeonByMap(c.pos.map); o.leaving = true;
+    if (!dungeonExitStep(c, o, d)) return 'busy';
+    o.leaving = false; log('Out of ' + d.name + '.');
+    if (c.pos.map === o.target.map) { o.cross = false; o.via = 'walking'; replanTravel(c, o); return 'done'; }
+    o.trip = planTrip(c, o.target); if (!o.trip) { log('No way to ' + o.label + ' found.'); c.order = null; renderOrder(); return 'fail'; }
+    renderOrder();
+  }
+  if (o.trip) {
+    const st = tripStep(c, o.trip); if (st === 'busy') return 'busy';
+    if (st === 'fail') { log('Could not get to ' + o.label + '.'); c.order = null; save(); renderOrder(); return 'fail'; }
+    o.trip = null;
+  }
+  if (c.pos.map !== o.target.map) { log('Could not get to ' + o.label + '.'); c.order = null; save(); renderOrder(); return 'fail'; }
+  o.cross = false; o.done = 0; o.total = 0; o.via = 'walking'; replanTravel(c, o); renderOrder(); return 'done';
+}
 function dungeonText(c, o) {
   const d = dungeonByMap(o.map);
+  if (o.phase === 'leaving') return { t: 'Dungeon: ' + o.label, d: 'walking to the exit' + (o.exit ? ' (' + Math.round(Math.hypot(o.exit.x - c.pos.x, o.exit.y - c.pos.y)) + ' yd)' : '') };
   if (o.phase === 'travel') return { t: (o.onlyTravel ? 'Travel to ' : 'Dungeon: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'to the entrance' };
   const left = d ? dungeonBossesLeft(c, d).length : 0;
   return { t: 'Dungeon: ' + o.label, d: (o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
@@ -406,16 +500,17 @@ function updateDungeon(c, o, dt) {
     enterDungeon(c, d, o); return;
   }
   if (c.pos.map !== d.map) { c.order = o.resume || null; renderOrder(); return; }
+  if (o.phase === 'leaving') { if (dungeonExitStep(c, o, d)) leaveDungeon(c, o.leaveMsg); return; }
   if (G.gameTime - (o.lastCall || 0) > 2) o.since = G.gameTime;          // busy with fighting, resting or looting in between
   o.lastCall = G.gameTime;
   if (r.bagFull || bagFree(c) <= 0) { const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n); if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 3)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('Bags are full - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); } }
-  if (G.gameTime - o.entered > DG_TIME_LIMIT * (d.kind === 'raid' ? 1.5 : 1)) { leaveDungeon(c, 'Spent too long in ' + d.name + ' - leaving.'); return; }
+  if (G.gameTime - o.entered > DG_TIME_LIMIT * (d.kind === 'raid' ? 1.5 : 1)) { orderLeaveDungeon(c, null, 'Spent too long in ' + d.name + ' - left.'); return; }
   // before each pull: everyone back on their feet
   const p = partyOf(c); if (p && p.some((u) => u.dead || u.hp < u.maxhp * 0.8)) { r.mv = null; o.since = G.gameTime; return; }
   if (!o.target || o.target.st === 'dead' || o.target.unreach) {
     if (o.target && o.target.st === 'dead') o.lastProgress = G.gameTime;
     o.target = dungeonNext(c, d, o);
-    if (!o.target) { leaveDungeon(c, d.name + ' cleared: ' + o.bossKills + ' bosses, ' + o.kills + ' creatures.'); return; }
+    if (!o.target) { orderLeaveDungeon(c, null, d.name + ' cleared: ' + o.bossKills + ' bosses, ' + o.kills + ' creatures.'); return; }
     o.since = G.gameTime; o.bestD = Infinity;
   }
   // stuck = no fight and no step closer for 4 minutes

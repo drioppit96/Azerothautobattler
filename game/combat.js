@@ -724,6 +724,7 @@ function updateChar(c, dt) {
   const o = c.order;
   if (!o) return;
   if (o.type === 'travel') {
+    if (o.cross && typeof travelCross === 'function') { const st = travelCross(c, o); if (st !== 'done') return; }
     const done = advance(c, o, dt);
     if (o.blocked) { log('Route blocked by dangerous creatures - travel cancelled.'); c.order = null; save(); renderOrder(); }
     else if (done) { log('Arrived at ' + o.label + '.'); c.order = null; save(); renderOrder(); }
@@ -737,6 +738,7 @@ function updateChar(c, dt) {
   else if (o.type === 'dungeon') updateDungeon(c, o, dt);
 }
 function replanTravel(c, o) {
+  if (o.cross) return;
   const p = planPath(c, o.target); o.path = p.pts; o.idx = 1; o.total = o.done + p.total; o.replan = false;
 }
 
