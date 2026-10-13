@@ -1,0 +1,7 @@
+6908: cannot do a non-empty take from an empty axes.
+9510: cannot do a non-empty take from an empty axes.
+11686: cannot do a non-empty take from an empty axes.
+13069: cannot do a non-empty take from an empty axes.
+14501: cannot do a non-empty take from an empty axes.
+15294: cannot do a non-empty take from an empty axes.
+15880: cannot do a non-empty take from an empty axes.

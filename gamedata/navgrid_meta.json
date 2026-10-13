@@ -1,0 +1,88 @@
+{
+ "cell": 4.166666640625,
+ "origin": 17066.66656,
+ "tile": 533.33333,
+ "slope_deg": 55.0,
+ "swim_depth": 1.6,
+ "codes": {
+  "0": "no data",
+  "1": "walkable",
+  "2": "swim",
+  "3": "steep",
+  "4": "lava/slime",
+  "5": "hole",
+  "6": "building"
+ },
+ "maps": {
+  "Azeroth": {
+   "calibration": {
+    "best": {
+     "swap_chunk": false,
+     "flip_ci": false,
+     "flip_cj": false,
+     "swap_vertex": false,
+     "flip_di": false,
+     "flip_dj": false,
+     "slot": 2
+    },
+    "median_error_yd": 0.45,
+    "within_6yd": 0.546,
+    "runner_up_median": 5.25,
+    "tiles": 14
+   },
+   "tiles": 736,
+   "buildings_blocked": 0,
+   "spawns_on_cells_percent": {
+    "walkable": 96.5,
+    "steep": 3.5
+   },
+   "before_overlay_walkable_percent": 82.0,
+   "overlay": {
+    "path_segments": 172660,
+    "anchor_points": 25696,
+    "cells_repaired": 67428
+   },
+   "link_validation": {
+    "links_tested": 80,
+    "reached": 80,
+    "avg_length_ratio": 0.83
+   },
+   "map_id": 0
+  },
+  "Kalimdor": {
+   "calibration": {
+    "best": {
+     "swap_chunk": false,
+     "flip_ci": false,
+     "flip_cj": false,
+     "swap_vertex": false,
+     "flip_di": false,
+     "flip_dj": false,
+     "slot": 2
+    },
+    "median_error_yd": 0.12,
+    "within_6yd": 0.787,
+    "runner_up_median": 1.33,
+    "tiles": 14
+   },
+   "tiles": 1018,
+   "buildings_blocked": 0,
+   "spawns_on_cells_percent": {
+    "walkable": 97.1,
+    "steep": 2.9
+   },
+   "before_overlay_walkable_percent": 80.1,
+   "overlay": {
+    "path_segments": 176601,
+    "anchor_points": 29869,
+    "cells_repaired": 61661
+   },
+   "link_validation": {
+    "links_tested": 80,
+    "reached": 80,
+    "avg_length_ratio": 0.89
+   },
+   "map_id": 1
+  }
+ }
+}

@@ -1,0 +1,585 @@
+'use strict';
+/* combat.js - stage 2: creatures in the world, aggro, melee combat, XP, loot, bags, respawn, death.
+   Uses the globals from game.js (G, log, dist, ...). */
+
+const MELEE_RANGE = 4.5;
+const CELL = 60;
+const SCAN_EVERY = 0.25;
+const MAX_LEVEL = 60;
+const CORPSE_SHOW = 12;          // seconds a corpse stays visible on the map
+function r_(c) { return rt(c); }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function irnd(a, b) { return Math.floor(a + Math.random() * (b - a + 1)); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function rt(c) { return c.rt || (c.rt = { threats: [], tgt: null, ghost: null, resting: false, scanT: 0, regenT: 0, swingT: 0, danger: [], outT: 99, mv: null, cd: {}, gcdUntil: 0, queued: null, buffs: [] }); }
+
+function rageConv(level) { return 0.0091107836 * level * level + 3.225598133 * level + 4.2652911; }
+
+/* ------------------------------------------------------------ creatures */
+function cell(x) { return Math.floor(x / CELL); }
+function gk(cx, cy) { return cx * 100003 + cy; }
+function behIndex(c) { if (c.rt && c.rt.raceIdx != null) return c.rt.raceIdx; const i = G.d.hostility.races.findIndex((r) => r.id === c.race); rt(c).raceIdx = i < 0 ? 1 : i; return rt(c).raceIdx; }
+function behOf(m, c) { const h = G.d.hostility.creatures[m.e]; return h ? h[1][behIndex(c)] : 'N'; }
+
+function fbHp(L, rank) { const b = 30 + 1.2 * L * L + 8 * L; return Math.round(b * (rank === 1 ? 2.1 : rank === 2 ? 2.8 : rank === 3 ? 12 : rank === 4 ? 1.8 : 1)); }
+function fbDmg(L, rank) { const a = 2 + 0.6 * L + 0.045 * L * L; const m = rank === 1 || rank === 2 ? 1.6 : rank === 3 ? 2.5 : 1; return [a * 0.7 * m, a * 1.3 * m]; }
+function fbArmor(L) { return Math.round(0.6 * L * L + 20 * L); }
+function initMob(m) {
+  const i = m.info; const lo = i ? i[2] : 1, hi = i ? i[3] : lo;
+  m.lvl = lo + Math.floor(Math.random() * (hi - lo + 1));
+  const st = G.d.cstats && G.d.cstats[m.e];
+  const rank = i ? i[4] : 0;
+  const k = Math.min(Math.max(0, m.lvl - lo), st ? st[1].length - 1 : 0);
+  if (st && st[1][k]) { m.maxhp = st[1][k]; m.dmin = st[2][k]; m.dmax = st[3][k]; m.armor = st[4][k]; m.atk = (st[0] || 2000) / 1000; }
+  else { m.maxhp = fbHp(m.lvl, rank); const d = fbDmg(m.lvl, rank); m.dmin = d[0]; m.dmax = d[1]; m.armor = fbArmor(m.lvl); m.atk = 2.0; }
+  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5);
+}
+function ensureWorld(mapId) {
+  if (G.world[mapId]) return G.world[mapId];
+  if (typeof loadGrid === 'function') loadGrid(mapId);
+  const list = [], grid = new Map(), W = { id: mapId, list, grid, active: new Set(), dead: [] };
+  for (const [e, lst] of G.spawnList) {
+    for (const s of lst) {
+      if (s[0] !== mapId) continue;
+      const m = { e, info: G.mobIdx[e] || null, hx: s[1], hy: s[2], z: s[3], rmin: s[7] || 300, rmax: s[8] || s[7] || 300 };
+      const h = G.d.hostility.creatures[e];
+      m.aggro = h && h[2] ? h[2] : 20; m.leash = h && h[3] ? h[3] : 45; m.help = h ? h[4] : 0; m.tmpl = h ? h[0] : 0; m.civ = h ? h[5] : 0; m.rank = h ? h[6] : 0;
+      initMob(m); list.push(m);
+      const k = gk(cell(m.hx), cell(m.hy)); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(m);
+    }
+  }
+  G.world[mapId] = W; return W;
+}
+function mobsNear(W, x, y, r, fn) {
+  const c0 = cell(x - r), c1 = cell(x + r), r0 = cell(y - r), r1 = cell(y + r);
+  for (let cx = c0; cx <= c1; cx++) for (let cy = r0; cy <= r1; cy++) { const a = W.grid.get(gk(cx, cy)); if (a) for (const m of a) fn(m); }
+}
+function aggroRadius(m, c) { return clamp(m.aggro - (c.level - m.lvl), 5, 45); }
+function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
+function dangerous(m, c) { return effLevel(m) - c.level >= 4; }
+function attackable(m, c) { const b = behOf(m, c); return (b === 'A' || b === 'N') && !m.civ && m.st === 'alive'; }
+function grayLevel(level) { const r = G.d.xp.levels[level - 1]; return r ? r.gray_level : 0; }
+
+/* ------------------------------------------------------------------ xp */
+function killXp(c, m) {
+  const L = c.level, M = m.lvl; if (L >= MAX_LEVEL) return 0;
+  if (m.info && m.info[5] === 8) return 0;
+  const base = M * 5 + 45; let xp;
+  if (M >= L) xp = base * (1 + 0.05 * Math.min(4, M - L));
+  else { if (M <= grayLevel(L)) return 0; let zd = 5; for (const [lv, z] of G.d.xp.formulas.zero_difference_table || [[8, 5], [10, 6], [12, 7], [16, 8], [20, 9], [30, 11], [40, 12], [45, 13], [50, 14], [55, 15], [60, 16], [999, 17]]) { if (L < lv) { zd = z; break; } } xp = base * (1 - (L - M) / zd); }
+  if (m.rank >= 1 && m.rank <= 3) xp *= 2;
+  return Math.max(0, Math.round(xp));
+}
+/* quest XP as the server computes it: from the money a level-60 character would get instead (RewMoneyMaxLevel) */
+function questXp(q, c) {
+  let full = q.reward_money_max_level ? q.reward_money_max_level / (q.level >= 60 ? 1.2 : 0.6) : (q.level * 5 + 45) * 2.6;
+  if (c) { const d = c.level - q.level; if (d >= 10) full *= 0.1; else if (d === 9) full *= 0.2; else if (d === 8) full *= 0.4; else if (d === 7) full *= 0.6; else if (d === 6) full *= 0.8; }
+  return Math.ceil(full);
+}
+function gainXp(c, xp, why) {
+  if (xp <= 0 || c.level >= MAX_LEVEL) return;
+  c.xp += xp;
+  fx(c.pos.x, c.pos.y, '+' + xp + ' xp', '#c58cf0');
+  for (;;) {
+    const need = (G.d.xp.levels[c.level - 1] || {}).xp_to_next; if (!need || c.xp < need || c.level >= MAX_LEVEL) break;
+    c.xp -= need; c.level++; dirty(c); const s = charStats(c); c.hp = s.maxHp; learnAbilities(c);
+    log('*** ' + c.name + ' reached level ' + c.level + '! ***'); fx(c.pos.x, c.pos.y, 'LEVEL ' + c.level, '#ffe14d');
+    if (c.level === 20 && (c.cls === 1 || c.cls === 3)) log('You can now dual wield one-handed weapons.');
+    if (c.level === 10 && c.cls === 4) log('You can now dual wield one-handed weapons.');
+    if (c.level === 40 && (c.cls === 1 || c.cls === 2)) log('You can now wear plate armor.');
+    if (c.level === 40 && (c.cls === 3 || c.cls === 7)) log('You can now wear mail armor.');
+  }
+  if (c.level >= MAX_LEVEL) c.xp = 0;
+  refreshGear();
+}
+
+/* --------------------------------------------------------------- effects */
+function fx(x, y, text, color) { G.fx.push({ x, y, text, color: color || '#fff', t: 0 }); if (G.fx.length > 60) G.fx.shift(); }
+
+/* ----------------------------------------------------------------- loot */
+function questNeeds(c, id) {
+  for (const qid in c.quests) {
+    const q = G.q.byId[qid]; if (!q) continue;
+    for (let i = 0; i < q.objectives.length; i++) {
+      const o = q.objectives[i]; if (o.type === 'Collect' && o.id === id && bagCount(c, id) < o.count) return true;
+    }
+  }
+  return false;
+}
+function lootMob(c, m) {
+  const info = G.d.loot.creatures[m.e]; if (!info) return;
+  const got = [];
+  const gmin = info[9], gmax = info[10];
+  if (gmax) { const g = irnd(gmin, gmax); c.gold += g; if (g) got.push(money(g)); }
+  const rows = G.d.loot.tables.creature[info[6]] || [];
+  for (const [item, pct, mn, mx, quest] of rows) {
+    if (quest && !questNeeds(c, item)) continue;
+    if (Math.random() * 100 >= pct) continue;
+    const n = irnd(mn, mx); const before = c.bags.length;
+    if (addItem(c, item, n)) {
+      const inst = c.bags.length > before ? c.bags[c.bags.length - 1] : null;
+      got.push((n > 1 ? n + ' x ' : '') + itemName(item, inst && inst.id === item ? inst : null));
+      if (quest) onItemGained(c, item);
+      if (inst && inst.id === item && upgradeFor(c, inst)) log('Possible upgrade: ' + itemName(item, inst) + ' (open the character sheet to equip it).');
+    } else { log('Bags are full - left ' + itemName(item) + ' behind.'); }
+  }
+  if (got.length) log('Looted: ' + got.join(', '));
+  if (bagFree(c) <= 0) rt(c).bagFull = true;
+  autoEquip(c);
+  refreshGear();
+}
+
+/* ----------------------------------------------------------- mob combat */
+function engage(m, c) {
+  if (m.st !== 'alive') return;
+  m.st = 'chase'; m.tgt = c; ensureWorld(c.pos.map).active.add(m);
+}
+function mobDamage(m, c, s, mods) {
+  /* one roll on the attack table: miss, dodge, parry, block, crit, hit (defense vs the mob's weapon skill) */
+  const skillDiff = s.def - m.lvl * 5;
+  let r = Math.random() * 100;
+  const miss = Math.max(0, 5 + skillDiff * 0.04);
+  if ((r -= miss) < 0) return { t: 'miss' };
+  if ((r -= Math.max(0, s.dodge)) < 0) return { t: 'dodge' };
+  if ((r -= Math.max(0, s.parry)) < 0) return { t: 'parry' };
+  let blocked = 0; if (s.hasShield && (r -= Math.max(0, s.block)) < 0) blocked = s.blockValue;
+  let d = rnd(m.dmin, m.dmax);
+  if (mods) { d += mods.ap / 14 * m.atk; if (mods.disarm) d *= 0.5; }
+  d = Math.max(1, d) * s.dmgTaken;
+  d *= 1 - s.armorReduction(m.lvl);
+  let crit = false;
+  if (!blocked && Math.random() * 100 < Math.max(0, 5 - skillDiff * 0.04)) { d *= 2; crit = true; }
+  else if (!blocked && m.lvl - c.level >= 3 && Math.random() < 0.15) { d *= 1.5; crit = true; }
+  d = Math.round(d - blocked);
+  if (d <= 0) return { t: 'block' };
+  return { t: 'hit', d, crit, blocked };
+}
+function mobTick(W, m, dt, now) {
+  const c = m.tgt;
+  if (m.st === 'chase') {
+    if (!c || c.hp <= 0 || rt(c).ghost || c.pos.map !== W.id) return evade(W, m);
+    mobAuraTick(W, m, dt); if (m.st !== 'chase') return;
+    const mods = mobMods(m);
+    const dh = Math.hypot(m.x - m.hx, m.y - m.hy);
+    if (dh > m.leash + 20 && !m.fleeing) return evade(W, m);
+    const d = Math.hypot(c.pos.x - m.x, c.pos.y - m.y);
+    // low-health humanoids try to run away (and bring friends)
+    if (!m.fled && m.rank === 0 && m.info && m.info[5] === 7 && m.hp < m.maxhp * 0.15) { m.fled = true; if (Math.random() < 0.6 && !mods.stun) { m.fleeing = now + 8; fx(m.x, m.y, 'flees!', '#ffb36b'); } }
+    if (m.fleeing) {
+      if (now > m.fleeing || mods.stun) { m.fleeing = 0; }
+      else {
+        const sp = 5.2 * mods.snare * dt; m.x += (m.x - c.pos.x) / (d || 1) * sp; m.y += (m.y - c.pos.y) / (d || 1) * sp;
+        if (m.help) callHelp(W, m, c);
+        return;
+      }
+    }
+    if (mods.fear) { const sp = 3 * dt; m.x += (m.x - c.pos.x) / (d || 1) * sp; m.y += (m.y - c.pos.y) / (d || 1) * sp; return; }
+    if (mods.stun) return;
+    if (d > MELEE_RANGE - 0.5) {
+      const step = Math.min(d, 7 * mods.snare * dt); m.x += (c.pos.x - m.x) / d * step; m.y += (c.pos.y - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
+    } else {
+      m.swing -= dt;
+      if (m.swing <= 0) {
+        m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods);
+        const r = rt(c);
+        if (h.t === 'dodge' || h.t === 'parry' || h.t === 'block' || h.blocked) r.revWindow = now + 5;
+        if (h.t === 'hit') {
+          c.hp -= h.d; fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
+          if (c.cls === 1) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
+          if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
+          autoPotion(c);
+        } else fx(c.pos.x, c.pos.y, h.t, '#cfc6b0');
+        const ret = (r.buffs || []).find((b) => b.retaliation && b.until > now);
+        if (ret) { ret.retaliation--; if (ret.retaliation <= 0) ret.until = 0; playerSwing(c, m, s, s.mh, { yellow: true }); if (m.hp <= 0) killMob(c, m); }
+      }
+    }
+  } else if (m.st === 'evade') {
+    m.fleeing = 0; m.auras = null;
+    const d = Math.hypot(m.hx - m.x, m.hy - m.y);
+    if (d < 1) { m.st = 'alive'; m.hp = m.maxhp; m.x = m.hx; m.y = m.hy; m.fled = false; W.active.delete(m); }
+    else { const step = Math.min(d, 10 * dt); m.x += (m.hx - m.x) / d * step; m.y += (m.hy - m.y) / d * step; m.hp = Math.min(m.maxhp, m.hp + m.maxhp * 0.2 * dt); }
+  }
+}
+function evade(W, m) { m.st = 'evade'; m.tgt = null; }
+function worldTick(dt) {
+  const now = G.gameTime;
+  for (const id in G.world) {
+    const W = G.world[id];
+    for (const m of W.active) mobTick(W, m, dt, now);
+    if (W.dead.length && ((now * 4) | 0) % 4 === 0) {
+      for (let i = W.dead.length - 1; i >= 0; i--) {
+        const m = W.dead[i]; if (now >= m.respAt) { W.dead.splice(i, 1); initMob(m); }
+      }
+    }
+  }
+}
+
+/* ---------------------------------------------------------- kills / death */
+function killMob(c, m) {
+  const W = ensureWorld(c.pos.map);
+  m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime; W.active.delete(m); W.dead.push(m);
+  const name = m.info ? m.info[1] : 'creature';
+  const xp = killXp(c, m); gainXp(c, xp);
+  log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
+  lootMob(c, m);
+  onKill(c, m);
+  if (c.order && c.order.type === 'grind') c.order.kills = (c.order.kills || 0) + 1;
+  const r = rt(c); if (r.tgt === m) r.tgt = null;
+  c.rage = c.rage; save();
+}
+function nearestGraveyard(c) {
+  let best = null, bd = 1e18;
+  for (const gy of G.d.graveyards) { if (gy[2] !== c.pos.map) continue; const d = Math.hypot(gy[3] - c.pos.x, gy[4] - c.pos.y); if (d < bd) { bd = d; best = gy; } }
+  return best;
+}
+function charDie(c, killer) {
+  const r = rt(c); const corpse = { map: c.pos.map, x: c.pos.x, y: c.pos.y };
+  log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + '.');
+  fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30');
+  const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) evade(W, m);
+  if (c.order && c.order.type === 'questing' && c.order.fq) {
+    const o = c.order; o.qdeaths = o.qdeaths || {}; o.qdeaths[o.fq] = (o.qdeaths[o.fq] || 0) + 1;
+    if (o.qdeaths[o.fq] >= 3) { const q = G.q.byId[o.fq]; log('Died 3 times on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; }
+  } else if (c.order && c.order.type !== 'questing') { c.order.deaths = (c.order.deaths || 0) + 1; if (c.order.deaths >= 3) { log('Died 3 times on this order - it is too dangerous. Order cancelled.'); c.order = null; } }
+  durabilityLoss(c, 0.1);
+  r.saved = c.order; r.ghost = { corpse }; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; c.order = null; c.rage = 0; r.mv = null; r.resting = false;
+  const gy = nearestGraveyard(c);
+  if (gy) { c.pos.x = gy[3]; c.pos.y = gy[4]; log('Released at ' + gy[1] + '. Running back to the corpse ...'); }
+  const p = planPath(c, corpse); r.ghost.path = p.pts; r.ghost.idx = 1;
+  save(); renderOrder();
+}
+function safeSpot(c, x, y) {
+  /* a point near (x, y) outside the aggro range of every hostile creature, or null */
+  const W = ensureWorld(c.pos.map); const hostile = [];
+  mobsNear(W, x, y, 90, (m) => { if (m.st === 'alive' && behOf(m, c) === 'A' && !m.civ) hostile.push(m); });
+  const ok = (px, py) => passable(c.pos.map, px, py) && hostile.every((m) => Math.hypot(px - m.x, py - m.y) > aggroRadius(m, c) + 5);
+  if (ok(x, y)) return { x, y };
+  let best = null, bd = 1e9;
+  for (const rad of [8, 16, 24, 32]) for (let k = 0; k < 16; k++) {
+    const a = k / 16 * Math.PI * 2; const px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad;
+    if (!ok(px, py)) continue; const d = Math.hypot(px - c.pos.x, py - c.pos.y); if (d < bd) { bd = d; best = { x: px, y: py }; }
+  }
+  return best;
+}
+function revive(c, how) {
+  const r = rt(c); r.ghost = null; const s = charStats(c); c.hp = Math.round(s.maxHp * 0.5);
+  if (how === 'spirit') { durabilityLoss(c, 0.25); log(c.name + ' was resurrected by the spirit healer (extra 25% durability loss).'); }
+  else log(c.name + ' is back among the living.');
+  r.resting = true;   // catch the breath before going on
+  if (r.saved) { const o = r.saved; r.saved = null; resumeOrder(c, o); }
+  save(); renderOrder();
+}
+function ghostStep(c, dt) {
+  const gh = rt(c).ghost; let left = c.speed * 1.25 * dt;
+  if (!gh.spot) {
+    const dc = Math.hypot(gh.corpse.x - c.pos.x, gh.corpse.y - c.pos.y);
+    if (dc < 40) {
+      gh.spot = safeSpot(c, gh.corpse.x, gh.corpse.y);
+      if (gh.spot) { gh.path = [{ x: c.pos.x, y: c.pos.y }, gh.spot]; gh.idx = 1; }
+      else {
+        gh.wait = (gh.wait || 0) + dt;
+        if (gh.wait > 20) { const gy = nearestGraveyard(c); if (gy) { c.pos.x = gy[3]; c.pos.y = gy[4]; } revive(c, 'spirit'); }
+        return;
+      }
+    }
+  }
+  while (left > 0 && gh.idx < gh.path.length) {
+    const nx = gh.path[gh.idx]; const dx = nx.x - c.pos.x, dy = nx.y - c.pos.y; const d = Math.hypot(dx, dy);
+    if (d <= left) { c.pos.x = nx.x; c.pos.y = nx.y; left -= d; gh.idx++; }
+    else { c.pos.x += dx / d * left; c.pos.y += dy / d * left; c.pos.o = Math.atan2(dx, dy); left = 0; }
+  }
+  if (gh.idx >= gh.path.length) {
+    if (!gh.spot) { gh.spot = safeSpot(c, gh.corpse.x, gh.corpse.y); if (gh.spot) { gh.path = [{ x: c.pos.x, y: c.pos.y }, gh.spot]; gh.idx = 1; return; } gh.wait = (gh.wait || 0) + dt; if (gh.wait > 20) { const gy = nearestGraveyard(c); if (gy) { c.pos.x = gy[3]; c.pos.y = gy[4]; } revive(c, 'spirit'); } return; }
+    revive(c);
+  }
+}
+function resumeOrder(c, o) {
+  if (o.type === 'travel') orderTravel(c, o.target, o.label);
+  else { c.order = o; o.state = null; o.wait = 0; o.wt = null; }
+}
+
+/* ------------------------------------------------------------ char combat */
+function regenStep(c, dt) {
+  const r = rt(c); const s = charStats(c);
+  r.outT += dt;
+  if (r.buffs && r.buffs.length) { const n = r.buffs.length; r.buffs = r.buffs.filter((b) => b.until > G.gameTime); if (r.buffs.length !== n) dirty(c); }
+  buffStep(c, dt);
+  if (r.eating) eatStep(c, dt);
+  r.regenT += dt;
+  while (r.regenT >= 2) {
+    r.regenT -= 2;
+    if (s.hp5) c.hp = Math.min(s.maxHp, c.hp + s.hp5 * 0.4);
+    if (r.outT > 5 || r.resting) { const per = Math.max(1, s.spi * 0.25) * (r.resting ? 2.5 : 1); c.hp = Math.min(s.maxHp, c.hp + per); }
+  }
+  if (r.outT > 6) c.rage = Math.max(0, c.rage - 1.5 * dt);
+  if (c.hp > s.maxHp) c.hp = s.maxHp;
+}
+/* sitting down: below cfg.sitAt % health when no enemy is near; eat food below cfg.eatAt %; stand at cfg.standAt % */
+function restStep(c) {
+  const r = rt(c); const cfg = c.cfg; const max = charStats(c).maxHp; const pct = c.hp / max * 100;
+  if (r.resting) {
+    if (pct >= Math.min(100, cfg.standAt) - 0.01 || (cfg.standAt >= 100 && c.hp >= max)) { r.resting = false; r.eating = null; return false; }
+    if (!r.eating && cfg.eatAt > 0 && pct < cfg.eatAt) autoEat(c);
+    return true;
+  }
+  if (pct < cfg.sitAt) { r.resting = true; r.mv = null; if (cfg.eatAt > 0 && pct < cfg.eatAt) autoEat(c); return true; }
+  return false;
+}
+function scanThreats(c) {
+  const r = rt(c); const W = ensureWorld(c.pos.map); const safe = c.cfg && c.cfg.style === 'safe';
+  r.danger = [];
+  mobsNear(W, c.pos.x, c.pos.y, 70, (m) => {
+    if (m.st !== 'alive') return;
+    const b = behOf(m, c); if (b !== 'A' || m.civ) return;
+    const R = aggroRadius(m, c); const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
+    if (dangerous(m, c)) r.danger.push({ m, R: R + 8 });
+    else if (safe && m !== r.tgt) r.danger.push({ m, R: R + 3, soft: true });
+    if (d <= R) {
+      engage(m, c);
+      if (m.help) callHelp(W, m, c);
+    }
+  });
+}
+/* social aggro: only creatures that attack on sight (red) help each other; neutral (yellow) ones never join in */
+function callHelp(W, m, c) {
+  if (behOf(m, c) !== 'A') return;
+  mobsNear(W, m.x, m.y, 10, (o) => { if (o !== m && o.st === 'alive' && o.tmpl === m.tmpl && behOf(o, c) === 'A' && !o.civ) engage(o, c); });
+}
+function threatsOf(c) {
+  const W = G.world[c.pos.map]; const out = []; if (!W) return out;
+  for (const m of W.active) if (m.st === 'chase' && m.tgt === c) out.push(m);
+  return out;
+}
+function playerSwing(c, m, s, w, opts) {
+  /* one melee hit with weapon info w. opts: {bonus, off (off-hand), yellow (ability), normalized, pct, name} */
+  opts = opts || {}; const r = rt(c);
+  const spd = opts.normalized ? (w.it && w.it.t === 17 ? 3.3 : w.it && w.it.s === 15 ? 1.7 : 2.4) : w.speed;
+  let d = rnd(w.min, w.max) + (s.ap + apVs(s, m)) / 14 * spd;
+  if (opts.pct) d *= opts.pct / 100;
+  d += opts.bonus || 0;
+  if (opts.off) d *= 0.5;
+  const diff = m.lvl - c.level;
+  const dw = s.oh && !opts.yellow ? 19 : 0;
+  let roll = Math.random() * 100;
+  const miss = Math.max(0, 5 + dw + Math.max(0, diff) * (diff > 2 ? 2 : 1) - s.hit);
+  if ((roll -= miss) < 0) { fx(m.x, m.y, 'miss', '#cfc6b0'); return 0; }
+  if (opts.name !== 'Overpower' && (roll -= 5 + Math.max(0, diff) * 0.5) < 0) { fx(m.x, m.y, 'dodge', '#cfc6b0'); r.opWindow = G.gameTime + 5; r.opTarget = m; return 0; }
+  const mm = mobMods(m); const arm = Math.max(0, m.armor + mm.armor);
+  d *= 1 - clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
+  d *= s.dmgDone;
+  let crit = false; if (Math.random() * 100 < s.crit - Math.max(0, diff) * 0.2) { d *= 2; crit = true; }
+  d = Math.max(1, Math.round(d));
+  m.hp -= d; onMobDamaged(m);
+  fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
+  if (c.cls === 1 && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
+  procs(c, m, s, w, opts.off ? 16 : 15);
+  return d;
+}
+function apVs(s, m) { let v = 0; const t = m.info ? m.info[5] : 0; for (const [mask, add] of s.apVs) if (t && (mask & (1 << (t - 1)))) v += add; return v; }
+function procs(c, m, s, w, slot) {
+  for (const p of s.procs) {
+    if ((p.slot === 15 || p.slot === 16) ? p.slot !== slot : slot !== 15) continue;
+    const ch = p.ppm ? p.ppm * w.speed / 60 : p.chance ? p.chance / 100 : 0.05;
+    if (Math.random() >= ch) continue;
+    const sp = spellRow(p.spell); if (!sp) continue;
+    for (const e of sp.ef || []) {
+      if (e.t === 2 && m.hp > 0) { const v = Math.round(e.lo + Math.random() * Math.max(0, e.hi - e.lo)); m.hp -= v; fx(m.x, m.y, v + ' ' + sp.n, '#ff9a3c'); break; }
+      if (e.t === 6 && e.k === 'self') { const r = rt(c); (r.buffs = r.buffs || []).push({ name: sp.n, until: G.gameTime + (sp.dur || 10000) / 1000, auras: [[e.au, e.mi, e.lo]] }); dirty(c); fx(c.pos.x, c.pos.y, sp.n, '#9fe0ff'); break; }
+    }
+  }
+}
+function fightStep(c, m, dt) {
+  const r = rt(c); const s = charStats(c);
+  r.outT = 0; r.resting = false; r.eating = null;
+  const dx = m.x - c.pos.x, dy = m.y - c.pos.y, d = Math.hypot(dx, dy);
+  c.pos.o = Math.atan2(dx, dy);
+  if (d > MELEE_RANGE) { const step = Math.min(d - MELEE_RANGE + 0.5, c.speed * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return; }
+  useAbilities(c, m);
+  if (m.hp <= 0 || m.st === 'dead') return;
+  r.swingT -= dt;
+  if (r.swingT <= 0) {
+    r.swingT += s.mh.speed;
+    const q = r.queued; r.queued = null;
+    const cost = q && q.sp.pw && q.sp.pw[0] === 1 ? q.sp.pw[1] : 0;
+    if (q && c.rage >= cost && abilityUsable(c, q.name).ok) {
+      c.rage -= cost; const bonus = (q.sp.ef[0] || {}).lo || 0;
+      playerSwing(c, m, s, s.mh, { bonus, yellow: true, name: q.name }); fx(c.pos.x, c.pos.y, q.name, '#ffe9a8');
+      if (q.name === 'Cleave') { const other = attackersOf(c).find((x) => x !== m && inMelee(c, x)); if (other) { playerSwing(c, other, s, s.mh, { bonus, yellow: true }); if (other.hp <= 0) killMob(c, other); } }
+    } else playerSwing(c, m, s, s.mh, {});
+    if (m.hp <= 0) { killMob(c, m); return; }
+  }
+  if (s.oh) {
+    if (r.ohT == null) r.ohT = s.oh.speed / 2;
+    r.ohT -= dt;
+    if (r.ohT <= 0) { r.ohT += s.oh.speed; playerSwing(c, m, s, s.oh, { off: true }); if (m.hp <= 0) killMob(c, m); }
+  }
+}
+function fleeStep(c, dt, danger) {
+  const r = rt(c); let ax = 0, ay = 0;
+  for (const m of danger) { const dx = c.pos.x - m.x, dy = c.pos.y - m.y, d = Math.hypot(dx, dy) || 1; ax += dx / d; ay += dy / d; }
+  const L = Math.hypot(ax, ay) || 1; ax /= L; ay /= L;
+  if (!r.fleeing) { r.fleeing = { t: 0 }; log(c.name + ' runs from ' + (danger[0].info ? danger[0].info[1] : 'a creature') + ' (level ' + danger[0].lvl + ').'); }
+  r.fleeing.t += dt; r.outT = 0;
+  if (!passable(c.pos.map, c.pos.x + ax * 6, c.pos.y + ay * 6)) {
+    const base = Math.atan2(ay, ax);
+    for (const off of [0.5, -0.5, 1, -1, 1.5, -1.5, 2, -2]) { const a = base + off; if (passable(c.pos.map, c.pos.x + Math.cos(a) * 6, c.pos.y + Math.sin(a) * 6)) { ax = Math.cos(a); ay = Math.sin(a); break; } }
+  }
+  c.pos.x += ax * c.speed * dt; c.pos.y += ay * c.speed * dt; c.pos.o = Math.atan2(ax, ay);
+  const o = c.order; if (o && o.type === 'travel') { /* re-plan from the new spot later */ o.replan = true; }
+}
+
+/* ---------------------------------------------------------------- steering */
+function steer(c, dx, dy, step) {
+  const r = rt(c); const dng = r.danger.filter((z) => z.m !== r.tgt && z.m.st === 'alive' && (!z.soft || Math.hypot(z.m.x - (r.tgt ? r.tgt.x : 1e9), z.m.y - (r.tgt ? r.tgt.y : 1e9)) > 2));
+  if (!dng.length) return [dx, dy];
+  const ang = Math.atan2(dy, dx); let best = null, bestScore = -1e9;
+  for (const off of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.4, -2.4, 3.14]) {
+    const a = ang + off; const nx = c.pos.x + Math.cos(a) * step * 12, ny = c.pos.y + Math.sin(a) * step * 12;
+    let clear = 1e9; for (const z of dng) clear = Math.min(clear, Math.hypot(nx - z.m.x, ny - z.m.y) - z.R);
+    const score = (clear >= 0 ? 100 : clear * 5) - Math.abs(off) * 3;
+    if (score > bestScore) { bestScore = score; best = a; }
+    if (clear >= 0 && off === 0) break;
+  }
+  return [Math.cos(best), Math.sin(best)];
+}
+
+/* ------------------------------------------------------------ movement api */
+/* A movement plan {path, idx, done, total} is advanced by advance(); travel orders use the same record. */
+function advance(c, mv, dt) {
+  // stuck detection (steering around dangerous creatures can dead-end)
+  if (!mv.chk) mv.chk = { t: G.gameTime, x: c.pos.x, y: c.pos.y };
+  else if (G.gameTime - mv.chk.t >= 4) {
+    if (Math.hypot(c.pos.x - mv.chk.x, c.pos.y - mv.chk.y) < 6) { mv.blocked = true; return false; }
+    mv.chk = { t: G.gameTime, x: c.pos.x, y: c.pos.y };
+  }
+  let left = c.speed * dt;
+  while (left > 0 && mv.idx < mv.path.length) {
+    const nx = mv.path[mv.idx]; let dx = nx.x - c.pos.x, dy = nx.y - c.pos.y; const d = Math.hypot(dx, dy);
+    if (d < 0.01) { mv.idx++; continue; }
+    const step = Math.min(d, left);
+    let ux = dx / d, uy = dy / d;
+    if (rt(c).danger.length) { const [sx, sy] = steer(c, ux, uy, step); if (passable(c.pos.map, c.pos.x + sx * step * 3, c.pos.y + sy * step * 3)) { ux = sx; uy = sy; } }
+    c.pos.x += ux * step; c.pos.y += uy * step; mv.done = (mv.done || 0) + step; left -= step; c.pos.o = Math.atan2(ux, uy);
+    if (Math.hypot(nx.x - c.pos.x, nx.y - c.pos.y) < 0.6) mv.idx++;
+    if (ux * dx + uy * dy < d * 0.2 && step < d) break;   // steering away: stop for this tick
+  }
+  return mv.idx >= mv.path.length;
+}
+function goTo(c, x, y, stop) {
+  const r = rt(c); const d0 = Math.hypot(x - c.pos.x, y - c.pos.y);
+  if (d0 <= (stop || 1)) return true;
+  if (!r.mv || Math.hypot(r.mv.tx - x, r.mv.ty - y) > 8 || r.mv.map !== c.pos.map) {
+    const p = planPath(c, { x, y }); r.mv = { path: p.pts, idx: 1, done: 0, total: p.total, tx: x, ty: y, map: c.pos.map };
+  }
+  const arrived = advance(c, r.mv, STEP);
+  if (r.mv && r.mv.blocked) {
+    const det = r.mv.detours || 0;
+    if (det < 3) {   // try to walk around the blocking creatures
+      const dx = x - c.pos.x, dy = y - c.pos.y, L = Math.hypot(dx, dy) || 1; const side = det % 2 ? -1 : 1; const off = 45 + det * 30;
+      const wx = c.pos.x + dx / L * Math.min(40, L / 2) - dy / L * off * side, wy = c.pos.y + dy / L * Math.min(40, L / 2) + dx / L * off * side;
+      const rest = planPath({ pos: { map: c.pos.map, x: wx, y: wy } }, { x, y });
+      r.mv = { path: [{ x: c.pos.x, y: c.pos.y }, { x: wx, y: wy }].concat(rest.pts.slice(1)), idx: 1, done: 0, total: 0, tx: x, ty: y, map: c.pos.map, detours: det + 1 };
+      return false;
+    }
+    r.blocked = true; r.mv = null; return false;
+  }
+  if (arrived || Math.hypot(x - c.pos.x, y - c.pos.y) <= (stop || 1)) { r.mv = null; return true; }
+  return false;
+}
+
+/* ---------------------------------------------------------- target picking */
+function pickTarget(c, o) {
+  const W = ensureWorld(c.pos.map); const r = rt(c); const style = c.cfg ? c.cfg.style : 'balanced';
+  const cx = o.cx != null ? o.cx : c.pos.x, cy = o.cy != null ? o.cy : c.pos.y, R = o.radius || 100;
+  const gray = grayLevel(c.level); let best = null, bd = 1e18, lone = null, ld = 1e18;
+  mobsNear(W, cx, cy, R + 20, (m) => {
+    if (m.st !== 'alive' || !attackable(m, c) || (m.banUntil || 0) > G.gameTime) return;
+    if (o.entries && !o.entries.has(m.e)) return;
+    if (!o.entries) { if (m.lvl <= gray && c.level > 1) return; if (m.info && m.info[5] === 8) return; if (m.info && (m.info[5] === 11)) return; }
+    if (dangerous(m, c) || m.lvl > c.level + (o.entries ? 3 : 2)) return;
+    if (m.rank >= 1) return;
+    if (Math.hypot(m.hx - cx, m.hy - cy) > R) return;
+    for (const z of r.danger) if (!z.soft && Math.hypot(m.x - z.m.x, m.y - z.m.y) < z.R) return;
+    const pack = packSize(W, m, c); const d0 = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
+    const d = style === 'aggressive' ? d0 : d0 + 40 * pack;
+    if (d < bd) { bd = d; best = m; }
+    if (pack === 0 && d0 < ld) { ld = d0; lone = m; }
+  });
+  if (style === 'safe') {
+    if (lone) { o.loneWait = 0; return lone; }
+    o.loneWait = (o.loneWait || 0) + 1; return o.loneWait > 60 ? best : null;   // ~15 s without a lone target: take the best one
+  }
+  return best;
+}
+function packSize(W, m, c) { let n = 0; mobsNear(W, m.hx, m.hy, 25, (o) => { if (o !== m && o.st === 'alive' && attackable(o, c) && behOf(o, c) === 'A' && Math.hypot(o.x - m.x, o.y - m.y) < Math.max(10, aggroRadius(o, c) + 2)) n++; }); return n; }
+/* approach & attack one chosen mob; returns 'moving' | 'engaged' | 'gone' */
+function approach(c, m) {
+  if (!m || m.st !== 'alive') return 'gone';
+  const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
+  if (d <= MELEE_RANGE + 1) { engage(m, c); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); return 'engaged'; }
+  if (d <= 25 && tryOpener(c, m)) return 'moving';
+  goTo(c, m.x, m.y, MELEE_RANGE);
+  if (rt(c).blocked) { rt(c).blocked = false; m.banUntil = G.gameTime + 120; return 'gone'; }
+  return 'moving';
+}
+
+/* ------------------------------------------------------------- grind order */
+function orderGrind(c, cx, cy, radius, entries, label) {
+  c.order = { type: 'grind', label: label || 'here', cx, cy, radius: radius || 100, entries: entries ? Array.from(entries) : null, kills: 0, started: G.gameTime };
+  log('Order: grind ' + c.order.label + '.'); save(); renderOrder();
+}
+function orderSet(o) { return o.entries ? new Set(o.entries) : null; }
+function updateGrind(c, o, dt) {
+  const r = rt(c);
+  if (r.bagFull || bagFree(c) <= 0) { bagsFull(c, o); return; }
+  if (!o._set) o._set = orderSet(o);
+  if (!r.tgt || r.tgt.st !== 'alive') {
+    const oo = { cx: o.cx, cy: o.cy, radius: o.radius, entries: o._set, loneWait: o.loneWait };
+    r.tgt = pickTarget(c, oo); o.loneWait = oo.loneWait;
+    if (!r.tgt) {
+      if (!o.wait) { o.wait = 1; log(c.cfg.style === 'safe' ? 'Waiting for a creature that stands alone ...' : 'No suitable creatures nearby - waiting for respawns.'); }
+      if (Math.hypot(c.pos.x - o.cx, c.pos.y - o.cy) > 25) { goTo(c, o.cx, o.cy, 15); if (rt(c).blocked) { rt(c).blocked = false; log('Cannot reach the grinding area safely - grinding here instead.'); o.cx = c.pos.x; o.cy = c.pos.y; } }
+      return;
+    }
+    o.wait = 0;
+  }
+  const st = approach(c, r.tgt);
+  if (st === 'gone') r.tgt = null;
+}
+
+/* ------------------------------------------------------------- char update */
+function updateChar(c, dt) {
+  const r = rt(c);
+  if (r.ghost) { ghostStep(c, dt); return; }
+  regenStep(c, dt);
+  if (r.charging) { chargeStep(c, dt); return; }
+  r.scanT -= dt;
+  if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); }
+  const threats = threatsOf(c); r.threats = threats;
+  const dg = threats.filter((m) => dangerous(m, c));
+  if (dg.length) { fleeStep(c, dt, dg); return; }
+  if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
+  if (threats.length) {
+    if (!r.tgt || r.tgt.st !== 'chase' || r.tgt.tgt !== c) {
+      let b = null, bd = 1e18; for (const m of threats) { const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d < bd) { bd = d; b = m; } }
+      r.tgt = b;
+    }
+    r.mv = null; fightStep(c, r.tgt, dt); return;
+  }
+  if (r.interact) { if (interactStep(c, dt)) return; }
+  if (restStep(c)) return;
+  const o = c.order;
+  if (!o) return;
+  if (o.type === 'travel') {
+    const done = advance(c, o, dt);
+    if (o.blocked) { log('Route blocked by dangerous creatures - travel cancelled.'); c.order = null; save(); renderOrder(); }
+    else if (done) { log('Arrived at ' + o.label + '.'); c.order = null; save(); renderOrder(); }
+  } else if (o.type === 'grind') updateGrind(c, o, dt);
+  else if (o.type === 'quest') updateQuest(c, o, dt);
+  else if (o.type === 'questing') updateQuesting(c, o, dt);
+  else if (o.type === 'vendor' || o.type === 'sell') updateVendor(c, o, dt);
+}
+function replanTravel(c, o) {
+  const p = planPath(c, o.target); o.path = p.pts; o.idx = 1; o.total = o.done + p.total; o.replan = false;
+}
+

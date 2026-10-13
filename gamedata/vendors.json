@@ -1,0 +1,5762 @@
+[
+{
+"entry": 9087,
+"name": "Bashana Runetotem",
+"subname": "",
+"level": [
+35,
+35
+],
+"faction": 104,
+"repair": false,
+"spawns": [
+[
+1,
+-1087.9,
+-225.0
+]
+],
+"items": [
+{
+"item": 11020,
+"price": 10000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 11022,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 15174,
+"name": "Calandrath",
+"subname": "Innkeeper",
+"level": [
+54,
+54
+],
+"faction": 994,
+"repair": false,
+"spawns": [
+[
+1,
+-6868.0,
+729.9
+]
+],
+"items": [
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2515,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2519,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3030,
+"price": 300,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3033,
+"price": 300,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4470,
+"price": 38,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4471,
+"price": 135,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4497,
+"price": 20000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4498,
+"price": 2500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 11284,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 11285,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3107,
+"price": 75,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3108,
+"price": 200,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 15327,
+"price": 800,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3135,
+"price": 75,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3137,
+"price": 200,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 15326,
+"price": 800,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 3685,
+"name": "Harb Clawhoof",
+"subname": "Kodo Mounts",
+"level": [
+45,
+45
+],
+"faction": 104,
+"repair": false,
+"spawns": [
+[
+1,
+-2279.8,
+-392.1
+]
+],
+"items": [
+{
+"item": 15277,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 15290,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18793,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18794,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18795,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 11116,
+"name": "Innkeeper Abeqwa",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 104,
+"repair": false,
+"spawns": [
+[
+1,
+-5477.9,
+-2460.4
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 9501,
+"name": "Innkeeper Adegwa",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+0,
+-912.4,
+-3524.9
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6740,
+"name": "Innkeeper Allison",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-8867.8,
+673.7
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 2352,
+"name": "Innkeeper Anderson",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-857.1,
+-570.8
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6739,
+"name": "Innkeeper Bates",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 68,
+"repair": false,
+"spawns": [
+[
+0,
+510.9,
+1636.5
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4604,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4605,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4606,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4607,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4608,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8948,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 1247,
+"name": "Innkeeper Belm",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 55,
+"repair": false,
+"spawns": [
+[
+0,
+-5601.6,
+-531.2
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2686,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2894,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 3934,
+"name": "Innkeeper Boorand Plainswind",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+-407.1,
+-2645.2
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4536,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4537,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4538,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4539,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4602,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8953,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6727,
+"name": "Innkeeper Brianna",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-9224.0,
+-2157.1
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 6887,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7714,
+"name": "Innkeeper Byula",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+-2376.3,
+-1995.7
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4536,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4537,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4538,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4539,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4602,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8953,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 16458,
+"name": "Innkeeper Faralia",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+2729.9,
+1498.1
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 295,
+"name": "Innkeeper Farley",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-9462.7,
+16.2
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 5111,
+"name": "Innkeeper Firebrew",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 55,
+"repair": false,
+"spawns": [
+[
+0,
+-4840.7,
+-857.1
+]
+],
+"items": [
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2593,
+"price": 150,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2594,
+"price": 1500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2595,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2596,
+"price": 120,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2723,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7733,
+"name": "Innkeeper Fizzgrimble",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 474,
+"repair": false,
+"spawns": [
+[
+1,
+-7159.0,
+-3841.6
+]
+],
+"items": [
+{
+"item": 18046,
+"price": 12000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7737,
+"name": "Innkeeper Greul",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+-4460.1,
+242.7
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6928,
+"name": "Innkeeper Grosk",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+340.4,
+-4686.3
+]
+],
+"items": [
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6929,
+"name": "Innkeeper Gryshka",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+1634.0,
+-4439.4
+]
+],
+"items": [
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6734,
+"name": "Innkeeper Hearthstove",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 55,
+"repair": false,
+"spawns": [
+[
+0,
+-5377.9,
+-2973.9
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 8931,
+"name": "Innkeeper Heather",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-10653.3,
+1166.4
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 6887,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 1464,
+"name": "Innkeeper Helbrek",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 55,
+"repair": false,
+"spawns": [
+[
+0,
+-3827.9,
+-831.9
+]
+],
+"items": [
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2594,
+"price": 1500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6272,
+"name": "Innkeeper Janene",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 894,
+"repair": false,
+"spawns": [
+[
+1,
+-3616.1,
+-4470.8
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7731,
+"name": "Innkeeper Jayka",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+893.7,
+927.9
+]
+],
+"items": [
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6930,
+"name": "Innkeeper Karakul",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+0,
+-10487.3,
+-3258.8
+]
+],
+"items": [
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6747,
+"name": "Innkeeper Kauth",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+-2365.4,
+-347.3
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 12196,
+"name": "Innkeeper Kaylisk",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+2341.9,
+-2567.0
+]
+],
+"items": [
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6736,
+"name": "Innkeeper Keldamyr",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+9802.2,
+982.6
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6738,
+"name": "Innkeeper Kimlya",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+2781.2,
+-433.0
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 11103,
+"name": "Innkeeper Lyshaerya",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+255.6,
+1253.8
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6741,
+"name": "Innkeeper Norman",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 68,
+"repair": false,
+"spawns": [
+[
+0,
+1635.4,
+223.3
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4604,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4605,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4606,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4607,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4608,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8948,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6746,
+"name": "Innkeeper Pala",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 104,
+"repair": false,
+"spawns": [
+[
+1,
+-1300.3,
+38.5
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 5688,
+"name": "Innkeeper Renee",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 68,
+"repair": false,
+"spawns": [
+[
+0,
+2269.5,
+244.9
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4604,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4605,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4606,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4607,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4608,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8948,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6735,
+"name": "Innkeeper Saelienne",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+10127.9,
+2224.8
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4536,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4537,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4538,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4539,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4602,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8953,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6737,
+"name": "Innkeeper Shaussiy",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+6406.5,
+515.4
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 2388,
+"name": "Innkeeper Shay",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 68,
+"repair": false,
+"spawns": [
+[
+0,
+-6.0,
+-942.3
+]
+],
+"items": [
+{
+"item": 3703,
+"price": 145,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 9356,
+"name": "Innkeeper Shul'kar",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+0,
+-6650.1,
+-2149.4
+]
+],
+"items": [
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7736,
+"name": "Innkeeper Shyria",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+-4381.6,
+3289.4
+]
+],
+"items": [
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8953,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4602,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4539,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4538,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4537,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4536,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 11106,
+"name": "Innkeeper Sikewa",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 104,
+"repair": false,
+"spawns": [
+[
+1,
+-1592.8,
+3150.3
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6807,
+"name": "Innkeeper Skindle",
+"subname": "Innkeeper",
+"level": [
+46,
+46
+],
+"faction": 120,
+"repair": false,
+"spawns": [
+[
+0,
+-14457.7,
+495.3
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 5814,
+"name": "Innkeeper Thulbek",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+0,
+-12434.4,
+211.6
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4536,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4537,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4538,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4539,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4602,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8953,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7744,
+"name": "Innkeeper Thulfram",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 694,
+"repair": false,
+"spawns": [
+[
+0,
+399.7,
+-2119.7
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2686,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2894,
+"price": 50,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6790,
+"name": "Innkeeper Trelayne",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-10516.0,
+-1161.2
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 414,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 422,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1707,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2070,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3927,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8932,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 11118,
+"name": "Innkeeper Vizzie",
+"subname": "Innkeeper",
+"level": [
+30,
+30
+],
+"faction": 855,
+"repair": false,
+"spawns": [
+[
+1,
+6695.1,
+-4673.0
+]
+],
+"items": [
+{
+"item": 22324,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 117,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2287,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3770,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 3771,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4599,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8952,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 6791,
+"name": "Innkeeper Wiley",
+"subname": "Innkeeper",
+"level": [
+35,
+35
+],
+"faction": 69,
+"repair": false,
+"spawns": [
+[
+1,
+-1050.0,
+-3664.8
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 16256,
+"name": "Jessica Chambers",
+"subname": "Innkeeper",
+"level": [
+52,
+52
+],
+"faction": 794,
+"repair": false,
+"spawns": [
+[
+0,
+2300.9,
+-5345.1
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4540,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4541,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4542,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4544,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4601,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8950,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 384,
+"name": "Katie Hunter",
+"subname": "Horse Breeder",
+"level": [
+10,
+10
+],
+"faction": 12,
+"repair": false,
+"spawns": [
+[
+0,
+-9455.4,
+-1385.3
+]
+],
+"items": [
+{
+"item": 2411,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 2414,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 5655,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 5656,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18776,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18777,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18778,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 14731,
+"name": "Lard",
+"subname": "Innkeeper",
+"level": [
+48,
+48
+],
+"faction": 1494,
+"repair": false,
+"spawns": [
+[
+0,
+-622.0,
+-4583.4
+]
+],
+"items": [
+{
+"item": 159,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 787,
+"price": 25,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1179,
+"price": 125,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1205,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1645,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 1708,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4592,
+"price": 20,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4593,
+"price": 500,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 4594,
+"price": 1000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8766,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8957,
+"price": 4000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21552,
+"price": 2000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21815,
+"price": 10,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21829,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 21833,
+"price": 100,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 4730,
+"name": "Lelanai",
+"subname": "Saber Handler",
+"level": [
+35,
+35
+],
+"faction": 80,
+"repair": false,
+"spawns": [
+[
+1,
+10129.9,
+2533.2
+]
+],
+"items": [
+{
+"item": 8629,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8631,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8632,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18766,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18767,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18902,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7955,
+"name": "Milli Featherwhistle",
+"subname": "Mechanostrider Merchant",
+"level": [
+50,
+50
+],
+"faction": 875,
+"repair": false,
+"spawns": [
+[
+0,
+-5451.6,
+-617.3
+]
+],
+"items": [
+{
+"item": 8563,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8595,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 13321,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 13322,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18772,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18773,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18774,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 3362,
+"name": "Ogunaro Wolfrunner",
+"subname": "Kennel Master",
+"level": [
+45,
+45
+],
+"faction": 29,
+"repair": false,
+"spawns": [
+[
+1,
+2159.4,
+-4653.7
+]
+],
+"items": [
+{
+"item": 1132,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 5665,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 5668,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18796,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18797,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18798,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 1261,
+"name": "Veron Amberstill",
+"subname": "Ram Breeder",
+"level": [
+10,
+10
+],
+"faction": 55,
+"repair": false,
+"spawns": [
+[
+0,
+-5537.0,
+-1323.7
+]
+],
+"items": [
+{
+"item": 5864,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 5872,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 5873,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18785,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18786,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18787,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 4731,
+"name": "Zachariah Post",
+"subname": "Undead Horse Merchant",
+"level": [
+30,
+30
+],
+"faction": 68,
+"repair": false,
+"spawns": [
+[
+0,
+2250.4,
+328.1
+]
+],
+"items": [
+{
+"item": 13331,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 13332,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 13333,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 13334,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18791,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+},
+{
+"entry": 7952,
+"name": "Zjolnir",
+"subname": "Raptor Handler",
+"level": [
+45,
+45
+],
+"faction": 126,
+"repair": false,
+"spawns": [
+[
+1,
+-858.2,
+-4882.7
+]
+],
+"items": [
+{
+"item": 8588,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8591,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 8592,
+"price": 100000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18788,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18789,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+},
+{
+"item": 18790,
+"price": 1000000,
+"stock": 0,
+"restock_s": 0
+}
+]
+}
+]

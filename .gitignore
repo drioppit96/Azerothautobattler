@@ -1,0 +1,8 @@
+# not needed in the repository (reports, raw client files, builds)
+*.xlsx
+*.zip
+dbc/
+web/
+android/
+__pycache__/
+*.pyc

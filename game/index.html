@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1a160f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<title>Azeroth Auto Battler</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <div class="brand">Azeroth <span>Auto&nbsp;Battler</span></div>
+    <nav id="maptabs"></nav>
+    <div class="spacer"></div>
+    <label class="chk"><input type="checkbox" id="follow"> Follow</label>
+    <label class="chk"><input type="checkbox" id="showroutes"> Routes</label>
+    <label class="chk" title="Red: cannot walk there (mountains, cliffs, lava). Blue: swimming."><input type="checkbox" id="showterrain"> Terrain</label>
+    <label class="chk"><input type="checkbox" id="showmobs" checked> Creatures</label>
+    <div class="seg" id="speed">
+      <button data-s="0" title="Pause">&#10074;&#10074;</button>
+      <button data-s="1" class="on">1x</button>
+      <button data-s="2">2x</button>
+    </div>
+    <button id="btnSave" class="mini" title="Download all characters as a file">Export</button>
+    <button id="btnLoad" class="mini" title="Load characters from a file">Import</button>
+    <input type="file" id="fileLoad" accept=".json" hidden>
+  </header>
+  <aside id="left">
+    <section class="card" id="charCard"></section>
+    <section class="card" id="orderCard"></section>
+    <section class="card grow" id="logCard"><h3>Log</h3><div id="log"></div></section>
+  </aside>
+  <main id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="hud"><span id="coords">&nbsp;</span><span id="zonehint"></span></div>
+    <div id="legend">
+      <i style="background:#e0453a"></i>attacks <i style="background:#e6b93c"></i>neutral
+      <i style="background:#4fc26b"></i>friendly <i style="background:#8a8f9c"></i>untargetable
+    </div>
+    <div id="abar"></div>
+    <div id="menu" hidden></div>
+    <div id="tip" hidden></div>
+    <div id="loading"><div><b>Loading game data</b><div id="loadmsg"></div></div></div>
+  </main>
+  <nav id="mnav"><button data-p="map" class="on">Map</button><button data-p="left">Hero</button><button data-p="right">Quests &amp; gear</button><button data-p="sheet">Bags</button></nav>
+  <aside id="right">
+    <section class="card" id="infoCard"><h3>Selection</h3><div class="muted">Click a creature, a graveyard or the ground on the map.</div></section>
+    <section class="card" id="questCard"></section>
+    <section class="card" id="gearCard"></section>
+  </aside>
+</div>
+<div id="sheet" class="modal" hidden>
+  <div class="sheet-win">
+    <div class="sheet-head"><nav id="sheetTabs"><button data-tab="char" class="on">Character</button><button data-tab="beh">Abilities &amp; behaviour</button><button data-tab="vendor">Vendor</button></nav><span id="sheetTitle"></span><button id="sheetClose" class="mini">&#10005;</button></div>
+    <div class="sheet-body"><section id="sheetLeft"></section><section id="sheetBags"></section></div>
+  </div>
+</div>
+<div id="itip" hidden></div>
+<div id="iact" hidden></div>
+<script src="../gamedata/mobmap_data.js"></script>
+<script src="../gamedata/nav.js"></script>
+<script src="collision.js"></script>
+<script src="combat.js"></script>
+<script src="items.js"></script>
+<script src="abilities.js"></script>
+<script src="sheet.js"></script>
+<script src="quests.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

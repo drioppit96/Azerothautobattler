@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azeroth Auto Battler</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <div class="brand">Azeroth <span>Auto&nbsp;Battler</span></div>
+    <nav id="maptabs"></nav>
+    <div class="spacer"></div>
+    <label class="chk"><input type="checkbox" id="follow"> Follow</label>
+    <label class="chk"><input type="checkbox" id="showroutes"> Routes</label>
+    <label class="chk"><input type="checkbox" id="showmobs" checked> Creatures</label>
+    <div class="seg" id="speed">
+      <button data-s="0" title="Pause">&#10074;&#10074;</button>
+      <button data-s="1" class="on">1x</button>
+      <button data-s="2">2x</button>
+    </div>
+    <button id="btnSave" class="mini" title="Download all characters as a file">Export</button>
+    <button id="btnLoad" class="mini" title="Load characters from a file">Import</button>
+    <input type="file" id="fileLoad" accept=".json" hidden>
+  </header>
+  <aside id="left">
+    <section class="card" id="charCard"></section>
+    <section class="card" id="orderCard"></section>
+    <section class="card grow" id="logCard"><h3>Log</h3><div id="log"></div></section>
+  </aside>
+  <main id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="hud"><span id="coords">&nbsp;</span><span id="zonehint"></span></div>
+    <div id="legend">
+      <i style="background:#e0453a"></i>attacks <i style="background:#e6b93c"></i>neutral
+      <i style="background:#4fc26b"></i>friendly <i style="background:#8a8f9c"></i>untargetable
+    </div>
+    <div id="menu" hidden></div>
+    <div id="tip" hidden></div>
+    <div id="loading"><div><b>Loading game data</b><div id="loadmsg"></div></div></div>
+  </main>
+  <aside id="right"><section class="card" id="infoCard"><h3>Selection</h3><div class="muted">Click a creature, a graveyard or the ground on the map.</div></section></aside>
+</div>
+<script src="../gamedata/mobmap_data.js"></script>
+<script src="../gamedata/nav.js"></script>
+<script src="../gamedata/navgrid.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

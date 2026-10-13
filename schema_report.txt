@@ -1,0 +1,591 @@
+=== ALL TABLES (212) ===
+achievement_category_dbc(89), achievement_criteria_data(2916), achievement_criteria_dbc(7973), achievement_dbc(1986), achievement_reward(103), achievement_reward_locale(229), ai_playerbot_enchants(320), ai_playerbot_help_texts(2194), ai_playerbot_named_location(54055), ai_playerbot_rpg_races(441), ai_playerbot_texts(857), ai_playerbot_texts_chance(3), ai_playerbot_travelnode(1839), ai_playerbot_travelnode_link(6200), ai_playerbot_travelnode_path(414126), ai_playerbot_weightscales(32), ai_playerbot_weightscale_data(220), ai_playerbot_zone_level(3488), areatrigger_involvedrelation(45), areatrigger_tavern(42), areatrigger_teleport(103), auction(0), battleground_events(167), battleground_template(3), battlemaster_entry(24), broadcast_text(11104), broadcast_text_locale(66624), bugreport(0), combat_condition(407), command(313), conditions(1260), creature(66468), creature_addon(1789), creature_ai_scripts(11469), creature_ai_summons(38), creature_ai_texts(0), creature_battleground(1033), creature_conditional_spawn(0), creature_cooldowns(0), creature_equip_template(5319), creature_immunities(507), creature_involvedrelation(3951), creature_linking(1188), creature_linking_template(155), creature_loot_template(151783), creature_model_info(10534), creature_model_race(24), creature_movement(53469), creature_movement_template(17123), creature_onkill_reputation(470), creature_questrelation(3827), creature_spawn_data(142), creature_spawn_data_template(78), creature_spawn_entry(8073), creature_spell_list(1806), creature_spell_list_entry(707), creature_spell_targeting(40), creature_template(10391), creature_template_addon(7479), creature_template_armor(9113), creature_template_classlevelstats(210), creature_template_spells(2356), creature_zone(0), custom_texts(0), dbscripts_on_creature_death(54), dbscripts_on_creature_movement(2411), dbscripts_on_event(445), dbscripts_on_gossip(424), dbscripts_on_go_template_use(180), dbscripts_on_go_use(37), dbscripts_on_quest_end(1943), dbscripts_on_quest_start(734), dbscripts_on_relay(907), dbscripts_on_spell(31), dbscript_random_templates(418), dbscript_string(0), db_version(1), disenchant_loot_template(80), exploration_basexp(61), fishing_loot_template(155), gameobject(47434), gameobject_addon(1245), gameobject_battleground(425), gameobject_involvedrelation(208), gameobject_loot_template(12547), gameobject_questrelation(257), gameobject_spawn_entry(5103), gameobject_template(10744), gameobject_template_addon(26), gameobject_zone(0), game_event(67), game_event_creature(3239), game_event_creature_data(1025), game_event_gameobject(11204), game_event_mail(1), game_event_quest(61), game_event_time(38), game_graveyard_zone(190), game_tele(269), game_weather(33), gossip_menu(3920), gossip_menu_option(2503), gossip_texts(29), instance_dungeon_encounters(612), instance_encounters(272), instance_template(33), item_convert(10), item_enchantment_template(27892), item_expire_convert(6), item_loot_template(3966), item_required_target(49), item_template(17718), locales_areatrigger_teleport(0), locales_creature(4), locales_gameobject(0), locales_gossip_menu_option(0), locales_item(0), locales_npc_text(0), locales_page_text(0), locales_points_of_interest(0), locales_quest(0), locales_questgiver_greeting(0), locales_trainer_greeting(0), mail_level_reward(24), mail_loot_template(75), mangos_string(967), npc_gossip(65), npc_spellclick_spells(99), npc_text(2474), npc_text_broadcast_text(2626), npc_trainer(27309), npc_trainer_template(1239), npc_vendor(11695), npc_vendor_template(242), page_text(1435), petcreateinfo_spell(7), pet_autocast_spell_list(0), pet_familystats(18), pet_levelstats(1560), pet_levelstats_copy(1320), pet_name_generation(260), pickpocketing_loot_template(6994), playercreateinfo(40), playercreateinfo_action(215), playercreateinfo_item(0), playercreateinfo_skills(77), playercreateinfo_spell(1497), player_classlevelstats(540), player_levelstats(2400), player_xp_for_level(60), points_of_interest(244), pool_creature(156), pool_creature_template(195), pool_gameobject(20081), pool_gameobject_template(42), pool_pool(2985), pool_template(4096), questgiver_greeting(214), quest_poi(18486), quest_poi_points(56425), quest_template(4245), reference_loot_template(32972), reference_loot_template_names(551), reputation_reward_rate(3), reputation_spillover_template(12), reserved_name(0), scripted_areatrigger(58), scripted_event_id(50), script_texts(1446), script_waypoint(1303), skill_discovery_template(348), skill_extra_item_template(206), skill_fishing_base_level(57), skinning_loot_template(2802), spam_records(0), spawn_group(1346), spawn_group_entry(2173), spawn_group_formation(231), spawn_group_linked_group(7), spawn_group_spawn(4582), spawn_group_squad(0), spell_affect(135), spell_area(5), spell_chain(1108), spell_cone(709), spell_elixir(60), spell_facing(973), spell_group(19), spell_group_spell(325), spell_learn_spell(9), spell_loot_template(171), spell_pet_auras(24), spell_proc_event(242), spell_proc_item_enchant(7), spell_scripts(578), spell_script_target(913), spell_target_position(353), spell_template(21456), spell_threat(111), string_id(13), taxi_shortcuts(98), trainer_greeting(491), transports(9), unit_condition(286), vehicle_accessory(119), warden_scans(89), waypoint_path(7752), waypoint_path_name(244), worldstate_expression(9705), worldstate_name(533), world_safe_locs(122), world_template(2)
+
+=== ai_playerbot_zone_level ===
+id, level
+
+=== areatrigger_involvedrelation ===
+id, quest
+
+=== areatrigger_tavern ===
+id, name
+
+=== areatrigger_teleport ===
+id, name, required_level, required_item, required_item2, required_quest_done, target_map, target_position_x, target_position_y, target_position_z, target_orientation, status_failed_text, condition_id
+
+=== creature ===
+guid, id, map, spawnMask, position_x, position_y, position_z, orientation, spawntimesecsmin, spawntimesecsmax, spawndist, MovementType
+
+=== creature_involvedrelation ===
+id, quest
+
+=== creature_movement ===
+Id, Point, PositionX, PositionY, PositionZ, Orientation, WaitTime, ScriptId, Comment
+
+=== creature_questrelation ===
+id, quest
+
+=== creature_spawn_entry ===
+guid, entry
+
+=== creature_spell_list ===
+Id, Position, SpellId, Flags, CombatCondition, TargetId, ScriptId, Availability, Probability, InitialMin, InitialMax, RepeatMin, RepeatMax, Comments
+
+=== creature_spell_list_entry ===
+Id, Name, ChanceSupportAction, ChanceRangedAttack
+
+=== creature_spell_targeting ===
+Id, Type, Param1, Param2, Param3, UnitCondition, Comments
+
+=== creature_template ===
+Entry, Name, SubName, MinLevel, MaxLevel, DisplayId1, DisplayId2, DisplayId3, DisplayId4, DisplayIdProbability1, DisplayIdProbability2, DisplayIdProbability3, DisplayIdProbability4, Faction, Scale, Family, CreatureType, InhabitType, RegenerateStats, RacialLeader, NpcFlags, UnitFlags, DynamicFlags, ExtraFlags, CreatureTypeFlags, StaticFlags1, StaticFlags2, StaticFlags3, StaticFlags4, SpeedWalk, SpeedRun, Detection, CallForHelp, Pursuit, Leash, Timeout, UnitClass, Rank, HealthMultiplier, PowerMultiplier, DamageMultiplier, DamageVariance, ArmorMultiplier, ExperienceMultiplier, StrengthMultiplier, AgilityMultiplier, StaminaMultiplier, IntellectMultiplier, SpiritMultiplier, MinLevelHealth, MaxLevelHealth, MinLevelMana, MaxLevelMana, MinMeleeDmg, MaxMeleeDmg, MinRangedDmg, MaxRangedDmg, Armor, MeleeAttackPower, RangedAttackPower, MeleeBaseAttackTime, RangedBaseAttackTime, DamageSchool, MinLootGold, MaxLootGold, LootId, PickpocketLootId, SkinningLootId, KillCredit1, KillCredit2, MechanicImmuneMask, SchoolImmuneMask, ResistanceHoly, ResistanceFire, ResistanceNature, ResistanceFrost, ResistanceShadow, ResistanceArcane, PetSpellDataId, MovementType, TrainerType, TrainerSpell, TrainerClass, TrainerRace, TrainerTemplateId, VendorTemplateId, GossipMenuId, InteractionPauseTimer, CorpseDecay, SpellList, CharmedSpellList, StringId1, StringId2, EquipmentTemplateId, Civilian, AIName, ScriptName, DamageMultiplierOLD, DamageVarianceOLD
+
+=== creature_template_addon ===
+entry, mount, stand_state, sheath_state, emote, moveflags, auras
+
+=== creature_template_spells ===
+entry, setId, spell1, spell2, spell3, spell4, spell5, spell6, spell7, spell8, spell9, spell10
+
+=== creature_zone ===
+Guid, ZoneId, AreaId, WmoGroupId
+
+=== dbscripts_on_spell ===
+id, delay, priority, command, datalong, datalong2, datalong3, buddy_entry, search_radius, data_flags, dataint, dataint2, dataint3, dataint4, datafloat, x, y, z, o, speed, condition_id, comments
+
+=== gameobject ===
+guid, id, map, spawnMask, position_x, position_y, position_z, orientation, rotation0, rotation1, rotation2, rotation3, spawntimesecsmin, spawntimesecsmax
+
+=== gameobject_involvedrelation ===
+id, quest
+
+=== gameobject_questrelation ===
+id, quest
+
+=== gameobject_template ===
+entry, type, displayId, name, IconName, faction, flags, ExtraFlags, size, data0, data1, data2, data3, data4, data5, data6, data7, data8, data9, data10, data11, data12, data13, data14, data15, data16, data17, data18, data19, data20, data21, data22, data23, CustomData1, mingold, maxgold, StringId, ScriptName
+
+=== gameobject_zone ===
+Guid, ZoneId, AreaId, WmoGroupId
+
+=== game_event_creature ===
+guid, event
+
+=== game_graveyard_zone ===
+id, ghost_loc, link_kind, faction
+
+=== item_template ===
+entry, class, subclass, name, displayid, Quality, Flags, BuyCount, BuyPrice, SellPrice, InventoryType, AllowableClass, AllowableRace, ItemLevel, RequiredLevel, RequiredSkill, RequiredSkillRank, requiredspell, requiredhonorrank, RequiredCityRank, RequiredReputationFaction, RequiredReputationRank, maxcount, stackable, ContainerSlots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, delay, ammo_type, RangedModRange, spellid_1, spelltrigger_1, spellcharges_1, spellppmRate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmRate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmRate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmRate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmRate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, description, PageText, LanguageID, PageMaterial, startquest, lockid, Material, sheath, RandomProperty, block, itemset, MaxDurability, area, Map, BagFamily, ScriptName, DisenchantID, FoodType, minMoneyLoot, maxMoneyLoot, Duration, ExtraFlags
+
+=== locales_areatrigger_teleport ===
+Entry, Text_loc1, Text_loc2, Text_loc3, Text_loc4, Text_loc5, Text_loc6, Text_loc7, Text_loc8
+
+=== locales_trainer_greeting ===
+Entry, Text_loc1, Text_loc2, Text_loc3, Text_loc4, Text_loc5, Text_loc6, Text_loc7, Text_loc8
+
+=== npc_spellclick_spells ===
+npc_entry, spell_id, quest_start, quest_start_active, quest_end, cast_flags, condition_id
+
+=== npc_trainer ===
+entry, spell, spellcost, reqskill, reqskillvalue, reqlevel, ReqAbility1, ReqAbility2, ReqAbility3, condition_id
+
+=== npc_trainer_template ===
+entry, spell, spellcost, reqskill, reqskillvalue, reqlevel, ReqAbility1, ReqAbility2, ReqAbility3, condition_id
+
+=== petcreateinfo_spell ===
+entry, Spell1, Spell2, Spell3, Spell4
+
+=== pet_autocast_spell_list ===
+CreatureEntry, SpellId, CombatCondition, TargetId, Comments
+
+=== playercreateinfo_skills ===
+raceMask, classMask, skill, step, note
+
+=== playercreateinfo_spell ===
+race, class, Spell, Note
+
+=== quest_template ===
+entry, Method, ZoneOrSort, MinLevel, MaxLevel, QuestLevel, Type, RequiredClasses, RequiredRaces, RequiredSkill, RequiredSkillValue, RequiredCondition, RepObjectiveFaction, RepObjectiveValue, RequiredMinRepFaction, RequiredMinRepValue, RequiredMaxRepFaction, RequiredMaxRepValue, SuggestedPlayers, LimitTime, QuestFlags, SpecialFlags, PrevQuestId, NextQuestId, ExclusiveGroup, BreadcrumbForQuestId, NextQuestInChain, SrcItemId, SrcItemCount, SrcSpell, Title, Details, Objectives, OfferRewardText, RequestItemsText, EndText, ObjectiveText1, ObjectiveText2, ObjectiveText3, ObjectiveText4, ReqItemId1, ReqItemId2, ReqItemId3, ReqItemId4, ReqItemCount1, ReqItemCount2, ReqItemCount3, ReqItemCount4, ReqSourceId1, ReqSourceId2, ReqSourceId3, ReqSourceId4, ReqSourceCount1, ReqSourceCount2, ReqSourceCount3, ReqSourceCount4, ReqCreatureOrGOId1, ReqCreatureOrGOId2, ReqCreatureOrGOId3, ReqCreatureOrGOId4, ReqCreatureOrGOCount1, ReqCreatureOrGOCount2, ReqCreatureOrGOCount3, ReqCreatureOrGOCount4, ReqSpellCast1, ReqSpellCast2, ReqSpellCast3, ReqSpellCast4, RewChoiceItemId1, RewChoiceItemId2, RewChoiceItemId3, RewChoiceItemId4, RewChoiceItemId5, RewChoiceItemId6, RewChoiceItemCount1, RewChoiceItemCount2, RewChoiceItemCount3, RewChoiceItemCount4, RewChoiceItemCount5, RewChoiceItemCount6, RewItemId1, RewItemId2, RewItemId3, RewItemId4, RewItemCount1, RewItemCount2, RewItemCount3, RewItemCount4, RewRepFaction1, RewRepFaction2, RewRepFaction3, RewRepFaction4, RewRepFaction5, RewRepValue1, RewRepValue2, RewRepValue3, RewRepValue4, RewRepValue5, RewFactionFlags, RewOrReqMoney, RewMoneyMaxLevel, RewSpell, RewSpellCast, RewMailTemplateId, RewMailDelaySecs, PointMapId, PointX, PointY, PointOpt, DetailsEmote1, DetailsEmote2, DetailsEmote3, DetailsEmote4, DetailsEmoteDelay1, DetailsEmoteDelay2, DetailsEmoteDelay3, DetailsEmoteDelay4, IncompleteEmote, IncompleteEmoteDelay, CompleteEmote, CompleteEmoteDelay, OfferRewardEmote1, OfferRewardEmote2, OfferRewardEmote3, OfferRewardEmote4, OfferRewardEmoteDelay1, OfferRewardEmoteDelay2, OfferRewardEmoteDelay3, OfferRewardEmoteDelay4, StartScript, CompleteScript
+
+=== scripted_areatrigger ===
+entry, ScriptName
+
+=== skill_discovery_template ===
+spellId, reqSpell, reqSkillValue, chance
+
+=== skill_extra_item_template ===
+spellId, requiredSpecialization, additionalCreateChance, additionalMaxNum
+
+=== skill_fishing_base_level ===
+entry, skill
+
+=== spawn_group ===
+Id, Name, Type, MaxCount, WorldState, WorldStateExpression, Flags, StringId, RespawnOverrideMin, RespawnOverrideMax
+
+=== spell_affect ===
+entry, effectId, SpellFamilyMask
+
+=== spell_area ===
+spell, area, quest_start, quest_start_active, quest_end, condition_id, aura_spell, racemask, gender, autocast
+
+=== spell_chain ===
+spell_id, prev_spell, first_spell, rank, req_spell
+
+=== spell_cone ===
+Id, ConeDegrees
+
+=== spell_elixir ===
+entry, mask
+
+=== spell_facing ===
+entry, facingcasterflag
+
+=== spell_group ===
+Id, Rule, Name
+
+=== spell_group_spell ===
+Id, SpellId
+
+=== spell_learn_spell ===
+entry, SpellID, Active
+
+=== spell_loot_template ===
+entry, item, ChanceOrQuestChance, groupid, mincountOrRef, maxcount, condition_id
+
+=== spell_pet_auras ===
+spell, pet, aura
+
+=== spell_proc_event ===
+entry, SchoolMask, SpellFamilyName, SpellFamilyMask0, SpellFamilyMask1, SpellFamilyMask2, procFlags, procEx, ppmRate, CustomChance, Cooldown
+
+=== spell_proc_item_enchant ===
+entry, ppmRate
+
+=== spell_scripts ===
+Id, ScriptName
+
+=== spell_script_target ===
+entry, type, targetEntry, inverseEffectMask
+
+=== spell_target_position ===
+id, target_map, target_position_x, target_position_y, target_position_z, target_orientation
+
+=== spell_template ===
+Id, School, Category, CastUI, Dispel, Mechanic, Attributes, AttributesEx, AttributesEx2, AttributesEx3, AttributesEx4, Stances, StancesNot, Targets, TargetCreatureType, RequiresSpellFocus, CasterAuraState, TargetAuraState, CastingTimeIndex, RecoveryTime, CategoryRecoveryTime, InterruptFlags, AuraInterruptFlags, ChannelInterruptFlags, ProcFlags, ProcChance, ProcCharges, MaxLevel, BaseLevel, SpellLevel, DurationIndex, PowerType, ManaCost, ManaCostPerlevel, ManaPerSecond, ManaPerSecondPerLevel, RangeIndex, Speed, ModalNextSpell, StackAmount, Totem1, Totem2, Reagent1, Reagent2, Reagent3, Reagent4, Reagent5, Reagent6, Reagent7, Reagent8, ReagentCount1, ReagentCount2, ReagentCount3, ReagentCount4, ReagentCount5, ReagentCount6, ReagentCount7, ReagentCount8, EquippedItemClass, EquippedItemSubClassMask, EquippedItemInventoryTypeMask, Effect1, Effect2, Effect3, EffectDieSides1, EffectDieSides2, EffectDieSides3, EffectBaseDice1, EffectBaseDice2, EffectBaseDice3, EffectDicePerLevel1, EffectDicePerLevel2, EffectDicePerLevel3, EffectRealPointsPerLevel1, EffectRealPointsPerLevel2, EffectRealPointsPerLevel3, EffectBasePoints1, EffectBasePoints2, EffectBasePoints3, EffectMechanic1, EffectMechanic2, EffectMechanic3, EffectImplicitTargetA1, EffectImplicitTargetA2, EffectImplicitTargetA3, EffectImplicitTargetB1, EffectImplicitTargetB2, EffectImplicitTargetB3, EffectRadiusIndex1, EffectRadiusIndex2, EffectRadiusIndex3, EffectApplyAuraName1, EffectApplyAuraName2, EffectApplyAuraName3, EffectAmplitude1, EffectAmplitude2, EffectAmplitude3, EffectMultipleValue1, EffectMultipleValue2, EffectMultipleValue3, EffectChainTarget1, EffectChainTarget2, EffectChainTarget3, EffectItemType1, EffectItemType2, EffectItemType3, EffectMiscValue1, EffectMiscValue2, EffectMiscValue3, EffectTriggerSpell1, EffectTriggerSpell2, EffectTriggerSpell3, EffectPointsPerComboPoint1, EffectPointsPerComboPoint2, EffectPointsPerComboPoint3, SpellVisual, SpellIconID, ActiveIconID, SpellPriority, SpellName, SpellName2, SpellName3, SpellName4, SpellName5, SpellName6, SpellName7, SpellName8, Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8, ManaCostPercentage, StartRecoveryCategory, StartRecoveryTime, MaxTargetLevel, SpellFamilyName, SpellFamilyFlags, MaxAffectedTargets, DmgClass, PreventionType, StanceBarOrder, DmgMultiplier1, DmgMultiplier2, DmgMultiplier3, MinFactionId, MinReputation, RequiredAuraVision, EffectBonusCoefficient1, EffectBonusCoefficient2, EffectBonusCoefficient3, EffectBonusCoefficientFromAP1, EffectBonusCoefficientFromAP2, EffectBonusCoefficientFromAP3, IsServerSide, AttributesServerside
+
+=== spell_threat ===
+entry, Threat, multiplier, ap_bonus, inverseEffectMask
+
+=== trainer_greeting ===
+Entry, Text
+
+=== SAMPLE ROW quest_template ===
+  entry = 527
+  Method = 2
+  ZoneOrSort = 267
+  MinLevel = 19
+  MaxLevel = 255
+  QuestLevel = 24
+  Type = 0
+  RequiredClasses = 0
+  RequiredRaces = 178
+  RequiredSkill = 0
+  RequiredSkillValue = 0
+  RequiredCondition = 0
+  RepObjectiveFaction = 0
+  RepObjectiveValue = 0
+  RequiredMinRepFaction = 0
+  RequiredMinRepValue = 0
+  RequiredMaxRepFaction = 0
+  RequiredMaxRepValue = 0
+  SuggestedPlayers = 0
+  LimitTime = 0
+  QuestFlags = 8
+  SpecialFlags = 0
+  PrevQuestId = 0
+  NextQuestId = 0
+  ExclusiveGroup = 0
+  BreadcrumbForQuestId = 0
+  NextQuestInChain = 528
+  SrcItemId = 0
+  SrcItemCount = 0
+  SrcSpell = 0
+  Title = 'Battle of Hillsbrad'
+  Details = 'Stand at attention while addressing me, $c.$B$BI am under direct command of Varimathras.  We are to quell the human infestation until our apothecaries can develop the new plague.$B$BOur information leads us to believe that the town of Hillsbrad is vulnerable to attack.  Your first assignment is aimed at disrupting their food supply and infrastructure.$B$BTravel west.  Raid the northernmost farms of Hillsbrad Fields.  Make sure that the landowners, Farmer Ray and Farmer Getz, are executed as well.'
+  Objectives = 'Kill 6 Hillsbrad Farmhands, 6 Hillsbrad Farmers, Farmer Ray and Farmer Getz and report back to Darthalia in Tarren Mill.'
+  OfferRewardText = 'At ease, $C. I see you have returned from battle. My sources tell me you performed well on the Hillsbrad front.'
+  RequestItemsText = 'As High Executor of Tarren Mill, under the direct command of Varimathras and the Dark Lady, you are subject to follow my command.$B$BPerhaps you take this war with the Alliance lightly? If such is the case I should behead you right here and now. Otherwise, travel west to the town of Hillsbrad and wage battle against the humans, as ordered.$B$BDismissed.'
+  EndText = ''
+  ObjectiveText1 = ''
+  ObjectiveText2 = ''
+  ObjectiveText3 = ''
+  ObjectiveText4 = ''
+  ReqItemId1 = 0
+  ReqItemId2 = 0
+  ReqItemId3 = 0
+  ReqItemId4 = 0
+  ReqItemCount1 = 0
+  ReqItemCount2 = 0
+  ReqItemCount3 = 0
+  ReqItemCount4 = 0
+  ReqSourceId1 = 0
+  ReqSourceId2 = 0
+  ReqSourceId3 = 0
+  ReqSourceId4 = 0
+  ReqSourceCount1 = 0
+  ReqSourceCount2 = 0
+  ReqSourceCount3 = 0
+  ReqSourceCount4 = 0
+  ReqCreatureOrGOId1 = 2266
+  ReqCreatureOrGOId2 = 2360
+  ReqCreatureOrGOId3 = 232
+  ReqCreatureOrGOId4 = 2403
+  ReqCreatureOrGOCount1 = 6
+  ReqCreatureOrGOCount2 = 6
+  ReqCreatureOrGOCount3 = 1
+  ReqCreatureOrGOCount4 = 1
+  ReqSpellCast1 = 0
+  ReqSpellCast2 = 0
+  ReqSpellCast3 = 0
+  ReqSpellCast4 = 0
+  RewChoiceItemId1 = 0
+  RewChoiceItemId2 = 0
+  RewChoiceItemId3 = 0
+  RewChoiceItemId4 = 0
+  RewChoiceItemId5 = 0
+  RewChoiceItemId6 = 0
+  RewChoiceItemCount1 = 0
+  RewChoiceItemCount2 = 0
+  RewChoiceItemCount3 = 0
+  RewChoiceItemCount4 = 0
+  RewChoiceItemCount5 = 0
+  RewChoiceItemCount6 = 0
+  RewItemId1 = 0
+  RewItemId2 = 0
+  RewItemId3 = 0
+  RewItemId4 = 0
+  RewItemCount1 = 0
+  RewItemCount2 = 0
+  RewItemCount3 = 0
+  RewItemCount4 = 0
+  RewRepFaction1 = 68
+  RewRepFaction2 = 0
+  RewRepFaction3 = 0
+  RewRepFaction4 = 0
+  RewRepFaction5 = 0
+  RewRepValue1 = 250
+  RewRepValue2 = 0
+  RewRepValue3 = 0
+  RewRepValue4 = 0
+  RewRepValue5 = 0
+  RewFactionFlags = 0
+  RewOrReqMoney = 1700
+  RewMoneyMaxLevel = 1170
+  RewSpell = 0
+  RewSpellCast = 0
+  RewMailTemplateId = 0
+  RewMailDelaySecs = 0
+  PointMapId = 0
+  PointX = 0.0
+  PointY = 0.0
+  PointOpt = 0
+  DetailsEmote1 = 25
+  DetailsEmote2 = 1
+  DetailsEmote3 = 1
+  DetailsEmote4 = 0
+  DetailsEmoteDelay1 = 0
+  DetailsEmoteDelay2 = 0
+  DetailsEmoteDelay3 = 0
+  DetailsEmoteDelay4 = 0
+  IncompleteEmote = 0
+  IncompleteEmoteDelay = 0
+  CompleteEmote = 1
+  CompleteEmoteDelay = 0
+  OfferRewardEmote1 = 25
+  OfferRewardEmote2 = 0
+  OfferRewardEmote3 = 0
+  OfferRewardEmote4 = 0
+  OfferRewardEmoteDelay1 = 0
+  OfferRewardEmoteDelay2 = 0
+  OfferRewardEmoteDelay3 = 0
+  OfferRewardEmoteDelay4 = 0
+  StartScript = 0
+  CompleteScript = 0
+
+=== SAMPLE ROW creature_template ===
+  Entry = 880
+  Name = 'Erlan Drudgemoor'
+  SubName = None
+  MinLevel = 8
+  MaxLevel = 8
+  DisplayId1 = 3322
+  DisplayId2 = 0
+  DisplayId3 = 0
+  DisplayId4 = 0
+  DisplayIdProbability1 = 100
+  DisplayIdProbability2 = 0
+  DisplayIdProbability3 = 0
+  DisplayIdProbability4 = 0
+  Faction = 17
+  Scale = 0.0
+  Family = 0
+  CreatureType = 7
+  InhabitType = 3
+  RegenerateStats = 14
+  RacialLeader = 0
+  NpcFlags = 0
+  UnitFlags = 0
+  DynamicFlags = 0
+  ExtraFlags = 0
+  CreatureTypeFlags = 0
+  StaticFlags1 = 0
+  StaticFlags2 = 0
+  StaticFlags3 = 0
+  StaticFlags4 = 0
+  SpeedWalk = 1.0
+  SpeedRun = 0.857143
+  Detection = 18
+  CallForHelp = 0
+  Pursuit = 15000
+  Leash = 0
+  Timeout = 0
+  UnitClass = 1
+  Rank = 0
+  HealthMultiplier = 1.0
+  PowerMultiplier = 1.0
+  DamageMultiplier = 2.3
+  DamageVariance = 0.4
+  ArmorMultiplier = 1.0
+  ExperienceMultiplier = 1.0
+  StrengthMultiplier = 1.0
+  AgilityMultiplier = 1.0
+  StaminaMultiplier = 1.0
+  IntellectMultiplier = 1.0
+  SpiritMultiplier = 1.0
+  MinLevelHealth = 156
+  MaxLevelHealth = 156
+  MinLevelMana = 0
+  MaxLevelMana = 0
+  MinMeleeDmg = 16.8976
+  MaxMeleeDmg = 22.2588
+  MinRangedDmg = 13.4464
+  MaxRangedDmg = 18.4888
+  Armor = 316
+  MeleeAttackPower = 9
+  RangedAttackPower = 100
+  MeleeBaseAttackTime = 2600
+  RangedBaseAttackTime = 2600
+  DamageSchool = 0
+  MinLootGold = 3
+  MaxLootGold = 14
+  LootId = 880
+  PickpocketLootId = 880
+  SkinningLootId = 0
+  KillCredit1 = 0
+  KillCredit2 = 0
+  MechanicImmuneMask = 0
+  SchoolImmuneMask = 0
+  ResistanceHoly = 0
+  ResistanceFire = 0
+  ResistanceNature = 0
+  ResistanceFrost = 0
+  ResistanceShadow = 0
+  ResistanceArcane = 0
+  PetSpellDataId = 0
+  MovementType = 0
+  TrainerType = 0
+  TrainerSpell = 0
+  TrainerClass = 0
+  TrainerRace = 0
+  TrainerTemplateId = 0
+  VendorTemplateId = 0
+  GossipMenuId = 0
+  InteractionPauseTimer = -1
+  CorpseDecay = 0
+  SpellList = 0
+  CharmedSpellList = 88005
+  StringId1 = 0
+  StringId2 = 0
+  EquipmentTemplateId = 880
+  Civilian = 0
+  AIName = ''
+  ScriptName = ''
+  DamageMultiplierOLD = 1.0
+  DamageVarianceOLD = 1.0
+
+=== SAMPLE ROW creature ===
+  guid = 525
+  id = 0
+  map = 0
+  spawnMask = 1
+  position_x = Decimal('-12344.09960937500000000000')
+  position_y = Decimal('-1108.29003906250000000000')
+  position_z = Decimal('1.39614999294281000000')
+  orientation = Decimal('2.14182996749877930000')
+  spawntimesecsmin = 900
+  spawntimesecsmax = 900
+  spawndist = 0.0
+  MovementType = 0
+
+=== SAMPLE ROW spell_template ===
+  Id = 829
+  School = 0
+  Category = 0
+  CastUI = 0
+  Dispel = 0
+  Mechanic = 0
+  Attributes = 262160
+  AttributesEx = 0
+  AttributesEx2 = 0
+  AttributesEx3 = 0
+  AttributesEx4 = 0
+  Stances = 0
+  StancesNot = 0
+  Targets = 0
+  TargetCreatureType = 0
+  RequiresSpellFocus = 0
+  CasterAuraState = 0
+  TargetAuraState = 0
+  CastingTimeIndex = 1
+  RecoveryTime = 300000
+  CategoryRecoveryTime = 0
+  InterruptFlags = 0
+  AuraInterruptFlags = 0
+  ChannelInterruptFlags = 0
+  ProcFlags = 0
+  ProcChance = 101
+  ProcCharges = 0
+  MaxLevel = 0
+  BaseLevel = 0
+  SpellLevel = 1
+  DurationIndex = 2
+  PowerType = 0
+  ManaCost = 0
+  ManaCostPerlevel = 0
+  ManaPerSecond = 0
+  ManaPerSecondPerLevel = 0
+  RangeIndex = 1
+  Speed = 0.0
+  ModalNextSpell = 0
+  StackAmount = 0
+  Totem1 = 0
+  Totem2 = 0
+  Reagent1 = 0
+  Reagent2 = 0
+  Reagent3 = 0
+  Reagent4 = 0
+  Reagent5 = 0
+  Reagent6 = 0
+  Reagent7 = 0
+  Reagent8 = 0
+  ReagentCount1 = 0
+  ReagentCount2 = 0
+  ReagentCount3 = 0
+  ReagentCount4 = 0
+  ReagentCount5 = 0
+  ReagentCount6 = 0
+  ReagentCount7 = 0
+  ReagentCount8 = 0
+  EquippedItemClass = -1
+  EquippedItemSubClassMask = -1
+  EquippedItemInventoryTypeMask = 0
+  Effect1 = 6
+  Effect2 = 0
+  Effect3 = 0
+  EffectDieSides1 = 1
+  EffectDieSides2 = 0
+  EffectDieSides3 = 0
+  EffectBaseDice1 = 1
+  EffectBaseDice2 = 0
+  EffectBaseDice3 = 0
+  EffectDicePerLevel1 = 0.0
+  EffectDicePerLevel2 = 0.0
+  EffectDicePerLevel3 = 0.0
+  EffectRealPointsPerLevel1 = 0.0
+  EffectRealPointsPerLevel2 = 0.0
+  EffectRealPointsPerLevel3 = 0.0
+  EffectBasePoints1 = -1
+  EffectBasePoints2 = 0
+  EffectBasePoints3 = 0
+  EffectMechanic1 = 0
+  EffectMechanic2 = 0
+  EffectMechanic3 = 0
+  EffectImplicitTargetA1 = 1
+  EffectImplicitTargetA2 = 0
+  EffectImplicitTargetA3 = 0
+  EffectImplicitTargetB1 = 0
+  EffectImplicitTargetB2 = 0
+  EffectImplicitTargetB3 = 0
+  EffectRadiusIndex1 = 0
+  EffectRadiusIndex2 = 0
+  EffectRadiusIndex3 = 0
+  EffectApplyAuraName1 = 38
+  EffectApplyAuraName2 = 0
+  EffectApplyAuraName3 = 0
+  EffectAmplitude1 = 0
+  EffectAmplitude2 = 0
+  EffectAmplitude3 = 0
+  EffectMultipleValue1 = 0.0
+  EffectMultipleValue2 = 0.0
+  EffectMultipleValue3 = 0.0
+  EffectChainTarget1 = 0
+  EffectChainTarget2 = 0
+  EffectChainTarget3 = 0
+  EffectItemType1 = 0
+  EffectItemType2 = 0
+  EffectItemType3 = 0
+  EffectMiscValue1 = 12
+  EffectMiscValue2 = 0
+  EffectMiscValue3 = 0
+  EffectTriggerSpell1 = 0
+  EffectTriggerSpell2 = 0
+  EffectTriggerSpell3 = 0
+  EffectPointsPerComboPoint1 = 0.0
+  EffectPointsPerComboPoint2 = 0.0
+  EffectPointsPerComboPoint3 = 0.0
+  SpellVisual = 56
+  SpellIconID = 43
+  ActiveIconID = 0
+  SpellPriority = 0
+  SpellName = 'Thickskull'
+  SpellName2 = ''
+  SpellName3 = ''
+  SpellName4 = ''
+  SpellName5 = ''
+  SpellName6 = ''
+  SpellName7 = ''
+  SpellName8 = ''
+  Rank1 = ''
+  Rank2 = ''
+  Rank3 = ''
+  Rank4 = ''
+  Rank5 = ''
+  Rank6 = ''
+  Rank7 = ''
+  Rank8 = ''
+  ManaCostPercentage = 0
+  StartRecoveryCategory = 0
+  StartRecoveryTime = 0
+  MaxTargetLevel = 0
+  SpellFamilyName = 0
+  SpellFamilyFlags = 0
+  MaxAffectedTargets = 0
+  DmgClass = 0
+  PreventionType = 0
+  StanceBarOrder = -1
+  DmgMultiplier1 = 1.0
+  DmgMultiplier2 = 1.0
+  DmgMultiplier3 = 1.0
+  MinFactionId = 0
+  MinReputation = 0
+  RequiredAuraVision = 0
+  EffectBonusCoefficient1 = 0.0
+  EffectBonusCoefficient2 = 0.0
+  EffectBonusCoefficient3 = 0.0
+  EffectBonusCoefficientFromAP1 = 0.0
+  EffectBonusCoefficientFromAP2 = 0.0
+  EffectBonusCoefficientFromAP3 = 0.0
+  IsServerSide = 0
+  AttributesServerside = 0
+
+=== SEARCH FOR 'maps' FOLDERS WITH .map FILES ===
+none found

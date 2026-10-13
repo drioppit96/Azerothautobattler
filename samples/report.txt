@@ -1,0 +1,323 @@
+=== Small Crag Boar  entry=708  display=607 ===
+CreatureDisplayInfo row:
+  f00 = 607
+  f01 = 66
+  f02 = 0
+  f03 = 0
+  f04 = 1058642330
+  f05 = 255
+  f06 = 3759   'BoarSkinBlue'
+  f07 = 0
+  f08 = 0
+  f09 = 0
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 66
+  f01 = 0
+  f02 = 2092   'Creature\Boar\Boar.mdx'
+  f03 = 0
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 3
+  f07 = 1091567616
+  f08 = 1086324736
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 66
+  f14 = 1060226099
+  f15 = 1074089951
+model file: Creature\Boar\Boar.mdx
+  saved Creature\Boar\Boar.mdx (266528 bytes)
+  saved Creature\Boar\BoarSkinBlue.blp (44876 bytes)
+
+=== Young Wolf  entry=299  display=447 ===
+CreatureDisplayInfo row:
+  f00 = 447
+  f01 = 43
+  f02 = 0
+  f03 = 0
+  f04 = 1053609165
+  f05 = 255
+  f06 = 1568   'WolfSkinTimber'
+  f07 = 1583   'WolfSkinTimberAlpha'
+  f08 = 0
+  f09 = 1   'HumanMaleCitizenLow'
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 43
+  f01 = 0
+  f02 = 1386   'Creature\Wolf\Wolf.mdx'
+  f03 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 7
+  f07 = 1091567616
+  f08 = 1086324736
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 43
+  f14 = 1060226099
+  f15 = 1074089951
+model file: Creature\Wolf\Wolf.mdx
+  saved Creature\Wolf\Wolf.mdx (714000 bytes)
+  saved Creature\Wolf\WolfSkinTimber.blp (44876 bytes)
+  saved Creature\Wolf\WolfSkinTimberAlpha.blp (44876 bytes)
+
+=== Forest Spider  entry=30  display=382 ===
+CreatureDisplayInfo row:
+  f00 = 382
+  f01 = 63
+  f02 = 0
+  f03 = 0
+  f04 = 1053609165
+  f05 = 255
+  f06 = 3683   'TarantulaSkinOrange'
+  f07 = 0
+  f08 = 0
+  f09 = 1   'HumanMaleCitizenLow'
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 63   'Creature\Centaur\Centaur.mdx'
+  f01 = 2
+  f02 = 2020   'Creature\Tarantula\Tarantula.mdx'
+  f03 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f07 = 1099956224
+  f08 = 1094713344
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 63   'Creature\Centaur\Centaur.mdx'
+  f14 = 1060226099
+  f15 = 1074089951
+model file: Creature\Centaur\Centaur.mdx
+  saved Creature\Centaur\Centaur.mdx (360976 bytes)
+  MISSING in archives: Creature\Centaur\TarantulaSkinOrange.blp
+
+=== Defias Pillager  entry=589  display=2338 ===
+CreatureDisplayInfo row:
+  f00 = 2338
+  f01 = 49
+  f02 = 0
+  f03 = 865
+  f04 = 1065353216
+  f05 = 255
+  f06 = 0
+  f07 = 0
+  f08 = 0
+  f09 = 1   'HumanMaleCitizenLow'
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 49
+  f01 = 4
+  f02 = 1498   'Character\Human\Male\HumanMale.mdx'
+  f03 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f07 = 1094713344
+  f08 = 1092616192
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 49
+  f14 = 1058828557
+  f15 = 1073871847
+CreatureDisplayInfoExtra row:
+  f00 = 865
+  f01 = 1   '973e54e79012eea3f2658f2897e681d9.blp'
+  f02 = 0
+  f03 = 0
+  f04 = 0
+  f05 = 1   '973e54e79012eea3f2658f2897e681d9.blp'
+  f06 = 0
+  f07 = 0
+  f08 = 15308
+  f09 = 0
+  f10 = 8550
+  f11 = 5490
+  f12 = 8551
+  f13 = 5622
+  f14 = 14951
+  f15 = 0
+  f16 = 0
+  f17 = 0
+  f18 = 28293   'adbbbd4670302d188345a02dc3a290c4.blp'
+model file: Character\Human\Male\HumanMale.mdx
+  saved Character\Human\Male\HumanMale.mdx (2577936 bytes)
+  saved Textures\BakedNpcTextures\973e54e79012eea3f2658f2897e681d9.blp (44876 bytes)
+  saved Textures\BakedNpcTextures\973e54e79012eea3f2658f2897e681d9.blp (44876 bytes)
+  saved Textures\BakedNpcTextures\adbbbd4670302d188345a02dc3a290c4.blp (44876 bytes)
+
+=== Murloc Tidehunter  entry=127  display=1995 ===
+CreatureDisplayInfo row:
+  f00 = 1995
+  f01 = 31
+  f02 = 0
+  f03 = 0
+  f04 = 1069547520
+  f05 = 255
+  f06 = 58   'Sahauginskin'
+  f07 = 0
+  f08 = 0
+  f09 = 1   'HumanMaleCitizenLow'
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 31
+  f01 = 0
+  f02 = 1022   'Creature\Murloc\Murloc.mdx'
+  f03 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 4
+  f07 = 1099956224
+  f08 = 1094713344
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 31
+  f14 = 1060226099
+  f15 = 1068616385
+model file: Creature\Murloc\Murloc.mdx
+  saved Creature\Murloc\Murloc.mdx (435424 bytes)
+  saved Creature\Murloc\Sahauginskin.blp (44876 bytes)
+
+=== Kobold Vermin  entry=6  display=10913 ===
+CreatureDisplayInfo row:
+  f00 = 10913
+  f01 = 26
+  f02 = 26
+  f03 = 0
+  f04 = 1060320051
+  f05 = 255
+  f06 = 21   'koboldskinNormal'
+  f07 = 0
+  f08 = 0
+  f09 = 4294967295
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 26
+  f01 = 0
+  f02 = 863   'Creature\Kobold\Kobold.mdx'
+  f03 = 0
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f07 = 1099956224
+  f08 = 1094713344
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 26
+  f14 = 1060226099
+  f15 = 1068616385
+model file: Creature\Kobold\Kobold.mdx
+  saved Creature\Kobold\Kobold.mdx (312112 bytes)
+  saved Creature\Kobold\koboldskinNormal.blp (44876 bytes)
+
+=== Hogger  entry=448  display=384 ===
+CreatureDisplayInfo row:
+  f00 = 384
+  f01 = 123
+  f02 = 0
+  f03 = 0
+  f04 = 1066611507
+  f05 = 255
+  f06 = 1732   'RiverPawGnollFighterSkin'
+  f07 = 0
+  f08 = 0
+  f09 = 1   'HumanMaleCitizenLow'
+  f10 = 0
+  f11 = 0
+CreatureModelData row:
+  f00 = 123
+  f01 = 0
+  f02 = 4504   'Creature\GnollMelee\GnollMelee.mdx'
+  f03 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f04 = 1065353216
+  f05 = 4294967295
+  f06 = 7
+  f07 = 1099956224
+  f08 = 1094713344
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 123
+  f14 = 1062556454
+  f15 = 1070084391
+model file: Creature\GnollMelee\GnollMelee.mdx
+  saved Creature\GnollMelee\GnollMelee.mdx (327104 bytes)
+  saved Creature\GnollMelee\RiverPawGnollFighterSkin.blp (88580 bytes)
+
+=== Stormwind Guard  entry=1423  display=3258 ===
+CreatureDisplayInfo row:
+  f00 = 3258
+  f01 = 49
+  f02 = 0
+  f03 = 346
+  f04 = 1065353216
+  f05 = 255
+  f06 = 0
+  f07 = 0
+  f08 = 0
+  f09 = 1   'HumanMaleCitizenLow'
+  f10 = 0
+  f11 = 48
+CreatureModelData row:
+  f00 = 49
+  f01 = 4
+  f02 = 1498   'Character\Human\Male\HumanMale.mdx'
+  f03 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f04 = 1065353216
+  f05 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f06 = 1   'Creature\Basilisk\Basilisk.mdx'
+  f07 = 1094713344
+  f08 = 1092616192
+  f09 = 1065353216
+  f10 = 0
+  f11 = 0
+  f12 = 0
+  f13 = 49
+  f14 = 1058828557
+  f15 = 1073871847
+CreatureDisplayInfoExtra row:
+  f00 = 346
+  f01 = 1   '973e54e79012eea3f2658f2897e681d9.blp'
+  f02 = 0
+  f03 = 0
+  f04 = 0
+  f05 = 0
+  f06 = 0
+  f07 = 0
+  f08 = 14964
+  f09 = 7541
+  f10 = 7223
+  f11 = 0
+  f12 = 7224
+  f13 = 7225
+  f14 = 7255
+  f15 = 0
+  f16 = 7698
+  f17 = 6255
+  f18 = 10459   '753720ae579b4cf6a14b8c8e39b36b34.blp'
+model file: Character\Human\Male\HumanMale.mdx
+  saved Character\Human\Male\HumanMale.mdx (2577936 bytes)
+  saved Textures\BakedNpcTextures\973e54e79012eea3f2658f2897e681d9.blp (44876 bytes)
+  saved Textures\BakedNpcTextures\753720ae579b4cf6a14b8c8e39b36b34.blp (44876 bytes)
