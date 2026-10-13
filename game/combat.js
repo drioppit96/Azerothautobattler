@@ -58,7 +58,7 @@ function mobsNear(W, x, y, r, fn) {
   const c0 = cell(x - r), c1 = cell(x + r), r0 = cell(y - r), r1 = cell(y + r);
   for (let cx = c0; cx <= c1; cx++) for (let cy = r0; cy <= r1; cy++) { const a = W.grid.get(gk(cx, cy)); if (a) for (const m of a) fn(m); }
 }
-const AGGRO_SCALE = 0.7;         // aggro ranges are 30% smaller than on the server (less chain pulling)
+const AGGRO_SCALE = 0.77;        // aggro ranges: 30% smaller than on the server, then 10% larger again (0.7 x 1.1)
 function aggroRadius(m, c) { return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_SCALE, 4, 32); }
 function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
 function dangerous(m, c) { return effLevel(m) - c.level >= 4; }

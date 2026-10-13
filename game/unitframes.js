@@ -19,7 +19,7 @@ function ufFrameTexture(rank) {
 /* build the DOM of one frame; mirror = portrait on the left (the player frame) */
 function ufMake(s, mirror) {
   const el = document.createElement('div'); el.className = 'uf' + (mirror ? ' me' : '');
-  el.style.width = Math.round(UF.w * s) + 'px'; el.style.height = Math.round(UF.h * s) + 'px';
+  el.style.width = Math.round(UF.w * s) + 'px'; el.style.height = Math.round(UF.h * s) + 'px'; el.style.setProperty('--s', s);
   const X = (b) => (mirror ? UF.w - b.x - (b.w || b.d || 0) : b.x) * s;
   const box = (cls, b, w, h) => { const d = document.createElement('div'); d.className = cls; d.style.left = X(Object.assign({}, b, { w })) + 'px'; d.style.top = b.y * s + 'px'; d.style.width = w * s + 'px'; d.style.height = h * s + 'px'; el.appendChild(d); return d; };
   const p = UF.portrait;
@@ -42,8 +42,9 @@ function ufSet(el, k, v, fn) { if (el['_v' + k] !== v) { el['_v' + k] = v; fn(v)
 function renderUnitFrames() {
   const box = $('unitframes'); if (!box) return;
   const c = active(); if (!c) return; const r = rt(c); const s = charStats(c);
+  /* the character on top across the whole card, below it the creatures it fights (up to five), the same size */
   const W = box.clientWidth || 254;
-  const sp = Math.min(0.72, (W * 0.54) / UF.w), se = Math.min(0.62, (W - UF.w * sp - 2) / UF.w);
+  const sp = Math.min(1.6, (W - 4) / UF.w), se = sp * 0.94;
   if (box._w !== W) { box._w = W; box.innerHTML = ''; box._me = null; box._en = []; }
   // the character
   if (!box._me) {
@@ -74,7 +75,7 @@ function renderUnitFrames() {
   while (box._en.length < shown.length) { const e = ufMake(se, false); e.classList.add('ufenemy'); box.appendChild(e); box._en.push(e); e.onclick = () => { if (e._mob) { G.selected = { kind: 'mob', mob: e._mob }; renderInfo(G.selected); } }; }
   box._en.forEach((e, i) => {
     const m = shown[i]; e.style.display = m ? '' : 'none'; e._mob = m || null; if (!m) return;
-    e.style.top = Math.round(i * (UF.h * se + 1)) + 'px';
+    e.style.top = Math.round(UF.h * sp + 6 + i * (UF.h * se + 3)) + 'px';
     const info = m.info; const beh = behOf(m, c);
     ufSet(e, 'id', m, () => {
       e._bg.style.backgroundImage = 'url(' + ufFrameTexture(m.rank) + ')';
@@ -91,9 +92,9 @@ function renderUnitFrames() {
     const au = (m.auras || []).filter((a) => a.until > G.gameTime).map((a) => a.key + (a.stacks > 1 ? ' x' + a.stacks : '')).join(',');
     ufSet(e, 'auras', au, (v) => { e._auras.innerHTML = v ? v.split(',').map((n) => '<i title="' + esc(n) + '">' + ufAuraIcon(n.replace(/ x\d+$/, '')) + '</i>').join('') : ''; });
   });
-  const hE = shown.length ? shown.length * (UF.h * se + 1) : 0, hP = UF.h * sp;
-  box.style.height = Math.ceil(Math.max(hE, hP)) + 'px';
-  me.style.top = Math.max(0, Math.max(hE, hP) - hP) + 'px';
+  const hE = shown.length ? 6 + shown.length * (UF.h * se + 3) : 0, hP = UF.h * sp;
+  box.style.height = Math.ceil(hP + hE) + 'px';
+  me.style.top = '0px';
 }
 /* a small icon for a buff / debuff by spell name (from the spell data), or its first letter */
 function ufAuraIcon(name) {

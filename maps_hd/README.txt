@@ -1,14 +1,9 @@
-High resolution maps
-====================
+High resolution terrain maps
+============================
 
-Put high resolution zone maps in this folder to draw them over the normal maps.
+These pictures are drawn 1:1 over the normal maps (same world area as maps/<name>.png).
+Switch them with the "HD map" button at the top of the game.
 
-- Use the same file names as in the "maps" folder (for example "Durotar.png").
-  png, jpg and webp all work ("Durotar.jpg" is fine too).
-- The picture must show the same area as the normal map (any size, same shape).
-  If it shows more (for example the whole 1024x768 frame with borders), add
-  hd_maps.json here with the part that matches the normal map:
-      { "Durotar": { "crop": [0, 0, 2004, 1336] } }
-  (x, y, width, height in pixels of the HD picture)
-- Switch between HD and normal maps with the "HD map" checkbox at the top.
-  Zones without an HD picture keep the normal map.
+They were made from "WoW Classic High-res Terrain Maps of Azeroth" (highresterrainmaps.zip) with
+    py script\make_hd_maps.py "path\to\highresterrainmaps.zip"
+which also rewrites index.json (the list the game loads).

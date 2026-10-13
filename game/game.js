@@ -77,9 +77,10 @@ function bestMapFor(pos) {
   }
   return best || G.maps[0];
 }
-/* high resolution maps: maps_hd/<same name>.png (or .jpg / .webp) drawn over the original map in the same place.
-   Optional maps_hd/hd_maps.json: { "Durotar": { "crop": [x, y, w, h] } } = the part of the HD picture that matches the original map. */
-const HD_EXT = ['.png', '.jpg', '.webp'];
+/* high resolution terrain maps: maps_hd/<same name>.jpg (made by script/make_hd_maps.py) cover exactly the same world
+   area as maps/<name>.png and are drawn 1:1 over it. maps_hd/index.json lists them.
+   Optional maps_hd/hd_maps.json: { "Durotar": { "crop": [x, y, w, h] } } for a hand-made picture that shows more. */
+const HD_EXT = ['.jpg', '.png', '.webp'];
 function hdOn() { return G.state && G.state.settings.hdMaps !== false; }
 function loadHd(m) {
   G.imgHd = G.imgHd || {};
@@ -87,14 +88,16 @@ function loadHd(m) {
   G.imgHd[m.name] = null;
   const base = '../maps_hd/' + encodeURIComponent(m.file.split('/').pop().replace(/\.[a-z]+$/i, ''));
   const tryExt = (i) => { if (i >= HD_EXT.length) return; loadImage(base + HD_EXT[i]).then((img) => { if (img) { G.imgHd[m.name] = img; G.hdAny = true; renderHdToggle(); } else tryExt(i + 1); }); };
-  if (G.hdList && !G.hdList.some((f) => f.replace(/\.[a-z]+$/i, '') === decodeURIComponent(base.split('/').pop()))) return;
+  const stem = m.file.split('/').pop().replace(/\.[a-z]+$/i, '');
+  if (G.hdList) { const f = G.hdList.find((x) => x.replace(/\.[a-z]+$/i, '') === stem); if (!f) return; loadImage('../maps_hd/' + encodeURIComponent(f)).then((img) => { if (img) { G.imgHd[m.name] = img; G.hdAny = true; } renderHdToggle(); }); return; }
   tryExt(0);
 }
 function renderHdToggle() {
   const b = $('hdmaps'); if (!b) return;
-  b.checked = hdOn(); const lab = b.parentNode;
-  lab.title = G.hdAny ? 'High resolution maps (from the maps_hd folder) over the original ones' : 'No high resolution map found for this zone. Put them in the maps_hd folder with the same file names as in maps (png, jpg or webp).';
-  lab.classList.toggle('dim', !(G.imgHd && G.imgHd[G.map && G.map.name]));
+  const has = !!(G.imgHd && G.map && G.imgHd[G.map.name]);
+  b.classList.toggle('on', hdOn()); b.classList.toggle('dim', !has);
+  b.textContent = 'HD map';
+  b.title = has ? 'High resolution terrain map over the normal one (same place, 1:1). Click to switch.' : 'No high resolution picture for this map (maps_hd folder).';
 }
 function setMap(m, keepView, onChar) {
   G.map = m; G.navHover = null; $('tip').hidden = true;
@@ -662,7 +665,7 @@ function bindInput() {
   $('btnLoad').onclick = () => $('fileLoad').click();
   $('btnChars').onclick = () => charScreen(false);
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
-  $('hdmaps').onchange = () => { G.state.settings.hdMaps = $('hdmaps').checked; save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
+  $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
     try { const s = JSON.parse(await f.text()); if (!s.characters || !s.characters.length) throw new Error('no characters'); G.state = s; save(); location.reload(); }
@@ -727,6 +730,7 @@ async function boot() {
     let manifest = null; try { manifest = await J('../files.json'); } catch (e) { manifest = null; }
     const files = manifest ? manifest.maps : await listDir('../maps/', '.png');
     G.hdList = manifest && manifest.maps_hd ? manifest.maps_hd : null;
+    if (!G.hdList) { try { G.hdList = (await J('../maps_hd/index.json')).files || null; } catch (e) { G.hdList = null; } }
     try { G.hdCal = await J('../maps_hd/hd_maps.json'); } catch (e) { G.hdCal = null; }
     const has = (f) => !files.length || files.includes(f.split('/').pop());
     G.maps = DATA.maps.filter((m) => has(m.file) && (m.map === 0 || m.map === 1));
