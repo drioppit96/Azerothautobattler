@@ -57,8 +57,14 @@ function renderUnitFrames() {
   ufSet(me, 'bg', 1, () => { me._bg.style.backgroundImage = 'url(' + ufFrameTexture(0) + ')'; me._namebg.style.background = 'rgba(0,0,0,.35)'; });
   const hp = Math.max(0, Math.round(c.hp)); const ghost = !!r.ghost;
   ufSet(me, 'hp', hp + '/' + s.maxHp + ghost, () => { me._hpi.style.width = (ghost ? 0 : 100 * hp / s.maxHp) + '%'; me._hpt.textContent = ghost ? 'Ghost' : hp + ' / ' + s.maxHp; });
-  const rg = Math.round(c.rage);
-  ufSet(me, 'pw', rg, () => { me._pwi.style.width = rg + '%'; me._pwt.textContent = 'Rage ' + rg; });
+  const pt = powerType(c); const pv = Math.round(powerOf(c, pt)), pm = Math.max(1, Math.round(powerMax(c, pt)));
+  ufSet(me, 'pw', pt + ':' + pv + '/' + pm, () => { me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv; });
+  const cpn = r.cpTgt && r.cpTgt.st !== 'dead' ? r.cp || 0 : 0;
+  ufSet(me, 'cp', cpn, (v) => { me._cp = me._cp || (() => { const d = document.createElement('div'); d.className = 'ufcp'; me.appendChild(d); return d; })(); me._cp.innerHTML = '<i class="on"></i>'.repeat(v) + (c.cls === 4 || c.form === 'cat' ? '<i></i>'.repeat(5 - v) : ''); });
+  ufSet(me, 'cast', r.cast ? r.cast.name + Math.round(10 * r.cast.t / r.cast.total) : '', () => {
+    me._cb = me._cb || (() => { const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); return d; })();
+    me._cb.hidden = !r.cast; if (r.cast) { me._cb.firstChild.style.width = Math.min(100, 100 * r.cast.t / Math.max(0.01, r.cast.total)) + '%'; me._cb.lastChild.textContent = r.cast.name; }
+  });
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufSet(me, 'auras', (r.buffs || []).filter((b) => b.until > G.gameTime).map((b) => b.name).join(','), (v) => { me._auras.innerHTML = v ? v.split(',').map((n) => '<i title="' + esc(n) + '">' + ufAuraIcon(n) + '</i>').join('') : ''; });
   // the creatures it fights: current target first

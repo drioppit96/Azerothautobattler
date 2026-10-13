@@ -126,12 +126,12 @@ function pickAt(sx, sy, rad) {
 }
 
 /* ------------------------------------------------------------- characters */
-function newCharacter(name, race, cls) {
+function newCharacter(name, race, cls, gender) {
   const st = G.d.races.start[race + '_' + cls];
-  const gear = START_GEAR[race + '_' + cls] || { equip: {}, bags: [] };
+  const gear = startGear(race, cls);
   return {
-    id: 'c' + Date.now(), name, race, cls, level: 1, xp: 0, gold: 0,
-    pos: { map: st.map, x: st.x, y: st.y, z: st.z, o: st.o }, hp: null, rage: 0,
+    id: 'c' + Date.now(), name, race, cls, gender: gender || 0, level: 1, xp: 0, gold: 0,
+    pos: { map: st.map, x: st.x, y: st.y, z: st.z, o: st.o }, hp: null, rage: 0, mana: null, energy: 100, form: null,
     order: null, speed: RUN_SPEED,
     equip: {}, bags: [], bagSlots: [null, null, null, null], quests: {}, done: {},
     _gear: gear, _new: true,
@@ -144,11 +144,14 @@ function migrate(c) {
   for (const k in c.equip) c.equip[k] = normInst(c.equip[k]);
   for (const s of c.bags) { const m = maxDur(s.id); if (m && s.dur == null) s.dur = m; }
   c.cfg = Object.assign(defaultCfg(), c.cfg || {}); c.talents = c.talents || {}; c.taxi = c.taxi || {};
+  if (!TALENT_BUILDS[c.cls] || !TALENT_BUILDS[c.cls][c.cfg.talentBuild]) c.cfg.talentBuild = Object.keys(TALENT_BUILDS[c.cls] || { none: 1 })[0];
+  if (c.energy == null) c.energy = 100; if (c.form === undefined) c.form = null; if (c.rage == null) c.rage = 0;
   if (c.resume && !c.order) { c.order = c.resume; c.hp = null; } delete c.resume;      // was dead when the game closed
   if (G.state && G.state.settings) { if (G.state.settings.autoEat === false) c.cfg.eatAt = 0; if (G.state.settings.autoPotion === false) c.cfg.potionAt = 0; }
   learnAbilities(c, !c._new); delete c._new;
   if (c.cfg.autoTalents !== false && talentFree(c) > 0) autoTalents(c, true);
   dirty(c);
+  if (c.mana == null || c.mana > (charStats(c).maxMana || 0)) c.mana = charStats(c).maxMana || 0;
 }
 function active() { return G.state.characters.find((c) => c.id === G.state.activeId); }
 function baseStats(c) {
@@ -275,6 +278,8 @@ function renderChar() {
   else if (r.riding) status = 'Travelling on ' + r.riding.name;
   else if (r.fleeing) status = 'Fleeing';
   else if (r.threats && r.threats.length) status = 'In combat: ' + (r.tgt && r.tgt.info ? r.tgt.info[1] : '...');
+  else if (r.cast) status = 'Casting ' + r.cast.name;
+  else if (r.drinking) status = 'Drinking';
   else if (r.resting) status = 'Resting';
   else if (c.order) status = 'Working on an order';
   if (!$('charTop')) $('charCard').innerHTML = '<div id="charTop"></div><div id="unitframes"></div><div id="charStats"></div>';
@@ -282,12 +287,13 @@ function renderChar() {
     '<h3>Character</h3><div class="name" id="cname" title="Click to rename" style="cursor:pointer">' + esc(c.name) + '</div>' +
     '<div class="sub">Level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + ' &middot; ' + status + '</div>' +
     '<div class="bar hp"><i style="width:' + (100 * Math.max(0, c.hp) / s.maxHp) + '%"></i><span>' + Math.round(c.hp) + ' / ' + s.maxHp + '</span></div>' +
-    '<div class="bar rage"><i style="width:' + c.rage + '%"></i><span>Rage ' + Math.round(c.rage) + ' / 100</span></div>' +
+    (() => { const pt = powerType(c); const v = Math.round(powerOf(c, pt)), mx = Math.max(1, Math.round(powerMax(c, pt))); return '<div class="bar ' + ['mana', 'rage', '', 'energy'][pt] + '"><i style="width:' + (100 * v / mx) + '%"></i><span>' + powerName(pt) + ' ' + v + ' / ' + mx + '</span></div>'; })() +
+    (c.pet ? '<div class="bar pet"><i style="width:' + (c.pet.dead ? 0 : 100 * c.pet.hp / c.pet.maxhp) + '%"></i><span>' + esc(c.pet.name) + (c.pet.dead ? ' (dead)' : ' ' + Math.round(c.pet.hp) + ' / ' + c.pet.maxhp) + '</span></div>' : '') +
     '<div class="bar xp"><i style="width:' + (100 * c.xp / xpNext) + '%"></i><span>XP ' + c.xp + ' / ' + xpNext + '</span></div>';
   $('charStats').innerHTML =
     '<div class="stats"><div>Strength <b>' + s.str + '</b></div><div>Agility <b>' + s.agi + '</b></div><div>Stamina <b>' + s.sta + '</b></div>' +
     '<div>Intellect <b>' + s.int + '</b></div><div>Spirit <b>' + s.spi + '</b></div><div>Armor <b>' + Math.round(s.armor) + '</b></div>' +
-    '<div>Attack power <b>' + s.ap + '</b></div><div>Crit <b>' + s.crit.toFixed(1) + '%</b></div></div>' +
+    (isCaster(c) || c.cls === 2 || c.cls === 7 || (c.cls === 11 && !c.form) ? '<div>Spell power <b>' + Math.round(s.sd || 0) + '</b></div><div>Spell crit <b>' + spellCritChance(c).toFixed(1) + '%</b></div>' : c.cls === 3 ? '<div>Ranged AP <b>' + Math.round(s.rap) + '</b></div><div>Crit <b>' + s.crit.toFixed(1) + '%</b></div>' : '<div>Attack power <b>' + s.ap + '</b></div><div>Crit <b>' + s.crit.toFixed(1) + '%</b></div>') + '</div>' +
     '<div class="kv" style="margin-top:6px"><span>Money</span><span style="color:#ffd866">' + money(c.gold) + '</span></div>';
   renderUnitFrames();
   $('cname').onclick = () => { const n = prompt('Name:', c.name); if (n && n.trim()) { c.name = n.trim().slice(0, 20); save(); renderChar(); } };
@@ -467,6 +473,12 @@ function draw() {
     for (const q of G.qMarks) { if (q.map !== m.map) continue; const [x, y] = w2s(q.x, q.y); if (x < -9 || y < -9 || x > G.cw + 9 || y > G.ch + 9) continue; ctx.fillStyle = q.t === '?' ? '#ffd23a' : '#ffe14d'; ctx.strokeText(q.t, x, y - 6); ctx.fillText(q.t, x, y - 6); }
     ctx.textAlign = 'start';
   }
+  // the pet
+  if (c.pet && !c.pet.dead && rt(c).pet && c.pos.map === m.map && !rt(c).ghost) {
+    const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
+    ctx.fillStyle = '#7fbf5a'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 11, 18, 3); ctx.fillStyle = '#5ec06a'; ctx.fillRect(x - 9, y - 11, 18 * Math.max(0, c.pet.hp / c.pet.maxhp), 3);
+  }
   // the character
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
     const [x, y] = w2s(c.pos.x, c.pos.y);
@@ -486,7 +498,8 @@ function draw() {
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
     const [x, y] = w2s(c.pos.x, c.pos.y); const r = rt(c);
     if (r.interact) { const p = Math.min(1, r.interact.t / r.interact.dur); ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y + 12, 60, 6); ctx.fillStyle = '#e8c46a'; ctx.fillRect(x - 30, y + 12, 60 * p, 6); ctx.font = '11px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff'; ctx.strokeText(r.interact.label, x, y + 30); ctx.fillText(r.interact.label, x, y + 30); ctx.textAlign = 'start'; }
-    else if (r.resting) { ctx.font = 'bold 12px Segoe UI'; ctx.fillStyle = r.eating ? '#9fe0a0' : '#9fc7ff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; const t = r.eating ? 'eating' : 'Zz'; ctx.strokeText(t, x + 10, y - 8); ctx.fillText(t, x + 10, y - 8); }
+    else if (r.cast) { const p = Math.min(1, r.cast.t / Math.max(0.01, r.cast.total)); ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y + 12, 60, 6); ctx.fillStyle = r.cast.ch ? '#7fb0ff' : '#ffd04a'; ctx.fillRect(x - 30, y + 12, 60 * (r.cast.ch ? 1 - p : p), 6); ctx.font = '11px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff'; ctx.strokeText(r.cast.name, x, y + 30); ctx.fillText(r.cast.name, x, y + 30); ctx.textAlign = 'start'; }
+    else if (r.resting) { ctx.font = 'bold 12px Segoe UI'; ctx.fillStyle = r.eating ? '#9fe0a0' : r.drinking ? '#7fb0ff' : '#9fc7ff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; const t = r.eating && r.drinking ? 'eating, drinking' : r.eating ? 'eating' : r.drinking ? 'drinking' : 'Zz'; ctx.strokeText(t, x + 10, y - 8); ctx.fillText(t, x + 10, y - 8); }
   }
   const ghost = rt(c).ghost;
   if (ghost && ghost.corpse.map === m.map) {
@@ -616,6 +629,7 @@ function bindInput() {
     a.download = 'auto_battler_save.json'; a.click();
   };
   $('btnLoad').onclick = () => $('fileLoad').click();
+  $('btnChars').onclick = () => charScreen(false);
   $('fileLoad').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
     try { const s = JSON.parse(await f.text()); if (!s.characters || !s.characters.length) throw new Error('no characters'); G.state = s; save(); location.reload(); }
@@ -635,7 +649,7 @@ function frame(ts) {
   const sp = G.state.settings.speed;
   if (sp > 0) {
     G.acc += dt * sp;
-    let n = 0; while (G.acc >= STEP && n++ < 400) { G.acc -= STEP; G.gameTime += STEP; for (const c of G.state.characters) updateChar(c, STEP); worldTick(STEP); }
+    const me = active(); let n = 0; while (G.acc >= STEP && n++ < 400) { G.acc -= STEP; G.gameTime += STEP; updateChar(me, STEP); worldTick(STEP); }
     if (G.acc > STEP * 40) G.acc = 0;          // the computer is too slow for this speed: drop the backlog instead of freezing
     for (const f of G.fx) f.t += dt * sp; G.fx = G.fx.filter((f) => f.t < 1.2);
   }
@@ -662,6 +676,9 @@ async function boot() {
     try { G.d.cstats = await J('../gamedata/creature_stats.json'); } catch (e) { G.d.cstats = null; console.warn('creature_stats.json not found - using estimated creature health and damage'); }
     try { G.d.vendorItems = await J('../gamedata/vendor_items.json'); } catch (e) { G.d.vendorItems = null; }
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }
+    try { G.d.eventMobs = new Set(await J('../gamedata/event_mobs.json')); } catch (e) { G.d.eventMobs = null; }
+    try { G.d.pets = await J('../gamedata/pets.json'); } catch (e) { G.d.pets = null; }
+    try { G.d.stances = await J('../gamedata/spell_stances.json'); } catch (e) { G.d.stances = null; }
     try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }
     try { G.d.go = await J('../gamedata/go_data.json'); } catch (e) { G.d.go = null; console.warn('go_data.json not found - quests with objects are not automated (run: py build_gamedata.py goquest)'); }
     G.d.graveyards = DATA.graveyards;
@@ -687,9 +704,11 @@ async function boot() {
 
     G.state = loadSave();
     if (!G.state || !G.state.characters || !G.state.characters.length) {
-      const c = newCharacter('Throg', 2, 1);
-      G.state = { version: 1, activeId: c.id, characters: [c], settings: { speed: 1, autoSellJunk: true, autoEquip: true, chainQuests: true } };
-      save();
+      G.state = Object.assign({ version: 1, activeId: null, characters: [], settings: { speed: 1, autoSellJunk: true, autoEquip: true, chainQuests: true } }, G.state || {}, { characters: [] });
+      $('loading').style.display = 'none';
+      const made = await charScreen(true);
+      G.state.characters.push(made); G.state.activeId = made.id; save();
+      $('loading').style.display = '';
     }
     G.gameTime = G.state.gameTime || 0;
     G.state.characters.forEach(migrate);

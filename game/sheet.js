@@ -74,7 +74,8 @@ function vendorHtml(c) {
   h += '<div class="vlist">';
   items.forEach((x) => {
     const inst = makeInst(x.id, 1); const price = itemBuy(x.id); const cant = c.gold < price;
-    h += '<div class="vrow" data-buy="' + x.id + '">' + iconHtml(inst) + '<div class="vname"><span style="color:' + QUALITY_COLORS[itemQuality(x.id)] + '">' + esc(itemName(x.id)) + '</span><div class="small">' + moneyHtml(price) + '</div></div><button class="mini" data-buyb="' + x.id + '"' + (cant ? ' disabled' : '') + '>Buy</button></div>';
+    const bn = buyCount(x.id);
+    h += '<div class="vrow" data-buy="' + x.id + '">' + iconHtml(Object.assign(inst, { n: bn })) + '<div class="vname"><span style="color:' + QUALITY_COLORS[itemQuality(x.id)] + '">' + esc(itemName(x.id)) + '</span><div class="small">' + moneyHtml(price) + (bn > 1 ? ' for ' + bn : '') + '</div></div><button class="mini" data-buyb="' + x.id + '"' + (cant ? ' disabled' : '') + '>Buy' + (bn > 1 ? ' ' + bn : '') + '</button></div>';
   });
   h += '</div><div class="muted small" style="margin-top:6px">To sell: click an item in your bags and choose Sell.</div>';
   return h;
@@ -132,7 +133,7 @@ function showItemMenu(ev, ref) {
     acts.push(['destroy', 'Destroy']);
   } else if (ref.where === 'eq') acts.push(['unequip', 'Take off']);
   else if (ref.where === 'bagslot') acts.push(['unbag', 'Take bag off']);
-  else if (ref.where === 'vendor') acts.push(['buy', 'Buy for ' + money(ref.price), c.gold < ref.price]);
+  else if (ref.where === 'vendor') acts.push(['buy', 'Buy ' + (buyCount(inst.id) > 1 ? buyCount(inst.id) + ' ' : '') + 'for ' + money(ref.price), c.gold < ref.price]);
   acts.push(['close', 'Close']);
   m.innerHTML = '<div class="tt">' + tooltipHtml(c, inst, { price: ref.price }) + '</div>' + acts.map(([a, t, dis]) => '<button data-ia="' + a + '"' + (dis ? ' disabled' : '') + '>' + esc(t) + '</button>').join('');
   m.hidden = false; hideItemTip();
@@ -231,18 +232,24 @@ function behaviourHtml(c) {
     '<label>Stand up at</label><select data-cfg="standAt">' + pctOptions(cfg.standAt, 50, 100, false) + '</select>' +
     '<label>Eat food below</label><select data-cfg="eatAt">' + pctOptions(cfg.eatAt, 10, 90, true) + '</select>' +
     '<label>Drink a potion below</label><select data-cfg="potionAt">' + pctOptions(cfg.potionAt, 10, 90, true) + '</select>' +
-    '</div><div class="small muted">Health % out of combat. Food is only eaten while sitting; potions only in combat.</div></div>';
+    (usesMana(c) && c.cls !== 1 ? '<label>Rest and drink below mana</label><select data-cfg="drinkAt">' + pctOptions(cfg.drinkAt, 10, 90, true) + '</select>' : '') +
+    ([5, 8, 9].includes(c.cls) ? '<label>Shoot the wand below mana</label><select data-cfg="wandAt">' + pctOptions(cfg.wandAt, 10, 90, true) + '</select>' : '') +
+    '</div><div class="small muted">Health % out of combat. Food is only eaten while sitting; potions only in combat.' + (usesMana(c) && c.cls !== 1 ? ' Drinks (water, milk, juice) refill mana while sitting.' : '') + '</div></div>';
+  if (c.cls === 11) h += '<div class="sgroup"><h5>Druid form for fighting</h5><select data-cfgs="form">' + [['auto', 'Automatic (Cat Form from 20, Bear Form from 10)'], ['cat', 'Cat Form'], ['bear', 'Bear Form'], ['caster', 'Caster form (Wrath, Moonfire)']].map(([k, t]) => '<option value="' + k + '"' + ((cfg.form || 'auto') === k ? ' selected' : '') + '>' + t + '</option>').join('') + '</select> <span class="small muted">Heals are cast in caster form between fights.</span></div>';
+  if (c.pet) h += '<div class="sgroup"><h5>Pet</h5><div class="small">' + esc(c.pet.name) + ' - level ' + c.level + ', ' + (c.pet.dead ? 'dead (revive it)' : Math.round(c.pet.hp) + ' / ' + c.pet.maxhp + ' health') + (PET_KINDS[c.pet.kind] && PET_KINDS[c.pet.kind].tank ? ' - holds the attention of the creatures' : '') + '</div></div>';
   const stances = Object.keys(STANCES).filter((n) => c.known && c.known[n]);
   if (stances.length) h += '<div class="sgroup"><h5>Stance</h5><select data-cfgs="stance">' + stances.map((n) => '<option value="' + STANCES[n] + '"' + (cfg.stance === STANCES[n] ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> <span class="small muted">Abilities that need another stance are skipped.</span></div>';
   h += '<div class="sgroup"><h5>Abilities - checked from the top, the first that fits is used</h5>';
   if (!cfg.rules.length) h += '<div class="muted small">No abilities yet.</div>';
   cfg.rules.forEach((rule, i) => {
-    const id = c.known[rule.n]; const sp = id ? spellRow(id) : null; const meta = (CLASS_META[c.cls] || {})[rule.n] || { modes: ['off', 'spam'] };
+    const id = c.known[rule.n]; const sp = id ? spellRow(id) : null; const meta = (CLASS_META[c.cls] || {})[rule.n] || { modes: genericModes(c, sp) };
     const u = abilityUsable(c, rule.n);
-    const cost = sp && sp.pw && sp.pw[0] === 1 ? abilityCost(c, sp, rule.n) + ' rage' : '';
+    const ct = sp && sp.pw ? spellCost(c, sp, rule.n) : [0, 0];
+    const cost = ct[1] ? ct[1] + ' ' + (ct[0] === -2 ? 'health' : powerName(ct[0]).toLowerCase()) : '';
+    const castS = sp ? castTime(c, sp) : 0;
     const cd = sp && (sp.cd || sp.catcd) ? ((sp.cd || sp.catcd) / 1000) + 's cd' : '';
     h += '<div class="arow' + (rule.mode === 'off' ? ' off' : '') + '">' + spellIcon(sp) +
-      '<div class="aname"><b>' + esc(rule.n) + '</b> <span class="muted small">' + esc(sp && sp.r ? sp.r : '') + '</span><div class="small muted">' + [cost, cd].filter(Boolean).join(', ') + (u.ok ? '' : ' <span style="color:#e6b93c">' + esc(u.why) + '</span>') + '</div></div>' +
+      '<div class="aname"><b>' + esc(rule.n) + '</b> <span class="muted small">' + esc(sp && sp.r ? sp.r : '') + '</span><div class="small muted">' + [cost, castS ? castS.toFixed(1) + 's cast' : sp && isChanneled(sp) ? 'channeled' : '', cd].filter(Boolean).join(', ') + (u.ok ? '' : ' <span style="color:#e6b93c">' + esc(u.why) + '</span>') + '</div></div>' +
       '<select data-rmode="' + i + '">' + meta.modes.map((m) => '<option value="' + m + '"' + (rule.mode === m ? ' selected' : '') + '>' + MODE_TEXT[m] + '</option>').join('') + '</select>' +
       (MODE_HAS_P[rule.mode] ? '<input type="number" data-rp="' + i + '" value="' + (rule.p || 0) + '" min="0" max="100" step="' + (rule.mode === 'multi' || rule.mode === 'stack' ? 1 : 5) + '">' : '<span class="pfill"></span>') +
       '<span class="updn"><button class="mini" data-up="' + i + '"' + (i ? '' : ' disabled') + '>&#9650;</button><button class="mini" data-dn="' + i + '"' + (i < cfg.rules.length - 1 ? '' : ' disabled') + '>&#9660;</button></span></div>';
@@ -252,6 +259,14 @@ function behaviourHtml(c) {
   if (up.length) h += '<div class="sgroup"><h5>Coming with levels (learned automatically)</h5>' + up.map((x) => '<div class="small">Level ' + x.lv + ': ' + esc(x.n) + (x.r ? ' (' + esc(x.r) + ')' : '') + (x.isNew ? ' <span class="up">new</span>' : '') + '</div>').join('') + '</div>';
   h += '<div class="sgroup small muted">Modes: <b>Keep on my target</b> re-applies a debuff (Rend, Hamstring...) only when it has run out. <b>Keep on every attacker</b> spreads it to each creature hitting you. <b>When attackers at least</b> is for area abilities. Heroic Strike and Cleave replace the next swing.</div>';
   return h + '</div>';
+}
+/* rule modes for abilities without a hand-made entry */
+function genericModes(c, sp) {
+  if (c.cls === 1 || !sp) return ['off', 'spam'];
+  const self = (sp.ef || []).every((e) => e.k === 'self' || e.k === 'friend' || e.k === 'other');
+  if (self) return ['off', 'buff', 'emergency', 'heal'];
+  if ((sp.ef || []).some((e) => e.k === 'area_enemy')) return ['off', 'multi', 'spam'];
+  return ['off', 'spam', 'opener', 'debuff', 'execute', 'emergency'];
 }
 function behaviourChange(e) {
   const t = e.target; const c = active(); if (!c || !c.cfg) return;
@@ -276,8 +291,8 @@ function renderAbar() {
   for (const rule of items) {
     const sp = spellRow(c.known[rule.n]); if (!sp) continue; const u = abilityUsable(c, rule.n);
     const cdLeft = Math.max(0, (r.cd[rule.n] || 0) - G.gameTime); const cdTot = (sp.cd || sp.catcd || 0) / 1000;
-    const cost = abilityCost(c, sp, rule.n);
-    const dim = !u.ok || cost > c.rage;
+    const ct = spellCost(c, sp, rule.n);
+    const dim = !u.ok || (ct[0] !== -2 && ct[1] > powerOf(c, ct[0]));
     h += '<div class="ab' + (dim ? ' dim' : '') + (r.queued && r.queued.name === rule.n ? ' q' : '') + '" title="' + esc(rule.n + ' - ' + MODE_TEXT[rule.mode] + (MODE_HAS_P[rule.mode] ? ' ' + rule.p : '')) + '">' + spellIcon(sp) +
       (cdLeft > 0 && cdTot ? '<i style="height:' + Math.round(100 * cdLeft / cdTot) + '%"></i><b>' + Math.ceil(cdLeft) + '</b>' : '') + '</div>';
   }

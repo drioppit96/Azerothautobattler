@@ -32,11 +32,11 @@ function initMob(m) {
   const k = Math.min(Math.max(0, m.lvl - lo), st ? st[1].length - 1 : 0);
   if (st && st[1][k]) { m.maxhp = st[1][k]; m.dmin = st[2][k]; m.dmax = st[3][k]; m.armor = st[4][k]; m.atk = (st[0] || 2000) / 1000; }
   else { m.maxhp = fbHp(m.lvl, rank); const d = fbDmg(m.lvl, rank); m.dmin = d[0]; m.dmax = d[1]; m.armor = fbArmor(m.lvl); m.atk = 2.0; }
-  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5);
+  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5); m.petThreat = 0; m.charThreat = 0;
 }
 /* creatures of world events (Scourge invasion, Ahn'Qiraj war, holidays): not part of the normal world */
 const EVENT_MOBS = [[15414, 15424], [15591, 15591], [15685, 15692], [15730, 15730], [15740, 15811], [16136, 16143], [16172, 16172], [16230, 16230], [16255, 16255], [16285, 16310], [16356, 16401], [16419, 16438], [16995, 16995]];
-function eventMob(e) { for (const [a, b] of EVENT_MOBS) if (e >= a && e <= b) return true; return false; }
+function eventMob(e) { if (G.d.eventMobs && G.d.eventMobs.has(e)) return true; for (const [a, b] of EVENT_MOBS) if (e >= a && e <= b) return true; return false; }
 function ensureWorld(mapId) {
   if (G.world[mapId]) return G.world[mapId];
   if (typeof loadGrid === 'function') loadGrid(mapId);
@@ -173,7 +173,8 @@ function mobTick(W, m, dt, now) {
     const mods = mobMods(m);
     const dh = Math.hypot(m.x - m.hx, m.y - m.hy);
     if (dh > m.leash + 20 && !m.fleeing) return evade(W, m);
-    const d = Math.hypot(c.pos.x - m.x, c.pos.y - m.y);
+    const onPet = mobVictimIsPet(m, c); const vx = onPet ? rt(c).pet.x : c.pos.x, vy = onPet ? rt(c).pet.y : c.pos.y;
+    const d = Math.hypot(vx - m.x, vy - m.y);
     // low-health humanoids try to run away (and bring friends)
     if (!m.fled && m.rank === 0 && m.info && m.info[5] === 7 && m.hp < m.maxhp * 0.15) { m.fled = true; if (Math.random() < 0.6 && !mods.stun) { m.fleeing = now + 8; fx(m.x, m.y, 'flees!', '#ffb36b'); } }
     if (m.fleeing) {
@@ -187,17 +188,20 @@ function mobTick(W, m, dt, now) {
     if (mods.fear) { const sp = 3 * dt; m.x += (m.x - c.pos.x) / (d || 1) * sp; m.y += (m.y - c.pos.y) / (d || 1) * sp; return; }
     if (mods.stun) return;
     if (d > MELEE_RANGE - 0.5) {
-      const step = Math.min(d, 7 * mods.snare * dt); m.x += (c.pos.x - m.x) / d * step; m.y += (c.pos.y - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
+      const step = Math.min(d, 7 * mods.snare * dt); m.x += (vx - m.x) / d * step; m.y += (vy - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
     } else {
       m.swing -= dt;
-      if (m.swing <= 0) {
+      if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
+      else if (m.swing <= 0) {
         m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods);
         const r = rt(c);
+        if (h.t === 'hit' && c.cls !== 1) { h.d = absorbDamage(c, h.d); damageShield(c, m); if (m.hp <= 0) { killMob(c, m); return; } if (h.d <= 0) { h.t = 'absorb'; } }
         if (h.t === 'dodge' || h.t === 'parry' || h.t === 'block' || h.blocked) r.revWindow = now + 5;
         if (h.t === 'hit') {
           hitTakenTalents(c, h);
           c.hp -= h.d; fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
-          if (c.cls === 1) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
+          if (c.cls === 1 || (c.cls === 11 && c.form === 'bear')) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
+          if (r.cast && !r.cast.ch && c.cls !== 1) r.cast.t = Math.max(0, r.cast.t - 0.5);      // spell pushback
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
           autoPotion(c);
         } else fx(c.pos.x, c.pos.y, h.t, '#cfc6b0');
@@ -212,7 +216,7 @@ function mobTick(W, m, dt, now) {
     else { const step = Math.min(d, 10 * dt); m.x += (m.hx - m.x) / d * step; m.y += (m.hy - m.y) / d * step; m.hp = Math.min(m.maxhp, m.hp + m.maxhp * 0.2 * dt); }
   }
 }
-function evade(W, m) { m.st = 'evade'; m.tgt = null; }
+function evade(W, m) { m.st = 'evade'; m.tgt = null; m.petThreat = 0; m.charThreat = 0; }
 function worldTick(dt) {
   const now = G.gameTime;
   for (const id in G.world) {
@@ -269,6 +273,8 @@ function charDie(c, killer) {
     if (o.qdeaths[o.fq] >= 3) { const q = G.q.byId[o.fq]; log('Died 3 times on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; }
   } else if (c.order && c.order.type !== 'questing') { c.order.deaths = (c.order.deaths || 0) + 1; if (c.order.deaths >= 3) { log('Died 3 times on this order - it is too dangerous. Order cancelled.'); c.order = null; } }
   durabilityLoss(c, 0.1);
+  r.cast = null; r.drinking = null; r.absorb = null; r.totemDmg = null; c.form = null; c.energy = 0;
+  if (c.pet) { if (c.pet.kind === 'hunter') c.pet.dead = true; else c.pet = null; }
   r.saved = c.order; c.resume = c.order; r.ghost = { corpse }; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; c.order = null; c.rage = 0; r.mv = null; r.resting = false; r.flying = null; r.riding = null;
   const gy = nearestGraveyard(c);
   if (gy) { c.pos.x = gy[3]; c.pos.y = gy[4]; log('Released at ' + gy[1] + '. Running back to the corpse ...'); }
@@ -332,9 +338,11 @@ function regenStep(c, dt) {
   if (r.buffs && r.buffs.length) { const n = r.buffs.length; r.buffs = r.buffs.filter((b) => b.until > G.gameTime); if (r.buffs.length !== n) dirty(c); }
   buffStep(c, dt);
   if (r.eating) eatStep(c, dt);
+  if (c.cls !== 1) { hotStep(c, dt); drinkStep(c, dt); }
   r.regenT += dt;
   while (r.regenT >= 2) {
     r.regenT -= 2;
+    if (c.cls !== 1) powerTick(c, s, r);
     if (s.hp5) c.hp = Math.min(s.maxHp, c.hp + s.hp5 * 0.4);
     if (r.outT > 5 || r.resting) { const per = Math.max(1, s.spi * 0.25) * (r.resting ? 2.5 : 1); c.hp = Math.min(s.maxHp, c.hp + per); }
   }
@@ -344,13 +352,21 @@ function regenStep(c, dt) {
 /* sitting down: below cfg.sitAt % health when no enemy is near; eat food below cfg.eatAt %; stand at cfg.standAt % */
 function restStep(c) {
   const r = rt(c); const cfg = c.cfg; const max = charStats(c).maxHp; const pct = c.hp / max * 100;
+  const mana = usesMana(c) && c.cls !== 1; const mmax = mana ? charStats(c).maxMana : 0; const mp = mana && mmax ? c.mana / mmax * 100 : 100;
+  const drinkAt = cfg.drinkAt == null ? 45 : cfg.drinkAt;
   if (r.resting) {
     const to = r.restFull ? 100 : cfg.standAt;
-    if (pct >= Math.min(100, to) - 0.01 || (to >= 100 && c.hp >= max)) { r.resting = false; r.eating = null; r.restFull = false; return false; }
+    const hpOk = pct >= Math.min(100, to) - 0.01 || (to >= 100 && c.hp >= max);
+    const mpOk = !mana || !drinkAt || mp >= 99 || (!r.drinking && mp >= Math.min(95, drinkAt + 40));
+    if (hpOk && mpOk) { r.resting = false; r.eating = null; r.drinking = null; r.restFull = false; return false; }
     if (!r.eating && cfg.eatAt > 0 && pct < cfg.eatAt) autoEat(c);
+    if (mana && !r.drinking && drinkAt && mp < Math.max(drinkAt, 70)) autoDrink(c);
     return true;
   }
-  if (pct < cfg.sitAt) { r.resting = true; r.mv = null; if (cfg.eatAt > 0 && pct < cfg.eatAt) autoEat(c); return true; }
+  if (pct < cfg.sitAt || (mana && drinkAt && mp < drinkAt)) {
+    r.resting = true; r.mv = null; if (c.form && c.cls === 11 && mana && mp < drinkAt) leaveForm(c);
+    if (cfg.eatAt > 0 && pct < cfg.eatAt) autoEat(c); if (mana && drinkAt && mp < drinkAt) autoDrink(c); return true;
+  }
   return false;
 }
 function scanThreats(c) {
@@ -399,8 +415,10 @@ function playerSwing(c, m, s, w, opts) {
   let critCh = s.crit - Math.max(0, diff) * 0.2; if (opts.name === 'Overpower') critCh += 25 * talentRank(c, 'Improved Overpower');
   let crit = false; if (Math.random() * 100 < critCh) { d *= opts.yellow ? 2 + 0.1 * talentRank(c, 'Impale') : 2; crit = true; }
   d = Math.max(1, Math.round(d));
-  m.hp -= d; onMobDamaged(m);
+  m.hp -= d; onMobDamaged(m); if (c.cls !== 1) addThreat(m, c, d);
   fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
+  if (c.cls !== 1 && !opts.yellow) classMeleeHit(c, m, s, w, d, crit, opts);
+  if (c.cls === 11 && c.form === 'bear' && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
   if (c.cls === 1 && !opts.yellow) { c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level)); if (Math.random() < 0.08 * talentRank(c, 'Unbridled Wrath')) c.rage = Math.min(100, c.rage + 1); }
   if (c.cls === 1 && c.talents) meleeTalentProcs(c, m, s, w, d, crit, opts);
   procs(c, m, s, w, opts.off ? 16 : 15);
@@ -448,20 +466,22 @@ function procs(c, m, s, w, slot) {
 }
 function fightStep(c, m, dt) {
   const r = rt(c); const s = charStats(c);
-  r.outT = 0; r.resting = false; r.eating = null;
+  r.outT = 0; r.resting = false; r.eating = null; r.drinking = null;
   const dx = m.x - c.pos.x, dy = m.y - c.pos.y, d = Math.hypot(dx, dy);
   c.pos.o = Math.atan2(dx, dy);
-  if (d > MELEE_RANGE) { const step = Math.min(d - MELEE_RANGE + 0.5, c.speed * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return; }
+  const want = c.cls === 1 ? MELEE_RANGE : combatRange(c, m);
+  if (d > want) { if (r.cast) return; const step = Math.min(d - want + 0.5, c.speed * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return; }
   useAbilities(c, m);
-  if (m.hp <= 0 || m.st === 'dead') return;
+  if (m.hp <= 0 || m.st === 'dead' || r.cast) return;
+  if (d > MELEE_RANGE + 0.5) { if (c.cls !== 1) rangedStep(c, m, dt, d); return; }
   r.swingT -= dt;
   if (r.swingT <= 0) {
     const fl = r.flurry && r.flurry.n > 0 ? r.flurry : null; if (fl) fl.n--;
-    r.swingT += s.mh.speed / (fl ? 1 + fl.haste : 1);
+    r.swingT += s.mh.speed / (fl ? 1 + fl.haste : 1) / (1 + (s.haste || 0) / 100);
     const q = r.queued; r.queued = null;
-    const cost = q ? abilityCost(c, q.sp, q.name) : 0;
-    if (q && c.rage >= cost && abilityUsable(c, q.name).ok) {
-      c.rage -= cost; const bonus = (q.sp.ef[0] || {}).lo || 0;
+    const [qpt, cost] = q ? queuedCost(c, q.sp, q.name) : [1, 0];
+    if (q && powerOf(c, qpt) >= cost && abilityUsable(c, q.name).ok) {
+      addPower(c, qpt, -cost); const bonus = (q.sp.ef[0] || {}).lo || 0; if (c.cls !== 1) startCooldown(c, q.name, q.sp);
       playerSwing(c, m, s, s.mh, { bonus, yellow: true, name: q.name }); fx(c.pos.x, c.pos.y, q.name, '#ffe9a8');
       if (q.name === 'Cleave') { const other = attackersOf(c).find((x) => x !== m && inMelee(c, x)); if (other) { playerSwing(c, other, s, s.mh, { bonus, yellow: true }); if (other.hp <= 0) killMob(c, other); } }
     } else playerSwing(c, m, s, s.mh, {});
@@ -470,13 +490,14 @@ function fightStep(c, m, dt) {
   if (s.oh) {
     if (r.ohT == null) r.ohT = s.oh.speed / 2;
     r.ohT -= dt;
-    if (r.ohT <= 0) { r.ohT += s.oh.speed; playerSwing(c, m, s, s.oh, { off: true }); if (m.hp <= 0) killMob(c, m); }
+    if (r.ohT <= 0) { r.ohT += s.oh.speed / (1 + (s.haste || 0) / 100); playerSwing(c, m, s, s.oh, { off: true }); if (m.hp <= 0) killMob(c, m); }
   }
 }
 function fleeStep(c, dt, danger) {
   const r = rt(c); let ax = 0, ay = 0;
   for (const m of danger) { const dx = c.pos.x - m.x, dy = c.pos.y - m.y, d = Math.hypot(dx, dy) || 1; ax += dx / d; ay += dy / d; }
   const L = Math.hypot(ax, ay) || 1; ax /= L; ay /= L;
+  r.cast = null;
   if (!r.fleeing) { r.fleeing = { t: 0 }; log(c.name + ' runs from ' + (danger[0].info ? danger[0].info[1] : 'a creature') + ' (level ' + danger[0].lvl + ').'); }
   r.fleeing.t += dt; r.outT = 0;
   if (!passable(c.pos.map, c.pos.x + ax * 6, c.pos.y + ay * 6)) {
@@ -576,12 +597,14 @@ function packSize(W, m, c) { let n = 0; mobsNear(W, m.hx, m.hy, 25, (o) => { if 
 function fightCost(c, m) {
   const s = charStats(c); const W = ensureWorld(c.pos.map);
   const arm = Math.max(0, m.armor); const red = clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
-  const myDps = Math.max(1, (s.mhDps + s.ohDps) * (1 - red) * s.dmgDone * 1.3);
+  const myDps = c.cls === 1 ? Math.max(1, (s.mhDps + s.ohDps) * (1 - red) * s.dmgDone * 1.3) : classDps(c, s, red);
   const hit = Math.max(0.3, 1 - (s.dodge + s.parry + s.block) / 100 - 0.05);
   const mobDps = ((m.dmin + m.dmax) / 2) * (1 - s.armorReduction(m.lvl)) * s.dmgTaken * hit / Math.max(0.8, m.atk);
   const pack = c.cfg && c.cfg.style === 'aggressive' ? packSize(W, m, c) : Math.min(2, packSize(W, m, c));
   let cost = mobDps * (m.hp / myDps);
   if (pack) cost += pack * mobDps * (m.hp / myDps + m.maxhp / myDps * 0.5);
+  if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank) cost *= 0.35;           // the pet takes the hits
+  else if (c.cls !== 1 && isCaster(c)) cost *= 0.75;                                       // a few spells land before it arrives
   return cost;
 }
 function approach(c, m) {
@@ -595,9 +618,13 @@ function approach(c, m) {
       r0.resting = true; r0.restFull = true; r0.mv = null; if (c.cfg.eatAt > 0) autoEat(c); return 'moving';
     }
   }
-  if (d <= MELEE_RANGE + 1) { engage(m, c); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); return 'engaged'; }
-  if (d <= 25 && tryOpener(c, m)) return 'moving';
-  goTo(c, m.x, m.y, MELEE_RANGE);
+  const reach = c.cls === 1 ? MELEE_RANGE + 1 : Math.max(MELEE_RANGE + 1, combatRange(c, m) - 1);
+  if (d <= reach) {
+    if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank && d > MELEE_RANGE + 1) { r0.petGo = m; m.petThreat = Math.max(m.petThreat || 0, 1); }
+    engage(m, c); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); return 'engaged';
+  }
+  if (d <= 25 && c.cls === 1 && tryOpener(c, m)) return 'moving';
+  goTo(c, m.x, m.y, reach - 0.5);
   if (rt(c).blocked) { rt(c).blocked = false; m.banUntil = G.gameTime + 120; return 'gone'; }
   return 'moving';
 }
@@ -639,6 +666,8 @@ function updateChar(c, dt) {
   const threats = threatsOf(c); r.threats = threats;
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
+  if (c.pet) petStep(c, dt);
+  if (r.cast && castStep(c, dt)) { if (threats.length && (!r.tgt || r.tgt.st === 'dead')) r.tgt = threats[0]; return; }
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
   if (threats.length) {
     if (!r.tgt || r.tgt.st !== 'chase' || r.tgt.tgt !== c) {
@@ -649,6 +678,7 @@ function updateChar(c, dt) {
   }
   if (r.interact) { if (interactStep(c, dt)) return; }
   if (restStep(c)) return;
+  if (c.cls !== 1 && oocStep(c)) return;
   const o = c.order;
   if (!o) return;
   if (o.type === 'travel') {

@@ -2,13 +2,62 @@
 /* talents.js - talent trees (from gamedata/talents.json), points from level 10 (one per level), automatic spending
    by a chosen build, the talent window, and the talent effects the combat code asks for (talentRank). */
 
-const TREE_ART = { Arms: 'WarriorArms', Fury: 'WarriorFury', Protection: 'WarriorProtection' };
+const TREE_ART = { 'Warrior Arms': 'WarriorArms', 'Warrior Fury': 'WarriorFury', 'Warrior Protection': 'WarriorProtection',
+  'Paladin Holy': 'PaladinHoly', 'Paladin Protection': 'PaladinProtection', 'Paladin Retribution': 'PaladinCombat',
+  'Hunter Beast Mastery': 'HunterBeastMastery', 'Hunter Marksmanship': 'HunterMarksmanship', 'Hunter Survival': 'HunterSurvival',
+  'Rogue Assassination': 'RogueAssassination', 'Rogue Combat': 'RogueCombat', 'Rogue Subtlety': 'RogueSubtlety',
+  'Priest Discipline': 'PriestDiscipline', 'Priest Holy': 'PriestHoly', 'Priest Shadow': 'PriestShadow',
+  'Shaman Elemental': 'ShamanElementalCombat', 'Shaman Enhancement': 'ShamanEnhancement', 'Shaman Restoration': 'ShamanRestoration',
+  'Mage Arcane': 'MageArcane', 'Mage Fire': 'MageFire', 'Mage Frost': 'MageFrost',
+  'Warlock Affliction': 'WarlockCurses', 'Warlock Demonology': 'WarlockSummoning', 'Warlock Destruction': 'WarlockDestruction',
+  'Druid Balance': 'DruidBalance', 'Druid Feral Combat': 'DruidFeralCombat', 'Druid Restoration': 'DruidRestoration' };
 /* '*WEAPON*' = the specialization of the weapon in the main hand when the point is spent */
 const TALENT_BUILDS = {
   1: {
     arms: { name: 'Arms - Mortal Strike (leveling)', order: [['Improved Heroic Strike', 3], ['Improved Rend', 3], ['Tactical Mastery', 3], ['Improved Charge', 2], ['Deep Wounds', 3], ['Improved Overpower', 2], ['Two-Handed Weapon Specialization', 5], ['Impale', 2], ['Sweeping Strikes', 1], ['*WEAPON*', 5], ['Improved Hamstring', 1], ['Mortal Strike', 1], ['Cruelty', 5], ['Unbridled Wrath', 5], ['Improved Battle Shout', 5], ['Improved Execute', 2], ['Enrage', 3]] },
     fury: { name: 'Fury - Bloodthirst', order: [['Cruelty', 5], ['Unbridled Wrath', 5], ['Improved Battle Shout', 5], ['Enrage', 5], ['Improved Execute', 2], ['Death Wish', 1], ['Improved Cleave', 2], ['Flurry', 5], ['Bloodthirst', 1], ['Improved Heroic Strike', 3], ['Deflection', 2], ['Tactical Mastery', 5], ['Anger Management', 1], ['Improved Rend', 3], ['Deep Wounds', 3], ['Two-Handed Weapon Specialization', 3]] },
     prot: { name: 'Protection - Shield Slam (shield and one-hander)', order: [['Shield Specialization', 5], ['Anticipation', 5], ['Toughness', 5], ['Improved Revenge', 3], ['Improved Bloodrage', 2], ['Last Stand', 1], ['Improved Sunder Armor', 3], ['Concussion Blow', 1], ['One-Handed Weapon Specialization', 5], ['Shield Slam', 1], ['Improved Heroic Strike', 3], ['Deflection', 2], ['Tactical Mastery', 5], ['Cruelty', 5], ['Unbridled Wrath', 5]] },
+  },
+  /* the other classes: fill the trees in this order, row by row (preferred talents first in a row), skipping the listed ones */
+  2: {
+    ret: { name: 'Retribution - Seal of Command (leveling)', trees: ['Retribution', 'Holy', 'Protection'], prefer: ['Benediction', 'Improved Judgement', 'Deflection', 'Conviction', 'Seal of Command', 'Two-Handed Weapon Specialization', 'Sanctity Aura', 'Vengeance', 'Divine Strength', 'Divine Intellect', 'Improved Seal of Righteousness'], skip: ['Improved Seal of the Crusader', 'Eye for an Eye', 'Improved Retribution Aura', 'Pursuit of Justice', 'Improved Lay on Hands', 'Unyielding Faith', 'Improved Blessing of Wisdom'] },
+    holy: { name: 'Holy - Holy Shock', trees: ['Holy', 'Retribution', 'Protection'], prefer: ['Divine Strength', 'Divine Intellect', 'Improved Seal of Righteousness', 'Spiritual Focus', 'Consecration', 'Healing Light', 'Illumination', 'Divine Favor', 'Holy Power', 'Holy Shock', 'Benediction', 'Improved Judgement', 'Conviction', 'Seal of Command'], skip: ['Unyielding Faith', 'Improved Blessing of Wisdom', 'Improved Seal of the Crusader', 'Eye for an Eye', 'Improved Retribution Aura'] },
+    prot: { name: 'Protection - Holy Shield', trees: ['Protection', 'Retribution', 'Holy'], prefer: ['Redoubt', 'Toughness', 'Improved Devotion Aura', 'Precision', 'Shield Specialization', 'Anticipation', 'Blessing of Kings', 'Reckoning', 'One-Handed Weapon Specialization', 'Holy Shield'], skip: ["Guardian's Favor", 'Improved Concentration Aura', 'Improved Righteous Fury', 'Blessing of Sanctuary', 'Improved Seal of the Crusader', 'Eye for an Eye'] },
+  },
+  3: {
+    bm: { name: 'Beast Mastery - strong pet (leveling)', trees: ['Beast Mastery', 'Marksmanship', 'Survival'], prefer: ['Improved Aspect of the Hawk', 'Endurance Training', 'Thick Hide', 'Unleashed Fury', 'Ferocity', 'Improved Mend Pet', 'Intimidation', 'Spirit Bond', 'Bestial Discipline', 'Frenzy', 'Bestial Wrath', 'Lethal Shots', 'Efficiency', 'Improved Hunter\'s Mark', 'Aimed Shot', 'Mortal Shots'], skip: ['Improved Eyes of the Beast', 'Pathfinding', 'Improved Revive Pet', 'Bestial Swiftness', 'Improved Aspect of the Monkey', 'Improved Concussive Shot', 'Improved Scorpid Sting'] },
+    mm: { name: 'Marksmanship - Trueshot Aura', trees: ['Marksmanship', 'Beast Mastery', 'Survival'], prefer: ['Lethal Shots', 'Efficiency', 'Improved Hunter\'s Mark', 'Aimed Shot', 'Improved Arcane Shot', 'Mortal Shots', 'Improved Serpent Sting', 'Barrage', 'Ranged Weapon Specialization', 'Trueshot Aura', 'Improved Aspect of the Hawk', 'Endurance Training', 'Unleashed Fury'], skip: ['Improved Concussive Shot', 'Scatter Shot', 'Improved Scorpid Sting', 'Hawk Eye', 'Improved Eyes of the Beast', 'Pathfinding'] },
+    surv: { name: 'Survival', trees: ['Survival', 'Marksmanship', 'Beast Mastery'], prefer: ['Monster Slaying', 'Humanoid Slaying', 'Deflection', 'Savage Strikes', 'Survivalist', 'Surefooted', 'Killer Instinct', 'Lightning Reflexes', 'Counterattack', 'Lethal Shots', 'Efficiency'], skip: ['Entrapment', 'Improved Wing Clip', 'Clever Traps', 'Trap Mastery', 'Improved Feign Death', 'Deterrence', 'Improved Concussive Shot'] },
+  },
+  4: {
+    combat: { name: 'Combat - swords (leveling)', trees: ['Combat', 'Assassination', 'Subtlety'], prefer: ['Improved Sinister Strike', 'Lightning Reflexes', 'Precision', 'Deflection', 'Riposte', 'Dual Wield Specialization', 'Sword Specialization', 'Blade Flurry', 'Weapon Expertise', 'Aggression', 'Adrenaline Rush', 'Malice', 'Ruthlessness', 'Murder', 'Improved Slice and Dice', 'Relentless Strikes', 'Lethality'], skip: ['Improved Gouge', 'Improved Sprint', 'Improved Kick', 'Improved Backstab', 'Dagger Specialization', 'Mace Specialization', 'Fist Weapon Specialization', 'Improved Expose Armor', 'Improved Poisons', 'Vile Poisons', 'Improved Kidney Shot'] },
+    assa: { name: 'Assassination - Seal Fate', trees: ['Assassination', 'Combat', 'Subtlety'], prefer: ['Improved Eviscerate', 'Malice', 'Ruthlessness', 'Murder', 'Improved Slice and Dice', 'Relentless Strikes', 'Lethality', 'Cold Blood', 'Seal Fate', 'Vigor', 'Improved Sinister Strike', 'Lightning Reflexes', 'Precision'], skip: ['Improved Expose Armor', 'Improved Poisons', 'Vile Poisons', 'Improved Kidney Shot', 'Improved Gouge', 'Improved Sprint', 'Improved Kick', 'Remorseless Attacks'] },
+    sub: { name: 'Subtlety - Hemorrhage', trees: ['Subtlety', 'Combat', 'Assassination'], prefer: ['Opportunity', 'Ghostly Strike', 'Serrated Blades', 'Hemorrhage', 'Deadliness', 'Improved Sinister Strike', 'Lightning Reflexes', 'Precision'], skip: ['Master of Deception', 'Camouflage', 'Elusiveness', 'Improved Sap', 'Heightened Senses', 'Preparation', 'Improved Ambush', 'Initiative', 'Setup', 'Dirty Deeds', 'Premeditation'] },
+  },
+  5: {
+    shadow: { name: 'Shadow - Shadowform (leveling)', trees: ['Shadow', 'Discipline', 'Holy'], prefer: ['Spirit Tap', 'Improved Shadow Word: Pain', 'Shadow Focus', 'Improved Mind Blast', 'Mind Flay', 'Shadow Weaving', 'Vampiric Embrace', 'Darkness', 'Shadowform', 'Wand Specialization', 'Improved Power Word: Shield', 'Meditation', 'Mental Agility', 'Mental Strength', 'Inner Focus', 'Divine Spirit', 'Improved Inner Fire'], skip: ['Improved Fade', 'Improved Psychic Scream', 'Silence', 'Unbreakable Will', 'Silent Resolve', 'Martyrdom', 'Improved Mana Burn', 'Improved Vampiric Embrace', 'Blackout'] },
+    disc: { name: 'Discipline - Power Infusion', trees: ['Discipline', 'Shadow', 'Holy'], prefer: ['Wand Specialization', 'Improved Power Word: Shield', 'Improved Power Word: Fortitude', 'Meditation', 'Inner Focus', 'Mental Agility', 'Improved Inner Fire', 'Mental Strength', 'Divine Spirit', 'Force of Will', 'Power Infusion', 'Spirit Tap'], skip: ['Unbreakable Will', 'Silent Resolve', 'Martyrdom', 'Improved Mana Burn', 'Improved Fade', 'Improved Psychic Scream', 'Silence'] },
+    holy: { name: 'Holy - Spiritual Guidance', trees: ['Holy', 'Discipline', 'Shadow'], prefer: ['Holy Specialization', 'Improved Renew', 'Divine Fury', 'Holy Nova', 'Inspiration', 'Improved Healing', 'Searing Light', 'Spiritual Guidance', 'Spiritual Healing', 'Lightwell', 'Wand Specialization', 'Meditation'], skip: ['Spell Warding', 'Healing Focus', 'Holy Reach', 'Improved Prayer of Healing', 'Spirit of Redemption', 'Unbreakable Will', 'Silent Resolve', 'Martyrdom'] },
+  },
+  7: {
+    enh: { name: 'Enhancement - Stormstrike (leveling)', trees: ['Enhancement', 'Elemental', 'Restoration'], prefer: ['Ancestral Knowledge', 'Thundering Strikes', 'Improved Lightning Shield', 'Two-Handed Axes and Maces', 'Flurry', 'Elemental Weapons', 'Toughness', 'Anticipation', 'Weapon Mastery', 'Stormstrike', 'Convection', 'Concussion', 'Call of Flame', 'Elemental Focus', 'Reverberation'], skip: ['Improved Ghost Wolf', 'Guardian Totems', 'Shield Specialization', 'Enhancing Totems', 'Improved Weapon Totems', 'Parry'] },
+    ele: { name: 'Elemental - Elemental Mastery', trees: ['Elemental', 'Restoration', 'Enhancement'], prefer: ['Convection', 'Concussion', 'Call of Flame', 'Elemental Focus', 'Reverberation', 'Call of Thunder', 'Elemental Fury', 'Lightning Mastery', 'Elemental Mastery', 'Improved Fire Totems', 'Tidal Focus', 'Totemic Focus', 'Nature\'s Guidance'], skip: ["Earth's Grasp", 'Elemental Warding', 'Eye of the Storm', 'Elemental Devastation', 'Storm Reach', 'Improved Reincarnation', 'Improved Ghost Wolf'] },
+    resto: { name: 'Restoration', trees: ['Restoration', 'Enhancement', 'Elemental'], prefer: ['Improved Healing Wave', 'Tidal Focus', 'Ancestral Healing', 'Totemic Focus', "Nature's Guidance", 'Healing Focus', 'Tidal Mastery', 'Healing Way', "Nature's Swiftness", 'Purification', 'Mana Tide Totem', 'Ancestral Knowledge', 'Thundering Strikes'], skip: ['Improved Reincarnation', 'Totemic Mastery', 'Healing Grace', 'Restorative Totems', 'Improved Ghost Wolf', 'Guardian Totems'] },
+  },
+  8: {
+    frost: { name: 'Frost - Ice Barrier (leveling)', trees: ['Frost', 'Arcane', 'Fire'], prefer: ['Improved Frostbolt', 'Elemental Precision', 'Ice Shards', 'Frostbite', 'Improved Frost Nova', 'Permafrost', 'Piercing Ice', 'Cold Snap', 'Shatter', 'Ice Block', 'Improved Cone of Cold', "Winter's Chill", 'Ice Barrier', 'Arcane Subtlety', 'Arcane Focus', 'Wand Specialization', 'Magic Absorption', 'Arcane Concentration', 'Arcane Meditation', 'Arcane Mind'], skip: ['Frost Warding', 'Improved Blizzard', 'Arctic Reach', 'Frost Channeling', 'Magic Attunement', 'Improved Arcane Explosion', 'Arcane Resilience', 'Improved Counterspell', 'Improved Mana Shield'] },
+    fire: { name: 'Fire - Combustion', trees: ['Fire', 'Arcane', 'Frost'], prefer: ['Improved Fireball', 'Ignite', 'Improved Fire Blast', 'Incinerate', 'Pyroblast', 'Improved Scorch', 'Master of Elements', 'Critical Mass', 'Blast Wave', 'Fire Power', 'Combustion', 'Arcane Subtlety', 'Arcane Focus', 'Arcane Concentration', 'Arcane Meditation'], skip: ['Impact', 'Flame Throwing', 'Improved Flamestrike', 'Burning Soul', 'Improved Fire Ward', 'Magic Attunement', 'Improved Counterspell'] },
+    arcane: { name: 'Arcane - Arcane Power', trees: ['Arcane', 'Frost', 'Fire'], prefer: ['Arcane Focus', 'Improved Arcane Missiles', 'Wand Specialization', 'Arcane Concentration', 'Improved Arcane Explosion', 'Arcane Meditation', 'Presence of Mind', 'Arcane Mind', 'Arcane Instability', 'Arcane Power', 'Improved Frostbolt', 'Elemental Precision'], skip: ['Magic Attunement', 'Arcane Resilience', 'Improved Counterspell', 'Improved Mana Shield', 'Frost Warding'] },
+  },
+  9: {
+    affli: { name: 'Affliction - Siphon Life (leveling)', trees: ['Affliction', 'Demonology', 'Destruction'], prefer: ['Improved Corruption', 'Suppression', 'Improved Life Tap', 'Improved Drain Life', 'Improved Curse of Agony', 'Amplify Curse', 'Nightfall', 'Grim Reach', 'Siphon Life', 'Shadow Mastery', 'Dark Pact', 'Improved Imp', 'Demonic Embrace', 'Improved Voidwalker', 'Fel Intellect', 'Fel Stamina', 'Fel Domination'], skip: ['Improved Curse of Weakness', 'Improved Drain Soul', 'Fel Concentration', 'Improved Drain Mana', 'Curse of Exhaustion', 'Improved Curse of Exhaustion', 'Improved Healthstone', 'Improved Health Funnel'] },
+    demo: { name: 'Demonology - Soul Link', trees: ['Demonology', 'Affliction', 'Destruction'], prefer: ['Demonic Embrace', 'Improved Voidwalker', 'Fel Intellect', 'Improved Health Funnel', 'Fel Stamina', 'Fel Domination', 'Unholy Power', 'Master Summoner', 'Demonic Sacrifice', 'Master Demonologist', 'Soul Link', 'Improved Corruption', 'Suppression'], skip: ['Improved Healthstone', 'Improved Imp', 'Improved Succubus', 'Improved Enslave Demon', 'Improved Firestone', 'Improved Spellstone'] },
+    destro: { name: 'Destruction - Ruin', trees: ['Destruction', 'Affliction', 'Demonology'], prefer: ['Improved Shadow Bolt', 'Bane', 'Devastation', 'Shadowburn', 'Destructive Reach', 'Improved Immolate', 'Ruin', 'Emberstorm', 'Conflagrate', 'Cataclysm', 'Improved Corruption', 'Suppression'], skip: ['Improved Firebolt', 'Improved Lash of Pain', 'Intensity', 'Improved Searing Pain', 'Pyroclasm', 'Aftermath'] },
+  },
+  11: {
+    feral: { name: 'Feral - cat and bear (leveling)', trees: ['Feral Combat', 'Restoration', 'Balance'], prefer: ['Ferocity', 'Feral Instinct', 'Thick Hide', 'Sharpened Claws', 'Feral Charge', 'Predatory Strikes', 'Blood Frenzy', 'Primal Fury', 'Savage Fury', 'Faerie Fire (Feral)', 'Heart of the Wild', 'Leader of the Pack', 'Furor', 'Improved Mark of the Wild', 'Natural Weapons', 'Natural Shapeshifter', 'Omen of Clarity'], skip: ['Feral Aggression', 'Brutal Impact', 'Feline Swiftness', 'Improved Shred'] },
+    balance: { name: 'Balance - Moonkin', trees: ['Balance', 'Restoration', 'Feral Combat'], prefer: ['Improved Wrath', 'Improved Moonfire', 'Natural Weapons', 'Natural Shapeshifter', 'Omen of Clarity', "Nature's Reach", 'Vengeance', 'Improved Starfire', "Nature's Grace", 'Moonglow', 'Moonfury', 'Moonkin Form', 'Furor', 'Improved Mark of the Wild'], skip: ["Nature's Grasp", "Improved Nature's Grasp", 'Improved Entangling Roots', 'Improved Thorns'] },
+    resto: { name: 'Restoration - Swiftmend', trees: ['Restoration', 'Balance', 'Feral Combat'], prefer: ['Furor', 'Improved Mark of the Wild', 'Improved Healing Touch', "Nature's Focus", 'Reflection', 'Insect Swarm', 'Subtlety', 'Improved Rejuvenation', "Nature's Swiftness", 'Gift of Nature', 'Improved Regrowth', 'Swiftmend', 'Improved Wrath', 'Improved Moonfire'], skip: ['Improved Enrage', 'Tranquil Spirit', 'Improved Tranquility'] },
   },
 };
 
@@ -60,12 +109,34 @@ function weaponSpecName(c) {
 function autoTalents(c, quiet) {
   const D = classTalents(c.cls); const builds = TALENT_BUILDS[c.cls]; if (!builds || !D.list.length) return;
   const b = builds[c.cfg.talentBuild] || builds[Object.keys(builds)[0]]; let n = 0;
+  if (b.trees) return autoTalentsTrees(c, b, quiet);
   for (const [name0, want] of b.order) {
     if (talentFree(c) <= 0) break;
     if (name0 === '*WEAPON*' && !c.cfg.weaponSpec) c.cfg.weaponSpec = weaponSpecName(c);      // decided once, at the first point
     const name = name0 === '*WEAPON*' ? c.cfg.weaponSpec : name0; const t = D.byName[name]; if (!t) continue;
     while (((c.talents || {})[t.id] || 0) < want && talentFree(c) > 0 && !talentBlock(c, t)) { learnTalent(c, t, quiet); n++; }
     if (((c.talents || {})[t.id] || 0) < want) break;          // keep the order: wait for the next level
+  }
+  return n;
+}
+/* the other classes: trees in order, row by row; skipped talents only when nothing else opens the next row */
+function autoTalentsTrees(c, b, quiet) {
+  const D = classTalents(c.cls); const skip = new Set(b.skip || []); const pi = (t) => { const i = (b.prefer || []).indexOf(t.name); return i < 0 ? 99 : i; };
+  let n = 0;
+  for (const treeName of b.trees) {
+    const tr = D.trees.find((t) => t.name === treeName); if (!tr) continue;
+    for (let guard = 0; guard < 80 && talentFree(c) > 0; guard++) {
+      const open = D.list.filter((t) => t.tree === tr.id && !talentBlock(c, t));
+      let cand = open.filter((t) => !skip.has(t.name));
+      if (!cand.length) {
+        const later = D.list.some((t) => t.tree === tr.id && !skip.has(t.name) && ((c.talents || {})[t.id] || 0) < t.ranks.length);
+        if (!later) break; cand = open;            // a filler point to reach the next row
+      }
+      if (!cand.length) break;
+      cand.sort((x, y) => x.row - y.row || pi(x) - pi(y) || x.col - y.col);
+      if (!learnTalent(c, cand[0], quiet)) break; n++;
+    }
+    if (talentFree(c) <= 0) break;
   }
   return n;
 }
@@ -133,7 +204,7 @@ function talentsHtml(c) {
   h += '<div class="taltrees">';
   for (const tr of D.trees) {
     const spent = talentSpent(c, tr.id);
-    h += '<div class="taltree" style="background-image:url(../ui/composed/TalentFrame__' + (TREE_ART[tr.name] || '') + '.png)"><div class="taltitle">' + esc(tr.name) + ' <span>' + spent + '</span></div><div class="talgrid">';
+    h += '<div class="taltree" style="background-image:url(../ui/composed/TalentFrame__' + (TREE_ART[tr.class + ' ' + tr.name] || TREE_ART[tr.name] || '') + '.png)"><div class="taltitle">' + esc(tr.name) + ' <span>' + spent + '</span></div><div class="talgrid">';
     for (const t of D.list.filter((x) => x.tree === tr.id)) {
       const r = (c.talents || {})[t.id] || 0; const why = talentBlock(c, t); const st = r >= t.ranks.length ? 'max' : !why ? 'can' : r ? 'some' : 'no';
       h += '<div class="tal ' + st + '" style="grid-row:' + (t.row + 1) + ';grid-column:' + (t.col + 1) + '" data-tal="' + t.id + '">' +

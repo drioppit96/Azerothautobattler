@@ -37,6 +37,8 @@ function itemName(id, inst) { const r = itemRow(id); const l = lootRow(id); cons
 function itemQuality(id) { const r = itemRow(id); if (r) return r.q || 0; const l = lootRow(id); return l ? l[1] : 1; }
 function itemSell(id) { const r = itemRow(id); if (r && r.sp != null) return r.sp; const l = lootRow(id); return l ? l[2] || 0 : 0; }
 function itemBuy(id) { const r = itemRow(id); return r && r.bp ? r.bp : Math.max(1, itemSell(id) * 4); }
+/* consumables (food, drink, potions ...) come in a stack of 10 for the vendor price */
+function buyCount(id) { const r = itemRow(id); return r && r.c === 0 ? Math.min(10, itemStack(id) || 1) : r && r.c === 6 ? itemStack(id) : 1; }
 function itemStack(id) { const r = itemRow(id); if (r && r.sk) return r.sk; const l = lootRow(id); return (l && l[5]) || 1; }
 function itemIcon(id) { const r = itemRow(id); return r && r.ic ? '../icons/' + r.ic.toLowerCase() + '.jpg' : ''; }
 function maxDur(id) { const r = itemRow(id); return r && r.du ? r.du : 0; }
@@ -94,7 +96,8 @@ function isJunk(c, id) {
   if (G.state.settings.sellWhiteGear && r && r.sl && r.sl.length && (r.q || 0) <= 1 && !(r.c === 1) && !upgradeFor(c, { id, n: 1 })) return true;
   // while leveling automatically: everything a player would vendor (no upgrade, not for quests, not food or potions)
   if (G.state.settings.sellAll !== false && c.order && (c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling')) && r) {
-    if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion')) return false;
+    if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion' || useInfo(id).kind === 'drink')) return false;
+    if (r.c === 6 && c.cls === 3) return false;                       // arrows and bullets
     if (r.c === 1) { if (!r.cs || r.bf) return true; const eq = c.bagSlots.filter(Boolean).map((b) => (itemRow(b.id) || {}).cs || 0); return eq.length >= 4 && r.cs <= Math.min(...eq); }
     if (r.sl && r.sl.length) return !upgradeFor(c, { id, n: 1 }) && !((r.rl || 0) > c.level && (r.q || 0) >= 2);
     if (r.c === 12 || r.c === 7 || r.c === 9 || r.c === 5 || r.c === 15 || r.c === 0 || r.c === 13) return true;
@@ -205,18 +208,28 @@ function charStats(c) {
   s.armor = Math.max(0, s.armorItems + s.armorBonus + s.agi * 2);
   s.maxHp = b.maxHp + (s.sta - b.sta) * 10 + s.hpBonus;
   s.maxMana = b.power ? b.power + Math.max(0, s.int - 20) * 15 + Math.min(20, s.int) + s.manaBonus : 0;
-  s.ap = Math.max(0, classAp(c.cls, c.level, s) + s.ap);
+  s.ap = Math.max(0, classAp(c.cls, c.level, s) + s.ap + (c.form === 'cat' ? c.level * 2 + s.agi : c.form === 'bear' ? c.level * 3 : 0));
+  s.rap = Math.max(0, (c.cls === 3 ? s.agi * 2 + c.level * 2 - 10 : c.cls === 1 || c.cls === 4 ? s.agi + c.level - 10 : 0) + s.rap);
+  if (c.form === 'bear') { s.armorItems *= c.known && c.known['Dire Bear Form'] ? 4.6 : 2.8; s.sta = Math.round(s.sta * (c.known && c.known['Dire Bear Form'] ? 1.25 : 1)); }
   s.crit += 5 + s.agi / (CRIT_RATIO[c.cls] || 20);
   s.dodge += (c.cls === 4 ? 0 : 0.75) + s.agi / (DODGE_RATIO[c.cls] || 20) + (s.def - c.level * 5) * 0.04;
   s.parry += canParry(c) ? 5 + (s.def - c.level * 5) * 0.04 : 0;
   const off = c.equip[16] && itemRow(c.equip[16].id);
   s.hasShield = !!(off && off.c === 4 && off.s === 6 && !isBroken(c.equip[16]));
   if (s.hasShield) { s.block += 5 + (s.def - c.level * 5) * 0.04; s.blockValue += Math.floor(s.str / 20); } else { s.block = 0; s.blockValue = 0; }
-  s.mh = weaponInfo(c.equip[15]) || { min: 1, max: 2, speed: 2.0, name: 'Fists', school: 0 };
-  const oh = weaponInfo(c.equip[16]); s.oh = oh && canDualWield(c) ? oh : null;
+  s.mh = (c.form && typeof formWeapon === 'function' && formWeapon(c)) || weaponInfo(c.equip[15]) || { min: 1, max: 2, speed: 2.0, name: 'Fists', school: 0 };
+  const oh = weaponInfo(c.equip[16]); s.oh = oh && canDualWield(c) && !c.form ? oh : null;
   s.mhDps = ((s.mh.min + s.mh.max) / 2 + s.ap / 14 * s.mh.speed) / s.mh.speed;
   s.ohDps = s.oh ? ((s.oh.min + s.oh.max) / 2 + s.ap / 14 * s.oh.speed) * 0.5 / s.oh.speed : 0;
   if (typeof talentStats === 'function') { const a0 = s.armorItems; talentStats(c, s); s.armor += s.armorItems - a0; if (s.hasShield) s.block += s.shieldSpec || 0; }
+  if (c.cls !== 1 && typeof classTalentStats === 'function') {
+    const k0 = { str: s.str, agi: s.agi, sta: s.sta, int: s.int, ap: s.ap };
+    classTalentStats(c, s);
+    // stat changes from talents feed into the derived numbers
+    s.maxHp += (s.sta - k0.sta) * 10; if (s.maxMana) s.maxMana += (s.int - k0.int) * 15;
+    s.crit += (s.agi - k0.agi) / (CRIT_RATIO[c.cls] || 20); s.armor += (s.agi - k0.agi) * 2 + (s.armorPct ? s.armorItems * s.armorPct / 100 : 0);
+    s.mhDps = ((s.mh.min + s.mh.max) / 2 + s.ap / 14 * s.mh.speed) / s.mh.speed;
+  }
   s.ohDps = s.oh ? ((s.oh.min + s.oh.max) / 2 + s.ap / 14 * s.oh.speed) * (s.ohMult || 0.5) / s.oh.speed : 0;
   s.armorReduction = (lvl) => Math.min(0.75, s.armor / (s.armor + 400 + 85 * lvl));
   r.statCache = { v: r.statVer, L: c.level, b: r.buffs ? r.buffs.length : 0, s };
@@ -261,7 +274,7 @@ function equipDelta(c, inst) {
 }
 function upgradeFor(c, inst) {
   const it = itemRow(inst.id); if (!it || !it.sl || !it.sl.length || canEquip(c, inst.id)) return false;
-  if (it.sl.includes(17) && c.cls === 1) return false;                // bows and guns are not used
+  if (it.sl.includes(17) && !(c.cls === 3 && it.s !== 19 && it.s !== 16) && !(it.s === 19 && (c.cls === 5 || c.cls === 8 || c.cls === 9))) return false;   // ranged slot: hunters shoot, priests / mages / warlocks use wands
   const d = equipDelta(c, inst); return d > 0.5 + Math.abs(itemScore(c, inst)) * 0.02;
 }
 
@@ -377,6 +390,7 @@ function useItem(c, idx, auto) {
     log('Eating ' + itemName(inst.id) + '.');
   } else if (u.kind === 'drink') {
     if (inCombat) return false; log('Drinking ' + itemName(inst.id) + '.'); r.resting = true;
+    if (typeof drinkValue === 'function') r.drinking = { tick: drinkValue(inst.id) / 9, left: 18 };
   } else { if (!auto) log(itemName(inst.id) + ': ' + (u.sp ? u.sp.n : 'nothing happens') + ' (not simulated yet).'); return false; }
   inst.n--; if (inst.n <= 0) c.bags.splice(idx, 1);
   save(); refreshGear(); return true;
@@ -447,8 +461,9 @@ function sellIndex(c, idx) {
 function buyItem(c, id) {
   const v = vendorNear(c); if (!v) { log('No vendor in reach.'); return; }
   const price = itemBuy(id); if (c.gold < price) { log('Not enough money.'); return; }
-  if (!addItem(c, id, 1)) { log('Bags are full.'); return; }
-  c.gold -= price; log('Bought ' + itemName(id) + ' for ' + money(price) + '.'); save(); refreshGear();
+  const n = buyCount(id);
+  if (!addItem(c, id, n)) { log('Bags are full.'); return; }
+  c.gold -= price; log('Bought ' + (n > 1 ? n + ' x ' : '') + itemName(id) + ' for ' + money(price) + '.'); save(); refreshGear();
 }
 function sellJunk(c) {
   let total = 0, n = 0;
@@ -472,18 +487,32 @@ function autoSellNearVendor(c) {
 }
 /* buy the biggest bag this vendor sells into an empty bag slot, keeping some money (player-like) */
 /* keep some food: buy a stack of the best food this vendor sells when less than 10 are left */
-function autoBuyFood(c, v) {
+/* hunters: arrows or bullets for the equipped bow / gun (a quiver's worth) */
+function ammoKind(c) { const w = c.equip[17] && itemRow(c.equip[17].id); return w ? (w.s === 3 ? 3 : w.s === 2 || w.s === 18 ? 2 : 0) : 0; }
+function ammoCount(c) { const k = ammoKind(c); let n = 0; for (const x of c.bags) { const it = itemRow(x.id); if (it && it.c === 6 && it.s === k) n += x.n; } return n; }
+function autoBuyAmmo(c, v) {
+  const k = ammoKind(c); if (!k || ammoCount(c) >= 400) return;
+  let best = null;
+  for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!it || it.c !== 6 || it.s !== k || (it.rl || 0) > c.level) continue; const val = it.dps || it.rl || 1; if (!best || val > best.val) best = { id: x.id, val, price: itemBuy(x.id) }; }
+  if (!best) return;
+  const per = itemStack(best.id); const stacks = Math.min(3, Math.floor(c.gold * 0.2 / Math.max(1, best.price)));
+  if (stacks < 1 || bagFree(c) < stacks) return;
+  if (addItem(c, best.id, per * stacks)) { c.gold -= stacks * best.price; log('Bought ' + per * stacks + ' x ' + itemName(best.id) + '.'); }
+}
+function autoBuyFood(c, v, kind) {
   if (!v || G.state.settings.autoBuyFood === false) return;
-  let have = 0; for (const x of c.bags) { const u = useInfo(x.id); if (u && u.kind === 'food') have += x.n; }
+  if (!kind) { autoBuyFood(c, v, 'food'); if (typeof usesMana === 'function' && usesMana(c) && c.cls !== 1) autoBuyFood(c, v, 'drink'); if (c.cls === 3) autoBuyAmmo(c, v); return; }
+  let have = 0; for (const x of c.bags) { const u = useInfo(x.id); if (u && u.kind === kind) have += x.n; }
   if (have >= 10) return;
   let best = null;
   for (const x of vendorItems(v.e)) {
-    const it = itemRow(x.id); const u = useInfo(x.id); if (!it || !u || u.kind !== 'food' || !u.tick || (it.rl || 0) > c.level) continue;
-    const val = u.tick * u.dur / u.every; if (!best || val > best.val) best = { id: x.id, val, price: itemBuy(x.id) };
+    const it = itemRow(x.id); const u = useInfo(x.id); if (!it || !u || u.kind !== kind || (it.rl || 0) > c.level) continue;
+    if (kind === 'food' && !u.tick) continue;
+    const val = kind === 'food' ? u.tick * u.dur / u.every : drinkValue(x.id); if (!best || val > best.val) best = { id: x.id, val, price: itemBuy(x.id) };
   }
   if (!best) return;
-  const n = Math.min(20, Math.floor(c.gold * 0.15 / Math.max(1, best.price))); if (n < 5 || bagFree(c) <= 0) return;
-  if (addItem(c, best.id, n)) { c.gold -= n * best.price; log('Bought ' + n + ' x ' + itemName(best.id) + ' for ' + money(n * best.price) + '.'); }
+  const per = buyCount(best.id); const stacks = Math.min(2, Math.floor(c.gold * 0.15 / Math.max(1, best.price))); if (stacks < 1 || bagFree(c) <= 0) return;
+  if (addItem(c, best.id, per * stacks)) { c.gold -= stacks * best.price; log('Bought ' + per * stacks + ' x ' + itemName(best.id) + ' for ' + money(stacks * best.price) + '.'); }
 }
 /* buy equipment upgrades a vendor sells, spending at most a third of the money (while leveling automatically) */
 function autoBuyGear(c, v) {
