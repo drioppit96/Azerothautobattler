@@ -91,7 +91,7 @@ function renderSheet() {
   $('sheet').classList.toggle('wide', SH.tab === 'talents');
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') { $('sheetLeft').innerHTML = professionsHtml(c); $('sheetBags').innerHTML = bagsHtml(c); return; }
-  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) :
+  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
@@ -108,6 +108,8 @@ function instFromEl(el) {
   if (el.dataset.bag != null) return c.bagSlots[el.dataset.bag] ? { inst: c.bagSlots[el.dataset.bag], where: 'bagslot', i: +el.dataset.bag } : null;
   if (el.dataset.buy != null) return { inst: makeInst(+el.dataset.buy, 1), where: 'vendor', price: itemBuy(+el.dataset.buy) };
   if (el.dataset.iid != null) return { inst: { id: +el.dataset.iid, n: 1 }, where: 'info' };
+  if (el.dataset.bk != null) return bankOf(c).items[+el.dataset.bk] ? { inst: bankOf(c).items[+el.dataset.bk], where: 'bank', i: +el.dataset.bk } : null;
+  if (el.dataset.ahl != null) { const [id, i] = el.dataset.ahl.split(':').map(Number); const v = auctioneerNear(c); const L = listings(id, v ? v.side : charSide(c)).find((x) => x.i === i); return L ? { inst: { id, n: L.n, rp: L.rp }, where: 'info' } : null; }
   return null;
 }
 function showItemTip(ev, ref) {
@@ -132,6 +134,8 @@ function showItemMenu(ev, ref) {
     else if (it && it.sl && it.sl.length) { const why = canEquip(c, inst.id); acts.push(['equip', why ? 'Equip (' + why + ')' : 'Equip', !!why]); if (it.t === 13 && canDualWield(c)) { acts.push(['equip15', 'Equip in main hand']); acts.push(['equip16', 'Equip in off hand']); } }
     const u = useInfo(inst.id); const cu = typeof consInfo === 'function' && consInfo(inst.id);
     if (u && (u.kind !== 'other' || cu)) acts.push(['use', u.kind === 'potion' ? 'Drink potion' : u.kind === 'food' ? 'Eat' : cu && cu.kind === 'bandage' ? 'Apply bandage' : cu && cu.kind === 'weapon' ? 'Apply to weapon' : cu && cu.kind === 'bomb' ? 'Throw' : 'Use']);
+    if (SH.tab === 'ah' && auctioneerNear(c) && ahSellable(inst)) acts.unshift(['ahsell', 'Sell at the auction house']);
+    if (bankerNear(c)) { acts.unshift(['bankput', 'Put in the bank']); if (it && it.c === 1 && it.cs && bankOf(c).bags.slice(0, bankOf(c).slots).filter(Boolean).length < bankOf(c).slots) acts.push(['bankbag', 'Put in a bank bag slot']); }
     const v = vendorNear(c); acts.push(['sell', v ? 'Sell for ' + money(itemSell(inst.id) * inst.n) : 'Sell (go to a vendor first)', !v || !itemSell(inst.id)]);
     acts.push(['destroy', 'Destroy']);
   } else if (ref.where === 'eq') acts.push(['unequip', 'Take off']);
@@ -155,6 +159,9 @@ function showItemMenu(ev, ref) {
     else if (a === 'unequip') unequipSlot(c, ref.slot);
     else if (a === 'unbag') unequipBag(c, ref.i);
     else if (a === 'buy') buyItem(c, ref.inst.id);
+    else if (a === 'ahsell') { AHUI.sub = 'sell'; AHUI.sel = ref.idx; AHUI.price = null; }
+    else if (a === 'bankput') bankPut(c, ref.idx);
+    else if (a === 'bankbag') bankPutBag(c, ref.idx);
     hideItemMenu(); renderSheet();
   };
 }
@@ -165,6 +172,8 @@ function bindSheet() {
     const t = e.target.closest('[data-tab]'); if (t) { SH.tab = t.dataset.tab; hideItemMenu(); renderSheet(); return; }
     if (e.target.id === 'sheetClose') { closeSheet(); return; }
     const c = active();
+    if (SH.tab === 'ah' && ahClick(e)) return;
+    if (SH.tab === 'bank' && bankClick(e)) return;
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
     if (SH.tab === 'talents' && talentClick(e)) return;
@@ -176,7 +185,8 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('dblclick', (e) => {
     const el = e.target.closest('[data-idx],[data-slot]'); if (!el) return; const c = active();
     if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id); if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }
@@ -187,7 +197,7 @@ function bindSheet() {
     if (!$('iact').hidden) return;
     const tl = e.target.closest('[data-tal]');
     if (tl) { const tip = $('itip'); tip.innerHTML = talentTip(active(), tl.dataset.tal); tip.hidden = false; const r = tip.getBoundingClientRect(); let x = e.clientX + 16, y = e.clientY + 12; if (x + r.width > window.innerWidth - 4) x = e.clientX - r.width - 16; if (y + r.height > window.innerHeight - 4) y = window.innerHeight - r.height - 4; tip.style.left = x + 'px'; tip.style.top = y + 'px'; return; }
-    const el = e.target.closest('[data-idx],[data-slot],[data-bag],[data-buy],[data-iid]');
+    const el = e.target.closest('[data-idx],[data-slot],[data-bag],[data-buy],[data-iid],[data-bk],[data-ahl]');
     if (!el) { hideItemTip(); return; } showItemTip(e, instFromEl(el));
   });
   sh.addEventListener('mouseleave', hideItemTip);
@@ -210,7 +220,7 @@ function renderGearCard() {
     '<div class="kv"><span>Money</span><b>' + moneyHtml(c.gold) + '</b></div>' +
     (upgrades ? '<div class="kv"><span>Upgrades in bags</span><b style="color:#1eff00">' + upgrades + '</b></div>' : '') +
     (talentFree(c) > 0 ? '<div class="kv"><span>Talent points</span><b style="color:#1eff00">' + talentFree(c) + ' free</b></div>' : '') +
-    '<div class="btnrow"><button class="act" id="btnSheet">Character &amp; bags (C)</button><button class="mini" id="btnTal">Talents (N)</button><button class="mini" id="btnVendor">' + (v ? 'Vendor' : 'Go to vendor') + '</button><button class="mini" id="btnRepair">Repair</button></div>' +
+    '<div class="btnrow"><button class="act" id="btnSheet">Character &amp; bags (C)</button><button class="mini" id="btnTal">Talents (N)</button><button class="mini" id="btnVendor">' + (v ? 'Vendor' : 'Go to vendor') + '</button><button class="mini" id="btnRepair">Repair</button><button class="mini" id="btnAh">Auction house' + (mailWaiting(c) ? ' (mail ' + mailWaiting(c) + ')' : '') + '</button><button class="mini" id="btnBank">Bank</button></div>' +
     '<label class="chk"><input type="checkbox" data-set="autoEquip"' + (st.autoEquip ? ' checked' : '') + '> Equip upgrades automatically</label>' +
     '<label class="chk"><input type="checkbox" data-set="autoBuyBags"' + (st.autoBuyBags ? ' checked' : '') + '> Buy bags at vendors when there is a free bag slot</label>' +
     '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" id="lnkBeh">Behaviour</a></div>' +
@@ -220,6 +230,7 @@ function renderGearCard() {
   $('btnRepair').onclick = () => { const vv = vendorNear(c); if (vv && vv.repair) { repairAll(c); } else orderRepair(c); };
   el.querySelectorAll('[data-set]').forEach((i) => { i.onchange = () => { st[i.dataset.set] = i.checked; save(); }; });
   $('lnkBeh').onclick = (e) => { e.preventDefault(); openSheet('beh'); };
+  $('btnAh').onclick = () => openSheet('ah'); $('btnBank').onclick = () => openSheet('bank');
 }
 
 /* ------------------------------------------------------------- behaviour tab */

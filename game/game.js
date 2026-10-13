@@ -319,6 +319,7 @@ function orderText(c) {
   if (o.type === 'leveling') return levelingText(c, o);
   if (o.type === 'patrol') return patrolText(c, o);
   if (o.type === 'dungeon') return dungeonText(c, o);
+  if (o.type === 'npc') return npcOrderText(c, o);
   if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
   if (o.type === 'questing') { const q = o.fq && G.q.byId[o.fq]; return { t: 'Questing: ' + (o.zones[o.zi] || 'done'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') }; }
   if (o.type === 'sell' || o.type === 'vendor') return { t: 'Vendor: ' + o.label, d: o.resume ? 'Selling junk, then back to work' : 'Walking to the vendor' };

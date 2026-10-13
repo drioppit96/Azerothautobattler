@@ -227,6 +227,7 @@ function mobTick(W, m, dt, now) {
 function evade(W, m) { m.st = 'evade'; m.tgt = null; m.petThreat = 0; m.charThreat = 0; }
 function worldTick(dt) {
   const now = G.gameTime;
+  if (typeof marketTick === 'function') marketTick();
   for (const id in G.world) {
     const W = G.world[id];
     for (const m of W.active) mobTick(W, m, dt, now);
@@ -723,6 +724,7 @@ function updateChar(c, dt) {
   if (c.prof && profStep(c)) return;
   const o = c.order;
   if (!o) return;
+  if (o.type === 'leveling' && typeof ahPassBy === 'function' && ahPassBy(c)) return;
   if (o.type === 'travel') {
     if (o.cross && typeof travelCross === 'function') { const st = travelCross(c, o); if (st !== 'done') return; }
     const done = advance(c, o, dt);
@@ -734,6 +736,7 @@ function updateChar(c, dt) {
   else if (o.type === 'leveling') updateLeveling(c, o, dt);
   else if (o.type === 'vendor' || o.type === 'sell') updateVendor(c, o, dt);
   else if (o.type === 'trainer') updateTrainer(c, o, dt);
+  else if (o.type === 'npc') updateNpcOrder(c, o);
   else if (o.type === 'patrol') updatePatrol(c, o, dt);
   else if (o.type === 'dungeon') updateDungeon(c, o, dt);
 }

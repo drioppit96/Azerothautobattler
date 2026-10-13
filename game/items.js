@@ -99,6 +99,7 @@ function isJunk(c, id) {
   if (G.state.settings.sellAll !== false && c.order && (c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling')) && r) {
     if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion' || useInfo(id).kind === 'drink')) return false;
     if (typeof consKeep === 'function' && consKeep(c, id)) return false;
+    if (typeof ahKeep === 'function' && ahKeep(c, id)) return false;
     if (r.c === 6 && c.cls === 3) return false;                       // arrows and bullets
     if (r.c === 1) { if (!r.cs || r.bf) return true; const eq = c.bagSlots.filter(Boolean).map((b) => (itemRow(b.id) || {}).cs || 0); return eq.length >= 4 && r.cs <= Math.min(...eq); }
     if (r.sl && r.sl.length) return !upgradeFor(c, { id, n: 1 }) && !((r.rl || 0) > c.level && (r.q || 0) >= 2);
@@ -111,6 +112,7 @@ function junkCount(c) { let n = 0; for (const s of c.bags) if (isJunk(c, s.id)) 
 function bagsFull(c, o) {
   const r = rt(c);
   if (c.prof && !junkCount(c) && (o.type === 'leveling' || o.type === 'patrol' || o.type === 'grind' || o.type === 'questing')) { r.sellMats = true; if (junkCount(c)) log('Bags are full - selling gathered materials too.'); }
+  if ((o.type === 'leveling' || (o.resume && o.resume.type === 'leveling')) && typeof ahBagsFull === 'function' && ahBagsFull(c, o)) return true;
   if (G.state.settings.autoSellJunk && junkCount(c) && !o.noSell) {
     const v = nearestVendor(c);
     if (v) {
@@ -565,6 +567,7 @@ function updateVendor(c, o, dt) {
   }
   if (!ok) return;
   if (o.auto || G.state.settings.autoSellJunk) sellJunk(c);
+  rt(c).ahDump = false;
   const vv = vendorList().find((x) => x.e === o.e);
   if ((o.repair || G.state.settings.autoRepair) && repairCost(c)) { if (vv && vv.repair) repairAll(c); }
   autoBuyBags(c, vv); autoBuyGear(c, vv); autoBuyFood(c, vv);
@@ -638,6 +641,7 @@ function tooltipHtml(c, inst, opts) {
   if (p) for (const [au, mi, v] of p.eq || []) if (au !== 29) { const t = auraText(au, mi, v); if (t) h += '<div class="tt-green">' + t + '</div>'; }
   if (it.ds) h += '<div class="tt-desc">"' + esc(it.ds) + '"</div>';
   if (it.il) h += '<div class="muted small">Item level ' + it.il + '</div>';
+  if (typeof ahTipLine === 'function' && !(opts && opts.noAh)) h += ahTipLine(c, inst);
   const sp = itemSell(id); h += sp ? '<div class="small">Sell price: ' + moneyHtml(sp * (inst.n || 1)) + '</div>' : '<div class="small muted">No sell price</div>';
   if (opts && opts.price) h += '<div class="small">Buy price: ' + moneyHtml(opts.price) + '</div>';
   return h;

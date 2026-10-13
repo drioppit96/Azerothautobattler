@@ -288,3 +288,24 @@ label.chk.dim{opacity:.55}
 .obtns .obtn button:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
 .obtns .obtn button:last-child{border-top-left-radius:0;border-bottom-left-radius:0;border-left:0;padding-left:6px;padding-right:6px}
 .obtns .obtn.on button{background:var(--gold2);color:#1a1409;border-color:var(--gold)}
+/* auction house and bank */
+.ah .vhead{margin-bottom:6px}
+.ahsubs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 8px}
+.ahsubs .mini.on{background:var(--gold2);color:#1a1409;border-color:var(--gold)}
+.ahsearch{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.ahsearch input[type=text]{flex:1;min-width:140px}
+.ahsearch input[type=number]{width:52px}
+.ahsearch .chk{margin:0}
+.ahlist{display:flex;flex-direction:column;gap:4px}
+.ahrow{margin:0}
+.ahauctions{margin:0 0 6px 18px;padding:4px 6px;border-left:2px solid var(--line)}
+.ahauc{display:grid;grid-template-columns:38px 1fr auto auto;gap:8px;align-items:center;padding:3px 0;border-bottom:1px dotted #33291a}
+.ahauc .ico{position:relative;width:36px;height:36px}
+.ahauc .sic{width:36px;height:36px}
+.ahauc .aname{font-size:13px;min-width:0}
+.ahauc>.small{text-align:right;white-space:nowrap}
+.ahsell .rgrid input[type=number]{width:52px}
+.ahsell{margin-bottom:6px}
+.bankgrid{display:grid;grid-template-columns:repeat(auto-fill,48px);gap:5px;margin-top:6px}
+.slot.locked{opacity:.75}
+.slot.locked span{font-size:9px;line-height:1.1;text-align:center;padding:2px}
