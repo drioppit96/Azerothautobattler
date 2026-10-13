@@ -360,11 +360,11 @@ function drawParty(ctx, m) {
 }
 
 /* ------------------------------------------------------------------ the run */
-function orderDungeon(c, d, group) {
+function orderDungeon(c, d, group, resume) {
   const min = d.lmin - (d.kind === 'raid' ? 0 : 3);
   if (c.level < min) { log(d.name + ' needs level ' + min + '.'); return; }
   if (isDungeonMap(c.pos.map) && c.pos.map !== d.map) { log('Leave ' + dungeonByMap(c.pos.map).name + ' first.'); return; }
-  const o = { type: 'dungeon', map: d.map, label: d.name, group: !!group, phase: c.pos.map === d.map ? 'inside' : 'travel', started: G.gameTime, kills: 0, bossKills: 0, resume: c.order && c.order.type === 'leveling' ? c.order : null };
+  const o = { type: 'dungeon', map: d.map, label: d.name, group: !!group, phase: c.pos.map === d.map ? 'inside' : 'travel', started: G.gameTime, kills: 0, bossKills: 0, resume: resume !== undefined ? resume : (c.order && ['leveling', 'questing', 'quest'].includes(c.order.type) ? c.order : null) };
   if (o.phase === 'travel') {
     o.trip = d.entrance ? planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }) : null;
     if (!o.trip) { log('No way to ' + d.name + ' found.'); return; }
@@ -382,7 +382,7 @@ function enterDungeon(c, d, o) {
   if (c.pet && rt(c).pet) { rt(c).pet.x = c.pos.x + 2; rt(c).pet.y = c.pos.y + 1; }
   o.phase = 'inside'; o.entered = G.gameTime; o.lastProgress = G.gameTime;
   log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' companions' : '') + '.');
-  if ($('follow').checked) setMap(dungeonMapAt(c.pos), false, true);
+  if (isActive(c) && $('follow').checked) setMap(dungeonMapAt(c.pos), false, true);
   save();
 }
 function leaveDungeon(c, msg) {
@@ -392,8 +392,8 @@ function leaveDungeon(c, msg) {
   r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = [];
   if (msg) log(msg);
   c.order = o && o.type === 'dungeon' && o.resume ? o.resume : null;
-  if (c.order && c.order.type === 'leveling') { c.order.mode = 'pick'; c.order.trip = null; }
-  if ($('follow').checked) goToCharacter();
+  if (c.order && c.order.type === 'leveling' && c.order.mode !== 'dgtour') { c.order.mode = 'pick'; c.order.trip = null; }
+  if (isActive(c) && $('follow').checked) goToCharacter();
   save(); renderOrder();
 }
 /* walking out: to the nearest way out (or the one given), then out through the portal to the entrance */
@@ -423,7 +423,7 @@ function dungeonPortalOut(c, d) {
   const r = rt(c);
   if (d.entrance) c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o };
   r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = [];
-  if ($('follow').checked) goToCharacter();
+  if (isActive(c) && $('follow').checked) goToCharacter();
 }
 /* a travel order to another map that starts inside a dungeon, or needs ships and flights (from orderTravel) */
 function travelCross(c, o) {
@@ -455,8 +455,44 @@ function dungeonBossesLeft(c, d) {
   return W.list.filter((m) => ids.has(m.e) && m.st !== 'dead' && !m.unreach);
 }
 /* what to go for next: the nearest boss (by the way through the dungeon), or with "kill every creature" the nearest creature */
+function dgTargetKey(x) { return x.key || (x.go ? x.e + ':' + x.i : 'm' + x.e); }
+/* what the character's quests want in here: creatures to kill (or to loot an item from), objects to use or loot */
+function dungeonQuestTargets(c, d) {
+  const mobs = new Map(), gos = new Map();
+  for (const qid in c.quests) {
+    const q = G.q.byId[qid]; if (!q) continue;
+    q.objectives.forEach((ob, i) => {
+      if (objDone(c, q, i)) return;
+      if (ob.type === 'Kill' || ob.type === 'Use/Interact') { if (ob.id < 0) gos.set(-ob.id, [q.id, i, 'use']); else mobs.set(ob.id, [q.id, i]); }
+      else if (ob.type === 'Collect') { for (const [e] of G.q.itemSrc[ob.id] || []) mobs.set(+e, [q.id, i]); for (const [e] of G.q.goSrc[ob.id] || []) gos.set(+e, [q.id, i, 'loot']); }
+    });
+  }
+  const W = ensureWorld(d.map); const out = [];
+  for (const m of W.list) if (m.st === 'alive' && !m.unreach && mobs.has(m.e) && attackable(m, c)) out.push(m);
+  // quest givers and turn-ins in here (an NPC or an object, like a corpse or a tablet)
+  const at = (s) => { if (s.obj) { const o = objSpawns(s.e)[s.i]; return o ? o[3] : null; } const m = W.list.find((x) => x.e === s.e && Math.hypot(x.hx - s.x, x.hy - s.y) < 3); return m ? m.z : null; };
+  for (const qid in c.quests) {
+    const q = G.q.byId[qid]; if (!q || !questDone(c, q)) continue;
+    for (const s of giverSpawns(q.turnin)) if (s.map === d.map) { out.push({ npc: 'turn', q, x: s.x, y: s.y, z: at(s), st: 'alive', info: [0, spotName(s)], key: 't' + q.id }); break; }
+  }
+  if (Object.keys(c.quests).length < 20) for (const { q, s } of (G.q.giverPts && G.q.giverPts[d.map]) || []) {
+    if (out.some((x) => x.npc === 'pick' && x.q === q) || !questAvailable(c, q) || questSupport(q) || q.level > c.level + 4 || !dungeonQuestOk(c, q, false) || !questDoable(c, q, {})) continue;
+    out.push({ npc: 'pick', q, x: s.x, y: s.y, z: at(s), st: 'alive', info: [0, spotName(s)], key: 'p' + q.id });
+  }
+  for (const [e, qi] of gos) objSpawns(e).forEach((s, idx) => { if (s[0] === d.map && goFree(e, idx)) out.push({ go: true, e, i: idx, x: s[1], y: s[2], z: s[3], st: 'alive', info: [0, objName(e)], qi }); });
+  return out;
+}
 function dungeonNext(c, d, o) {
   const W = ensureWorld(d.map); const full = G.state.settings.dgFullClear;
+  // quests first (bosses are often quest targets anyway)
+  const qc = dungeonQuestTargets(c, d).filter((x) => !(o.qSkip && o.qSkip.includes(dgTargetKey(x))));
+  if (qc.length) {
+    qc.sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
+    let best = null, bd = Infinity; for (const m of qc.slice(0, 8)) { const dd = dungeonReach(c, m); if (dd < bd) { bd = dd; best = m; } }
+    if (best) return best;
+    if (o.questRun) return qc[0];
+  }
+  if (o.questRun && !full) return null;
   const cand = full ? W.list.filter((m) => m.st === 'alive' && !m.unreach && attackable(m, c) && !(m.info && (m.info[5] === 8 || m.info[5] === 11))) : dungeonBossesLeft(c, d).filter((m) => m.st === 'alive');
   if (!cand.length) return null;
   cand.sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
@@ -510,14 +546,26 @@ function updateDungeon(c, o, dt) {
   if (!o.target || o.target.st === 'dead' || o.target.unreach) {
     if (o.target && o.target.st === 'dead') o.lastProgress = G.gameTime;
     o.target = dungeonNext(c, d, o);
-    if (!o.target) { orderLeaveDungeon(c, null, d.name + ' cleared: ' + o.bossKills + ' bosses, ' + o.kills + ' creatures.'); return; }
+    if (!o.target) { orderLeaveDungeon(c, null, o.questRun ? 'Quest work in ' + d.name + ' done (' + o.kills + ' creatures).' : d.name + ' cleared: ' + o.bossKills + ' bosses, ' + o.kills + ' creatures.'); return; }
     o.since = G.gameTime; o.bestD = Infinity;
   }
   // stuck = no fight and no step closer for 4 minutes
   // stuck = no fight and no walking for 3 minutes (or 15 minutes on one target)
   if (!o.lastPos || Math.hypot(c.pos.x - o.lastPos.x, c.pos.y - o.lastPos.y) > 8 || (r.threats && r.threats.length) || r.resting) { o.since = G.gameTime; o.lastPos = { x: c.pos.x, y: c.pos.y }; }
   if (!o.targetSince || o.targetFor !== o.target || o.killsAt !== o.kills) { o.targetFor = o.target; o.targetSince = G.gameTime; o.killsAt = o.kills; }
-  if (G.gameTime - (o.since || 0) > 180 || (G.gameTime - o.targetSince > 900 && !(r.threats && r.threats.length))) { o.target.unreach = true; log('Cannot get to ' + (o.target.info ? o.target.info[1] : 'a creature') + ' - skipping it.'); o.target = null; return; }
+  if (G.gameTime - (o.since || 0) > 180 || (G.gameTime - o.targetSince > 900 && !(r.threats && r.threats.length))) { o.target.unreach = true; if (o.target.go || o.target.npc) (o.qSkip = o.qSkip || []).push(dgTargetKey(o.target)); log('Cannot get to ' + (o.target.info ? o.target.info[1] : 'a creature') + ' - skipping it.'); o.target = null; return; }
+  if (o.target.npc) {       // a quest giver or turn-in in here
+    const t = o.target;
+    if (!goTo(c, t.x, t.y, 3, t.z)) { if (r.blocked) { r.blocked = false; (o.qSkip = o.qSkip || []).push(dgTargetKey(t)); o.target = null; } return; }
+    startInteract(c, (t.npc === 'pick' ? 'Talking to ' : 'Turning in at ') + t.info[1], () => { t.st = 'dead'; if (t.npc === 'pick') { if (questAvailable(c, t.q)) acceptQuest(c, t.q); } else if (c.quests[t.q.id] && questDone(c, t.q)) turnInQuest(c, t.q); });
+    return;
+  }
+  if (o.target.go) {        // a quest object: walk to it and use it
+    const t = o.target; if (!goFree(t.e, t.i)) { o.target = null; return; }
+    if (!goTo(c, t.x, t.y, 3, t.z)) { if (r.blocked) { r.blocked = false; (o.qSkip = o.qSkip || []).push(dgTargetKey(t)); o.target = null; } return; }
+    startInteract(c, 'Using ' + objName(t.e), () => { useGo(t.e, t.i); t.st = 'dead'; const q = G.q.byId[t.qi[0]]; if (t.qi[2] === 'loot') lootGo(c, t.e); else if (q) credit(c, q, t.qi[1]); });
+    return;
+  }
   const st = approach(c, o.target); if (st === 'gone') { if (o.target.st === 'alive') o.target.banUntil = 0; o.target = null; }
 }
 /* creatures in a dungeon: no respawn while the instance lasts; companions share the experience */

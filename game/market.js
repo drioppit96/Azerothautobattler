@@ -95,11 +95,8 @@ function updateNpcOrder(c, o) {
   }
   c.order = o.resume || null; if (c.order) { c.order.wait = 0; c.order.noSell = false; }
   collectMail(c, true);
-  if (o.kind === 'ah') { rt(c).ahVisit = G.gameTime; if (o.auto) ahAutoVisit(c); }
-  if (o.kind === 'bank' && o.auto && G.state.settings.bankMats) bankDepositMats(c, true);
   renderOrder(); save();
-  if (!o.auto && !G.headless) openSheet(o.kind === 'bank' ? 'bank' : 'ah');
-  if (o.auto && c.order && (rt(c).bagFull || bagFree(c) <= 0)) bagsFull(c, c.order);
+  if (!G.headless && isActive(c)) openSheet(o.kind === 'bank' ? 'bank' : 'ah');
 }
 function npcOrderText(c, o) { return { t: (o.kind === 'ah' ? 'Auction house: ' : o.kind === 'bank' ? 'Bank: ' : 'Mail: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'walking there' }; }
 
@@ -287,68 +284,6 @@ function collectMail(c, quiet) {
   save(); refreshGear(); return gold || items;
 }
 
-/* ------------------------------------------------------------------ automatic use while leveling */
-function ahSettings() { const s = G.state.settings; if (s.ahAuto == null) s.ahAuto = true; if (s.ahMin == null) s.ahMin = 2; if (s.ahBuyGear == null) s.ahBuyGear = true; if (s.ahBudget == null) s.ahBudget = 25; return s; }
-/* worth more at the auction house than at a vendor (by the factor in the settings, and at least 20 silver) */
-function ahWorth(c, inst) {
-  const s = ahSettings(); if (!s.ahAuto || !ahSellable(inst)) return false;
-  const k = charSide(c); const v = marketPrice(inst.id, k) * inst.n * (1 - AH_CUT[k]); const vend = itemSell(inst.id) * inst.n;
-  return v >= vend * (s.ahMin || 2) && v - vend >= Math.max(100, c.level * 25);
-}
-/* kept out of the junk while leveling (sold at the auction house instead) */
-function ahKeep(c, id) { const r = rt(c); if (r.ahDump || !ahSettings().ahAuto) return false; const inst = c.bags.find((x) => x.id === id) || { id, n: 1 }; return ahWorth(c, inst); }
-function ahAutoVisit(c) {
-  const s = ahSettings(); const v = auctioneerNear(c, 12); if (!v) return; const k = v.side; rt(c).ahDump = false;
-  // sell: what is worth it and not needed
-  let listed = 0;
-  for (let i = c.bags.length - 1; i >= 0; i--) {
-    const inst = c.bags[i]; const it = itemRow(inst.id); if (!it) continue;
-    if (!ahWorth(c, inst) || questWants(c, inst.id) || (c.prof && profKeeps(c, inst.id)) || (typeof consKeep === 'function' && consKeep(c, inst.id))) continue;
-    if (it.sl && it.sl.length && (upgradeFor(c, inst) || ((it.rl || 0) > c.level && (it.q || 0) >= 2 && (it.rl || 0) <= c.level + 3))) continue;
-    const unit = Math.max(itemSell(inst.id) + 1, Math.round(marketPrice(inst.id, k) * 0.97));
-    if (ahList(c, i, unit, inst.n > 1 || itemStack(inst.id) > 1 ? 8 : 24, k, true)) listed++;
-  }
-  if (listed) log('Put ' + listed + ' auction' + (listed > 1 ? 's' : '') + ' up at the auction house.');
-  if (s.ahBuyGear) ahBuyUpgrades(c, k, c.gold * (s.ahBudget || 25) / 100);
-}
-/* gear in the market for the character's level that beats what it wears */
-function ahGearIndex() {
-  if (G.ahGear) return G.ahGear; const by = {};
-  for (const id in G.d.items.items) { const it = G.d.items.items[id]; if (!it.sl || !it.sl.length || it.c === 1 || it.bo === 1 || it.bo === 4 || (it.q || 0) < 1) continue; const L = it.rl || 1; (by[L] = by[L] || []).push(+id); }
-  return (G.ahGear = by);
-}
-function ahBuyUpgrades(c, k, budget) {
-  const idx = ahGearIndex(); const cand = [];
-  for (let L = Math.max(1, c.level - 6); L <= c.level; L++) for (const id of idx[L] || []) {
-    if (canEquip(c, id)) continue;
-    for (const x of listings(id, k)) { const cost = x.unit * x.n; if (cost > budget) continue; const inst = makeInst(id, 1); if (x.rp) inst.rp = x.rp; if (!upgradeFor(c, inst)) continue; cand.push({ x, inst, d: equipDelta(c, inst), cost }); }
-  }
-  cand.sort((a, b) => b.d / Math.sqrt(b.cost) - a.d / Math.sqrt(a.cost)); let bought = 0; const slots = new Set();
-  for (const q of cand) {
-    if (bought >= 3 || bagFree(c) <= 0) break; const sl = (itemRow(q.inst.id).sl || [])[0]; if (slots.has(sl)) continue;
-    if (q.cost > budget || !upgradeFor(c, q.inst)) continue;
-    if (ahBuy(c, q.inst.id, q.x.i, k)) { budget -= q.cost; bought++; slots.add(sl); autoEquip(c); }
-  }
-}
-/* while leveling: passing by an auction house with something to sell or mail waiting - drop in */
-function ahPassBy(c) {
-  const o = c.order; const s = ahSettings(); if (!s.ahAuto || !o || o.type !== 'leveling' || (rt(c).threats || []).length) return false;
-  const r = rt(c); if (G.gameTime - (r.ahLook || -1e9) < 20) return false; r.ahLook = G.gameTime;
-  if (mailWaiting(c) && npcNear(c, mailboxes(), 25)) collectMail(c, true);           // a mailbox on the way: pick up the mail
-  if (G.gameTime - (r.ahVisit || -1e9) < 1800) return false;
-  const v = auctioneerNear(c, 160); if (!v) return false;
-  if (!mailWaiting(c) && !c.bags.some((x) => ahWorth(c, x))) { r.ahVisit = G.gameTime - 1200; return false; }
-  log('Passing the ' + v.house.n + ' auction house - dropping in.'); return orderNpc(c, 'ah', true, o);
-}
-/* bags are full while leveling: an auction house close by takes the valuables first */
-function ahBagsFull(c, o) {
-  const s = ahSettings(); const r = rt(c); if (!s.ahAuto) return false;
-  const worth = c.bags.filter((x) => ahWorth(c, x)).length; if (!worth) return false;
-  const near = auctioneers().filter((v) => v.map === c.pos.map && npcUsable(c, v) && Math.hypot(v.x - c.pos.x, v.y - c.pos.y) < 900);
-  if (!near.length || G.gameTime - (r.ahVisit || -1e9) < 600) { r.ahDump = true; return false; }     // too far: the vendor takes them this time
-  log('Bags are full - taking ' + worth + ' valuable item' + (worth > 1 ? 's' : '') + ' to the auction house.'); return orderNpc(c, 'ah', true, o);
-}
-
 /* ------------------------------------------------------------------ bank */
 function bankOf(c) { if (!c.bank) c.bank = { items: [], bags: [], slots: 0 }; return c.bank; }
 function bankCapacity(c) { const b = bankOf(c); let n = BANK_SLOTS; for (const x of b.bags) if (x) n += (itemRow(x.id) || {}).cs || 0; return n; }
@@ -397,8 +332,8 @@ function ahSearchList() {
   return (G.ahAll = out);
 }
 function ahHtml(c) {
-  ahSettings(); const v = auctioneerNear(c); const mailN = mailWaiting(c);
-  const subs = [['browse', 'Browse'], ['sell', 'Sell'], ['mine', 'My auctions (' + market().auctions.filter((a) => a.cid === c.id).length + ')'], ['mail', 'Mail' + (mailN ? ' (' + mailN + ')' : '')], ['auto', 'Automatic']];
+  const v = auctioneerNear(c); const mailN = mailWaiting(c);
+  const subs = [['browse', 'Browse'], ['sell', 'Sell'], ['mine', 'My auctions (' + market().auctions.filter((a) => a.cid === c.id).length + ')'], ['mail', 'Mail' + (mailN ? ' (' + mailN + ')' : '')]];
   let h = '<div class="ah">';
   if (!v) {
     const near = mailNear(c);
@@ -410,7 +345,7 @@ function ahHtml(c) {
   else if (AHUI.sub === 'sell') h += v ? ahSellHtml(c, k) : '<div class="muted small">Selling needs an auctioneer.</div>';
   else if (AHUI.sub === 'mine') h += ahMineHtml(c);
   else if (AHUI.sub === 'mail') h += ahMailHtml(c);
-  else h += ahAutoHtml(c);
+  else h += ahMailHtml(c);
   return h + '</div>';
 }
 function ahRow(c, id, inner, extra) {
@@ -420,7 +355,7 @@ function ahBrowseHtml(c, k) {
   let h = '<div class="ahsearch"><input type="text" id="ahq" placeholder="Search by name" value="' + esc(AHUI.q) + '"><select id="ahcat">' + AH_CATS.map(([v, t]) => '<option value="' + v + '"' + (AHUI.cat === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
     '<input type="number" id="ahlmin" placeholder="Lvl" min="0" max="60" value="' + esc(AHUI.lmin) + '"><input type="number" id="ahlmax" placeholder="to" min="0" max="60" value="' + esc(AHUI.lmax) + '">' +
     '<label class="chk"><input type="checkbox" id="ahusable"' + (AHUI.usable ? ' checked' : '') + '> Usable</label><button class="act" data-ahsearch="1">Search</button></div>';
-  if (AHUI.res == null) return h + '<div class="muted small">Search for an item, or pick a category and press Search.</div>';
+  if (AHUI.res == null) return h + '<div class="muted small">Search for an item, or pick a category and press Search.</div><div class="sgroup small muted" style="margin-top:10px">The market is simulated: prices come from the vendor price, how rare an item is and how many recipes need it. Selling a lot of one thing lowers its price for a while, buying raises it. Your auctions sell over time - cheaper ones faster - and the money comes by mail. The Horde and the Alliance each have one market; Booty Bay, Gadgetzan and Everlook are neutral and take 15%.</div>';
   const res = AHUI.res; if (!res.length) return h + '<div class="muted small">Nothing on offer right now. Other sellers come and go every two hours.</div>';
   h += '<div class="small muted" style="margin:4px 0">' + res.length + (res.length >= 60 ? '+' : '') + ' items on offer. Click one to see the auctions.</div><div class="ahlist">';
   for (const r of res) {
@@ -475,16 +410,6 @@ function ahMailHtml(c) {
   for (const x of box) h += '<div class="ahauc">' + (x.inst ? iconHtml(x.inst) : '<span class="sic"></span>') + '<span class="aname">' + esc(x.sub) + '<br><span class="muted small">' + esc(x.from) + (x.t > now ? ' &middot; arrives in ' + fmtTime(x.t - now) : '') + (x.note ? ' &middot; ' + esc(x.note) : '') + '</span></span><span class="small">' + (x.gold ? moneyHtml(x.gold) : '') + '</span></div>';
   return h;
 }
-function ahAutoHtml(c) {
-  const s = ahSettings();
-  return '<div class="sgroup"><h5>While leveling</h5>' +
-    '<label class="chk"><input type="checkbox" data-ahset="ahAuto"' + (s.ahAuto ? ' checked' : '') + '> Use the auction house: keep valuable loot instead of vendoring it, and sell it when passing an auction house (or when the bags are full and one is close)</label>' +
-    '<div class="rgrid"><label>Only when it is worth at least</label><span><input type="number" data-ahnum="ahMin" min="1" max="20" step="0.5" value="' + s.ahMin + '"> x the vendor price</span></div>' +
-    '<label class="chk"><input type="checkbox" data-ahset="ahBuyGear"' + (s.ahBuyGear ? ' checked' : '') + '> Buy gear upgrades at the auction house</label>' +
-    '<div class="rgrid"><label>Spend at most</label><span><input type="number" data-ahnum="ahBudget" min="0" max="100" step="5" value="' + s.ahBudget + '"> % of the money per visit</span></div>' +
-    '<label class="chk"><input type="checkbox" data-ahset="bankMats"' + (s.bankMats ? ' checked' : '') + '> At the bank: put the trade goods away</label></div>' +
-    '<div class="sgroup small muted">The market is simulated: prices come from the vendor price, how rare an item is and how many recipes need it. Selling a lot of one thing lowers its price for a while, buying raises it. Auctions sell over time - cheaper ones faster. The Horde and the Alliance each have one market; Booty Bay, Gadgetzan and Everlook are neutral and take 15%.</div>';
-}
 function ahClick(e) {
   const c = active(); const t = e.target; const v = auctioneerNear(c); const k = v ? v.side : charSide(c);
   const q = (sel) => t.closest(sel);
@@ -508,8 +433,6 @@ function ahReadForm() {
 }
 function ahChange(e) {
   const t = e.target;
-  if (t.dataset.ahset) { G.state.settings[t.dataset.ahset] = t.checked; save(); return true; }
-  if (t.dataset.ahnum) { G.state.settings[t.dataset.ahnum] = Math.max(0, +t.value || 0); save(); return true; }
   if (['ahg', 'ahs', 'ahc', 'ahh'].includes(t.id)) { ahReadForm(); renderSheet(); return true; }
   if (['ahcat', 'ahusable'].includes(t.id)) { ahReadForm(); return true; }
   return false;

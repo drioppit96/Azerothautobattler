@@ -279,6 +279,7 @@ function updateLeveling(c, o, dt) {
     updateGrind(c, o.grind, dt); if (c.order !== o && c.order && c.order.type !== 'vendor') c.order = o;
     return;
   }
+  if (o.mode === 'dgtour') { updateDungeonTour(c, o, dt); return; }
   if (o.mode === 'pick' && c.prof && profAutoTrain(c, o)) return;
   if (o.mode === 'pick') { levelingPick(c, o); return; }
   // questing in the chosen zone (zone questing logic; calls levelingIdle when the zone has nothing for now)
@@ -287,6 +288,7 @@ function updateLeveling(c, o, dt) {
 }
 function levelingPick(c, o) {
   if (G.gameTime - (o.recheckP || -1e9) > 60) { o.recheckP = G.gameTime; abandonStale(c); }
+  if (dungeonTourPick(c, o)) return;
   const choices = zoneChoices(c, o).filter((z) => !(o.avoid && o.avoid[z.zone] >= c.level));
   const cur = choices.find((z) => z.zone === o.zones[0]);
   let pick = choices[0];
@@ -328,7 +330,66 @@ function abandonStale(c) {
     if (c.level - q.level >= 8 || questSupport(q)) { log('Abandoned "' + q.title + '" (' + (questSupport(q) || 'too low level now') + ').'); delete c.quests[id]; }
   }
 }
+/* dungeon quests for this level: pick them up in town, run the dungeon (with a group), turn them in */
+function dungeonTourPick(c, o) {
+  if (G.state.settings.dungeonQuests === false || typeof dungeonList !== 'function') return false;
+  o.dgDone = o.dgDone || {}; if (G.gameTime - (o.dgLook || -1e9) < 120) return false; o.dgLook = G.gameTime;
+  let best = null;
+  for (const d of dungeonList()) {
+    if (d.kind === 'raid' || !d.entrance || d.entrance.map !== c.pos.map || c.level < d.lmin || c.level >= (d.lmax || d.lmin + 8)) continue;
+    if (o.dgDone[d.map] != null && o.dgDone[d.map] + 3 > c.level) continue;          // once every few levels
+    const qs = [];
+    for (const p of questPool(c)) {
+      const q = p.q; if (questDungeon(q) !== d) continue;
+      if (!questOpenFor(c, q, o) || !questDoable(c, q, o) || q.level > c.level + 3 || q.min_level > c.level) continue;
+      if (!p.pts.some((s) => s.map === c.pos.map)) continue;
+      qs.push(q.id);
+    }
+    for (const id in c.quests) { const q = G.q.byId[id]; if (q && questDungeon(q) === d && !qs.includes(q.id)) qs.push(q.id); }
+    if (qs.length >= 2 && (!best || qs.length > best.qs.length)) best = { d, qs };
+  }
+  if (!best) return false;
+  o.tour = { map: best.d.map, qs: best.qs, phase: 'pickup', runs: 0 }; o.mode = 'dgtour'; o.fq = null; o.wt = null; o.trip = null;
+  log('Dungeon quests in ' + best.d.name + ': ' + best.qs.map((id) => '"' + G.q.byId[id].title + '"').join(', ') + ' - picking them up, then going in' + (G.state.settings.dungeonSolo ? '' : ' with a group') + '.');
+  return true;
+}
+function updateDungeonTour(c, o) {
+  const T = o.tour; const d = T && dungeonByMap(T.map); const r = rt(c);
+  const end = (msg) => { if (msg) log(msg); o.dgDone = o.dgDone || {}; if (T) o.dgDone[T.map] = c.level; o.tour = null; o.mode = 'pick'; o.fq = null; o.wt = null; };
+  if (!d) { end(); return; }
+  if (r.bagFull || bagFree(c) <= 0) { bagsFull(c, o); return; }
+  T.qs = T.qs.filter((id) => !c.done[id] && G.q.byId[id] && (c.quests[id] || questAvailable(c, G.q.byId[id])));
+  if (!T.qs.length) { end('Dungeon quests of ' + d.name + ' finished.'); return; }
+  if (T.phase === 'pickup') {
+    const id = T.qs.find((x) => !c.quests[x]); if (id == null) { T.phase = 'run'; return; }
+    const res = questStep(c, G.q.byId[id], o);
+    if (typeof res === 'string' && res[0] === '!') { log(res.slice(1) + ' - leaving it out.'); T.qs = T.qs.filter((x) => x !== id); }
+    else if (res && res.dungeon) T.qs = T.qs.filter((x) => x !== id);       // given inside: picked up on the run
+    return;
+  }
+  if (T.phase === 'run') {
+    const need = T.qs.filter((id) => c.quests[id] && (!questDone(c, G.q.byId[id]) || questMeta(G.q.byId[id]).turnDungeon === T.map));
+    if (need.length && T.runs < 2) {
+      T.runs++; log('Into ' + d.name + (T.runs > 1 ? ' again' : '') + ' for ' + need.length + ' quest' + (need.length > 1 ? 's' : '') + '.');
+      orderDungeon(c, d, G.state.settings.dungeonSolo !== true, o);
+      if (c.order && c.order.type === 'dungeon') c.order.questRun = true; else end('Could not go into ' + d.name + '.');
+      return;
+    }
+    T.phase = 'turnin'; return;
+  }
+  // quests picked up inside (a follow-up from a corpse or a tablet) are turned in on the way too
+  for (const x in c.quests) { const q = G.q.byId[x]; if (q && !T.qs.includes(q.id) && questMeta(q).giverDungeon === T.map && questDone(c, q)) T.qs.push(q.id); }
+  let id = null, bd = Infinity;            // the nearest turn-in first
+  for (const x of T.qs) { const q = G.q.byId[x]; if (!c.quests[x] || !questDone(c, q)) continue; const s = nearestOf(c, giverSpawns(q.turnin)); const dd = s ? s.d : 1e7; if (dd < bd) { bd = dd; id = x; } }
+  if (T.cur && T.qs.includes(T.cur) && c.quests[T.cur] && questDone(c, G.q.byId[T.cur])) id = T.cur; T.cur = id;
+  if (id == null) { end(T.qs.some((x) => c.quests[x]) ? 'Could not finish every dungeon quest of ' + d.name + '.' : 'Dungeon quests of ' + d.name + ' finished.'); return; }
+  const res = questStep(c, G.q.byId[id], o);
+  if (res === 'done') o.fq = null;
+  else if (typeof res === 'string' && res[0] === '!') { log(res.slice(1)); T.qs = T.qs.filter((x) => x !== id); }
+  else if (res && res.dungeon) T.qs = T.qs.filter((x) => x !== id);
+}
 function levelingText(c, o) {
+  if (o.mode === 'dgtour' && o.tour) { const d = dungeonByMap(o.tour.map); return { t: 'Level up: dungeon quests - ' + (d ? d.name : ''), d: (o.tour.phase === 'pickup' ? 'picking up ' : o.tour.phase === 'turnin' ? 'turning in ' : 'going in ') + (o.phase ? '- ' + o.phase : '') + (o.where ? ' - ' + o.where : '') }; }
   if (o.mode === 'travel') return { t: 'Level up: travelling to ' + (o.afterTrip === 'grind' ? 'a grinding spot' : o.zones[0] || '...'), d: tripText(o.trip) };
   if (o.mode === 'grind') return { t: 'Level up: grinding', d: o.grind ? o.grind.label + ' (kills ' + (o.grind.kills || 0) + ')' : '' };
   if (o.mode === 'pick') return { t: 'Level up', d: 'choosing the next zone' };

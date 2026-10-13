@@ -99,7 +99,6 @@ function isJunk(c, id) {
   if (G.state.settings.sellAll !== false && c.order && (c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling')) && r) {
     if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion' || useInfo(id).kind === 'drink')) return false;
     if (typeof consKeep === 'function' && consKeep(c, id)) return false;
-    if (typeof ahKeep === 'function' && ahKeep(c, id)) return false;
     if (r.c === 6 && c.cls === 3) return false;                       // arrows and bullets
     if (r.c === 1) { if (!r.cs || r.bf) return true; const eq = c.bagSlots.filter(Boolean).map((b) => (itemRow(b.id) || {}).cs || 0); return eq.length >= 4 && r.cs <= Math.min(...eq); }
     if (r.sl && r.sl.length) return !upgradeFor(c, { id, n: 1 }) && !((r.rl || 0) > c.level && (r.q || 0) >= 2);
@@ -112,7 +111,6 @@ function junkCount(c) { let n = 0; for (const s of c.bags) if (isJunk(c, s.id)) 
 function bagsFull(c, o) {
   const r = rt(c);
   if (c.prof && !junkCount(c) && (o.type === 'leveling' || o.type === 'patrol' || o.type === 'grind' || o.type === 'questing')) { r.sellMats = true; if (junkCount(c)) log('Bags are full - selling gathered materials too.'); }
-  if ((o.type === 'leveling' || (o.resume && o.resume.type === 'leveling')) && typeof ahBagsFull === 'function' && ahBagsFull(c, o)) return true;
   if (G.state.settings.autoSellJunk && junkCount(c) && !o.noSell) {
     const v = nearestVendor(c);
     if (v) {
@@ -567,13 +565,12 @@ function updateVendor(c, o, dt) {
   }
   if (!ok) return;
   if (o.auto || G.state.settings.autoSellJunk) sellJunk(c);
-  rt(c).ahDump = false;
   const vv = vendorList().find((x) => x.e === o.e);
   if ((o.repair || G.state.settings.autoRepair) && repairCost(c)) { if (vv && vv.repair) repairAll(c); }
   autoBuyBags(c, vv); autoBuyGear(c, vv); autoBuyFood(c, vv);
   log('At ' + o.label + '.');
   c.order = o.resume || null; if (o.resume) { o.resume.wait = 0; o.resume.noSell = junkCount(c) === 0 && bagFree(c) <= 0; }
-  renderOrder(); if (!o.resume && !G.headless) openSheet('vendor');
+  renderOrder(); if (!o.resume && !G.headless && isActive(c)) openSheet('vendor');
 }
 
 /* --------------------------------------------------------------------- tooltip */

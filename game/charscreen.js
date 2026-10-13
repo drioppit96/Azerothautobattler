@@ -67,7 +67,7 @@ function charScreen(first) {
       else if (d.g != null) { st.gender = +d.g; draw(); }
       else if (d.rnd) { st.name = randomName(); draw(); }
       else if (d.close) { el.hidden = true; }
-      else if (d.play) { if (d.play !== G.state.activeId) { save(); G.state.activeId = d.play; save(); location.reload(); } else el.hidden = true; }
+      else if (d.play) { el.hidden = true; if (d.play !== G.state.activeId) switchCharacter(d.play); }
       else if (d.del) {
         const c = G.state.characters.find((x) => x.id === d.del); if (!c) return;
         if (!confirm('Delete ' + c.name + ' (level ' + c.level + ' ' + CLASS_NAMES[c.cls] + ') for good?')) return;
@@ -87,4 +87,60 @@ function charScreen(first) {
     };
     draw();
   });
+}
+
+/* ------------------------------------------------------------------ the character window (click your portrait) */
+/* every character: switch to it, or let it play on its own (Go) while you watch another one; Pause stops it where it is */
+function openCharSwitch() {
+  let el = $('charswitch');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'charswitch'; document.body.appendChild(el);
+    el.onclick = (e) => {
+      if (e.target === el) { el.hidden = true; return; }
+      const b = e.target.closest('button'); if (!b) return; const d = b.dataset; const c = d.id && G.state.characters.find((x) => x.id === d.id);
+      if (d.close) el.hidden = true;
+      else if (d.manage) { el.hidden = true; charScreen(false); }
+      else if (d.sw && c) { switchCharacter(c.id); }
+      else if (d.go && c) charGo(c);
+      else if (d.pause && c) charPause(c);
+      else if (d.allgo) for (const x of G.state.characters) if (!x.bg) charGo(x);
+      else if (d.allpause) for (const x of G.state.characters) if (x.bg) charPause(x);
+      renderCharSwitch(true);
+    };
+  }
+  el.hidden = false; renderCharSwitch(true);
+}
+function charGo(c) {
+  c.bg = true;
+  if (!c.order) { G.logCtx = c; orderLeveling(c); G.logCtx = null; }
+  G.logCtx = c; log(c.name + ' plays on its own' + (isActive(c) ? ' (also when you switch to another character).' : '.')); G.logCtx = null; save(); renderOrder(); renderQuests();
+}
+function charPause(c) {
+  c.bg = false;
+  if (isActive(c)) { stopOrder(c); log(c.name + ' stops.'); }
+  else { G.logCtx = c; log('Paused - waits here.'); G.logCtx = null; const r = rt(c); r.mv = null; }
+  save(); renderOrder(); renderQuests();
+}
+function renderCharSwitch(force) {
+  const el = $('charswitch'); if (!el || el.hidden) return;
+  if (!force && el.querySelector('button:hover')) return;          // not under the mouse pointer: a click would miss
+  const me = active(); const running = G.state.characters.filter((c) => c.bg || c === me).length;
+  let h = '<div class="cw-win"><button class="mini cs-close" data-close="1">&#10005;</button><h2>Characters</h2>';
+  for (const c of G.state.characters) {
+    const on = c === me; const t = c.order ? orderText(c) : null; const r = rt(c);
+    const where = (typeof dungeonByMap === 'function' && dungeonByMap(c.pos.map) ? dungeonByMap(c.pos.map).name : zoneNameAt(c.pos)) || 'somewhere';
+    const st = on ? (c.bg ? 'Playing - keeps going when you switch' : 'Playing') : c.bg ? (r.ghost ? 'Running (dead - on the way back)' : 'Running on its own') : 'Paused';
+    const last = G.logs && G.logs[c.id] && G.logs[c.id][0];
+    const xpNeed = (G.d.xp.levels[c.level - 1] || {}).xp_to_next || 0;
+    h += '<div class="cw-row' + (on ? ' on' : '') + '"><img src="' + racePortrait(c.race, c.gender) + '"><div class="cw-info"><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b> <span class="muted">level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</span>' +
+      (xpNeed ? '<div class="bar xp cw-xp"><i style="width:' + Math.min(100, 100 * c.xp / xpNeed) + '%"></i></div>' : '') +
+      '<div class="small"><span class="cw-st' + (c.bg || on ? ' run' : '') + '">' + st + '</span> &middot; ' + esc(where) + ' &middot; ' + moneyHtml(c.gold) + '</div>' +
+      '<div class="small muted">' + (t ? esc(t.t) + (t.d ? ' - ' + esc(t.d) : '') : 'No order') + '</div>' +
+      (last && !on ? '<div class="small muted cw-last">' + fmtTime(last[0]) + ' ' + esc(last[1]) + '</div>' : '') + '</div>' +
+      '<div class="cw-btns">' + (on ? '<span class="muted small">playing</span>' : '<button class="act" data-sw="1" data-id="' + c.id + '">Switch</button>') +
+      (c.bg ? '<button class="mini" data-pause="1" data-id="' + c.id + '">&#10074;&#10074; Pause</button>' : '<button class="mini cw-go" data-go="1" data-id="' + c.id + '" title="' + (c.order ? 'Carry on with: ' + esc(t.t) : 'Level up on its own (auto-quest)') + '">&#9654; Go</button>') + '</div></div>';
+  }
+  h += '<div class="cw-foot"><button class="mini" data-allgo="1">&#9654; All go</button><button class="mini" data-allpause="1">&#10074;&#10074; Pause all</button><button class="mini" data-manage="1">New / delete characters</button></div>' +
+    '<div class="small muted" style="margin-top:6px">Characters set to Go keep playing - questing and leveling on their own - while you watch another one. Paused ones wait where they are. ' + running + ' in the world now; each one running makes the computer work a little more.</div></div>';
+  el.innerHTML = h;
 }

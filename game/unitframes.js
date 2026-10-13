@@ -57,7 +57,8 @@ function renderUnitFrames() {
   // the character
   if (!box._me) {
     box._me = ufMake(sp, true); box._me.classList.add('ufplayer'); box.appendChild(box._me);
-    box._me.onclick = () => openSheet('char');
+    box._me.onclick = (e) => { if (e.target.closest('.ufpor')) openCharSwitch(); else openSheet('char'); };
+    box._me._por.title = 'Characters - switch, or let them play on their own';
   }
   const me = box._me;
   ufSet(me, 'img', c.race + '_' + (c.gender || 0), () => { me._img.src = '../ui/CharacterFrame/TemporaryPortrait-' + (c.gender ? 'Female' : 'Male') + '-' + (RACE_PORTRAIT[c.race] || 'Orc') + '.png'; });

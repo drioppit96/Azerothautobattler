@@ -314,7 +314,7 @@ function safeSpot(c, x, y) {
 }
 function revive(c, how) {
   const r = rt(c); r.ghost = null; delete c.resume; const s = charStats(c); c.hp = Math.round(s.maxHp * 0.5);
-  if (r.dgReturn) { c.pos = { map: r.dgReturn.map, x: r.dgReturn.x, y: r.dgReturn.y, z: r.dgReturn.z, o: c.pos.o }; r.dgReturn = null; log('Back inside.'); if ($('follow').checked) goToCharacter(); }
+  if (r.dgReturn) { c.pos = { map: r.dgReturn.map, x: r.dgReturn.x, y: r.dgReturn.y, z: r.dgReturn.z, o: c.pos.o }; r.dgReturn = null; log('Back inside.'); if (isActive(c) && $('follow').checked) goToCharacter(); }
   if (how === 'spirit') { durabilityLoss(c, 0.25); log(c.name + ' was resurrected by the spirit healer (extra 25% durability loss).'); }
   else log(c.name + ' is back among the living.');
   r.resting = true;   // catch the breath before going on
@@ -724,7 +724,6 @@ function updateChar(c, dt) {
   if (c.prof && profStep(c)) return;
   const o = c.order;
   if (!o) return;
-  if (o.type === 'leveling' && typeof ahPassBy === 'function' && ahPassBy(c)) return;
   if (o.type === 'travel') {
     if (o.cross && typeof travelCross === 'function') { const st = travelCross(c, o); if (st !== 'done') return; }
     const done = advance(c, o, dt);

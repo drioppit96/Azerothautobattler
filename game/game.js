@@ -23,10 +23,26 @@ const G = {
 function fmtTime(s) { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); }
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+/* the log: one per character (the one being simulated right now - G.logCtx - or the one you play) */
 function log(msg) {
-  const el = $('log'); const d = document.createElement('div');
+  const c = G.logCtx || (G.state && G.state.activeId ? active() : null);
+  if (c) { G.logs = G.logs || {}; const L = (G.logs[c.id] = G.logs[c.id] || []); L.unshift([G.gameTime, msg]); if (L.length > 80) L.length = 80; if (!isActive(c)) return; }
+  const el = $('log'); if (!el) return; const d = document.createElement('div');
   d.innerHTML = '<span class="t">' + fmtTime(G.gameTime) + '</span> ' + esc(msg);
   el.prepend(d); while (el.children.length > 80) el.removeChild(el.lastChild);
+}
+function renderLog() { const el = $('log'); const c = active(); if (!el || !c) return; el.innerHTML = ((G.logs && G.logs[c.id]) || []).map(([t, m]) => '<div><span class="t">' + fmtTime(t) + '</span> ' + esc(m) + '</div>').join(''); }
+function isActive(c) { return !!(c && G.state && c.id === G.state.activeId); }
+/* the characters in the world right now: the one you play and the ones set to keep playing (Go) */
+function liveChars() { const me = active(); return G.state.characters.filter((c) => c === me || c.bg); }
+function switchCharacter(id) {
+  if (!G.state.characters.some((c) => c.id === id) || id === G.state.activeId) return;
+  save(); G.state.activeId = id; const c = active();
+  G.selected = null; if (SH.open) closeSheet(); hideMenu(); if (G.routeEdit) { G.routeEdit = null; if (typeof renderRouteBar === 'function') renderRouteBar(); }
+  const uf = $('unitframes'); if (uf) uf._w = 0;
+  ensureWorld(c.pos.map); loadGrid(c.pos.map); goToCharacter();
+  renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderAbar();
+  log('Now playing ' + c.name + (c.order ? ' (' + orderText(c).t + ')' : '') + '.'); save(); renderCharSwitch();
 }
 function levelColor(mob, lvl) {
   const diff = mob - lvl;
@@ -315,7 +331,7 @@ function orderText(c) {
   if (o.type === 'travel') return { t: 'Travel to ' + o.label, d: Math.round(Math.max(0, o.total - o.done)) + ' yd left (' + o.via + ')' };
   if (o.type === 'grind') return { t: 'Grind ' + o.label, d: 'Radius ' + o.radius + ' yd' + (o.entries ? ', only ' + mobName(o.entries[0]) : '') };
   if (o.type === 'quest') return { t: 'Quest: ' + o.label, d: (o.phase || '') + (o.where ? ' - ' + o.where : '') };
-  if ((o.type === 'questing' || o.type === 'quest' || o.type === 'leveling') && o.wobj && G.q.byId[o.wobj[0]] && active().quests[o.wobj[0]] && o.phase === G.q.byId[o.wobj[0]].title) { const q = G.q.byId[o.wobj[0]]; const ob = q.objectives[o.wobj[1]]; o.where = (ob.type === 'Collect' ? 'collect ' : ob.id < 0 ? 'use ' : 'kill ') + ob.name + ' ' + progText(active(), q, o.wobj[1]); }
+  if ((o.type === 'questing' || o.type === 'quest' || o.type === 'leveling') && o.wobj && G.q.byId[o.wobj[0]] && c.quests[o.wobj[0]] && o.phase === G.q.byId[o.wobj[0]].title) { const q = G.q.byId[o.wobj[0]]; const ob = q.objectives[o.wobj[1]]; o.where = (ob.type === 'Collect' ? 'collect ' : ob.id < 0 ? 'use ' : 'kill ') + ob.name + ' ' + progText(c, q, o.wobj[1]); }
   if (o.type === 'leveling') return levelingText(c, o);
   if (o.type === 'patrol') return patrolText(c, o);
   if (o.type === 'dungeon') return dungeonText(c, o);
@@ -553,6 +569,14 @@ function draw() {
     ctx.strokeText(c.name, x, y - 22); ctx.fillText(c.name, x, y - 22); ctx.textAlign = 'start';
     const hm = charStats(c).maxHp; ctx.fillStyle = '#000'; ctx.fillRect(x - 14, y - 18, 28, 5); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 14, y - 18, 28 * Math.max(0, c.hp / hm), 5);
   }
+  // the other characters (running in the background, or waiting where they were left)
+  for (const o of G.state.characters) {
+    if (o === c || o.pos.map !== m.map || !inMap(m, o.pos.x, o.pos.y)) continue;
+    const [x, y] = w2s(o.pos.x, o.pos.y); ctx.globalAlpha = o.bg ? 1 : 0.6;
+    ctx.fillStyle = CLASS_COLOR[o.cls] || '#9fc7ff'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 11px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#cfe3ff';
+    const t = o.name + (o.bg ? '' : ' (paused)'); ctx.strokeText(t, x, y - 11); ctx.fillText(t, x, y - 11); ctx.textAlign = 'start'; ctx.globalAlpha = 1;
+  }
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
     const [x, y] = w2s(c.pos.x, c.pos.y); const r = rt(c);
     if (r.interact) { const p = Math.min(1, r.interact.t / r.interact.dur); ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y + 12, 60, 6); ctx.fillStyle = '#e8c46a'; ctx.fillRect(x - 30, y + 12, 60 * p, 6); ctx.font = '11px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff'; ctx.strokeText(r.interact.label, x, y + 30); ctx.fillText(r.interact.label, x, y + 30); ctx.textAlign = 'start'; }
@@ -693,7 +717,7 @@ function bindInput() {
     a.download = 'auto_battler_save.json'; a.click();
   };
   $('btnLoad').onclick = () => $('fileLoad').click();
-  $('btnChars').onclick = () => charScreen(false);
+  $('btnChars').onclick = () => openCharSwitch();
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
@@ -715,7 +739,8 @@ function frame(ts) {
   const sp = G.state.settings.speed;
   if (sp > 0) {
     G.acc += dt * sp;
-    const me = active(); let n = 0; while (G.acc >= STEP && n++ < 400) { G.acc -= STEP; G.gameTime += STEP; updateChar(me, STEP); worldTick(STEP); }
+    const live = liveChars(); let n = 0; const cap = Math.max(60, Math.round(400 / live.length));
+    while (G.acc >= STEP && n++ < cap) { G.acc -= STEP; G.gameTime += STEP; for (const ch of live) { G.logCtx = ch; updateChar(ch, STEP); } G.logCtx = null; worldTick(STEP); }
     if (G.acc > STEP * 40) G.acc = 0;          // the computer is too slow for this speed: drop the backlog instead of freezing
     for (const f of G.fx) f.t += dt * sp; G.fx = G.fx.filter((f) => f.t < 1.2);
   }
@@ -728,6 +753,7 @@ function frame(ts) {
     G.uiT = ts; renderChar(); renderAbar(); if (c.order) renderOrder();
     if (!G.qT || ts - G.qT > 1500) { G.qT = ts; if (!$('questCard').matches(':hover')) renderQuests(); }
     if (G.selected && G.selected.kind === 'mob') renderInfo(G.selected);
+    if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); }
   }
   requestAnimationFrame(frame);
 }
