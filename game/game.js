@@ -42,6 +42,7 @@ function switchCharacter(id) {
   const uf = $('unitframes'); if (uf) uf._w = 0;
   ensureWorld(c.pos.map); loadGrid(c.pos.map); goToCharacter();
   renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderAbar();
+  if (typeof meterReset === 'function') meterReset();
   log('Now playing ' + c.name + (c.order ? ' (' + orderText(c).t + ')' : '') + '.'); save(); renderCharSwitch();
 }
 function levelColor(mob, lvl) {
@@ -718,6 +719,7 @@ function bindInput() {
   };
   $('btnLoad').onclick = () => $('fileLoad').click();
   $('btnChars').onclick = () => openCharSwitch();
+  $('btnMeter').onclick = () => toggleMeter();
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
@@ -754,6 +756,7 @@ function frame(ts) {
     if (!G.qT || ts - G.qT > 1500) { G.qT = ts; if (!$('questCard').matches(':hover')) renderQuests(); }
     if (G.selected && G.selected.kind === 'mob') renderInfo(G.selected);
     if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); }
+    if (METER.show && (!G.mtT || ts - G.mtT > 500)) { G.mtT = ts; renderMeter(); }
   }
   requestAnimationFrame(frame);
 }
@@ -818,6 +821,7 @@ async function boot() {
     loadGrid(c.pos.map);
     setSpeed(G.state.settings.speed === undefined ? 1 : G.state.settings.speed);
     renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); bindSheet(); syncNodeToggle();
+    METER.show = !!G.state.settings.meter; renderMeter(true); syncMeterBtn();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');
     $('loading').style.display = 'none';
     requestAnimationFrame(frame);

@@ -59,7 +59,7 @@ function mobsNear(W, x, y, r, fn) {
   for (let cx = c0; cx <= c1; cx++) for (let cy = r0; cy <= r1; cy++) { const a = W.grid.get(gk(cx, cy)); if (a) for (const m of a) fn(m); }
 }
 const AGGRO_SCALE = 0.77;        // aggro ranges: 30% smaller than on the server, then 10% larger again (0.7 x 1.1)
-function aggroRadius(m, c) { return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_SCALE, 4, 32); }
+function aggroRadius(m, c) { return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_SCALE * (c.pos && typeof masteryAggro === 'function' ? masteryAggro(c) : 1), 4, 40); }
 function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
 function dangerous(m, c) {
   if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) return m.lvl - c.level >= (rt(c).party ? 8 : 5);      // dungeons are full of elites: only run from the far too strong
@@ -92,7 +92,7 @@ function gainXp(c, xp, why) {
   fx(c.pos.x, c.pos.y, '+' + xp + ' xp', '#c58cf0');
   for (;;) {
     const need = (G.d.xp.levels[c.level - 1] || {}).xp_to_next; if (!need || c.xp < need || c.level >= MAX_LEVEL) break;
-    c.xp -= need; c.level++; dirty(c); const s = charStats(c); c.hp = s.maxHp; learnAbilities(c);
+    c.xp -= need; c.level++; masteryLevelUp(c); dirty(c); const s = charStats(c); c.hp = s.maxHp; learnAbilities(c);
     if (typeof checkStarterItems === 'function') checkStarterItems(c);
     if (typeof onLevelTalents === 'function') onLevelTalents(c);
     log('*** ' + c.name + ' reached level ' + c.level + '! ***'); fx(c.pos.x, c.pos.y, 'LEVEL ' + c.level, '#ffe14d');
@@ -206,7 +206,7 @@ function mobTick(W, m, dt, now) {
         if (h.t === 'dodge' || h.t === 'parry' || h.t === 'block' || h.blocked) r.revWindow = now + 5;
         if (h.t === 'hit') {
           hitTakenTalents(c, h);
-          c.hp -= h.d; if (r.party) (r.dmgLog = r.dmgLog || []).push([now, h.d]); fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
+          c.hp -= h.d; meterTaken(c, h.d); if (r.party) (r.dmgLog = r.dmgLog || []).push([now, h.d]); fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
           if (c.cls === 1 || (c.cls === 11 && c.form === 'bear')) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
           if (r.cast && !r.cast.ch && c.cls !== 1) r.cast.t = Math.max(0, r.cast.t - 0.5);      // spell pushback
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
@@ -247,6 +247,7 @@ function killMob(c, m) {
   const name = m.info ? m.info[1] : 'creature';
   const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
   if (dg) dungeonKill(c, m);
+  masteryKill(c, m);
   log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
   lootMob(c, m);
   onKill(c, m);
@@ -265,6 +266,7 @@ function charDie(c, killer) {
   const r = rt(c);
   const dgDeath = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && dungeonDeath(c);     // inside: the body is back at the entrance
   const corpse = { map: c.pos.map, x: c.pos.x, y: c.pos.y };
+  if (!dgDeath) masteryDeath(c);
   log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + '.');
   fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30');
   const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) evade(W, m);
@@ -437,7 +439,7 @@ function playerSwing(c, m, s, w, opts) {
   let critCh = s.crit - Math.max(0, diff) * 0.2; if (opts.name === 'Overpower') critCh += 25 * talentRank(c, 'Improved Overpower');
   let crit = false; if (Math.random() * 100 < critCh) { d *= opts.yellow ? 2 + 0.1 * talentRank(c, 'Impale') : 2; crit = true; }
   d = Math.max(1, Math.round(d));
-  m.hp -= d; onMobDamaged(m); if (c.cls !== 1) addThreat(m, c, d);
+  m.hp -= d; onMobDamaged(m); if (c.cls !== 1) addThreat(m, c, d); meterDmg(c, d, opts.name || (opts.off ? 'Off hand' : 'Melee'));
   fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
   if (c.cls !== 1 && !opts.yellow) classMeleeHit(c, m, s, w, d, crit, opts);
   if (c.cls === 11 && c.form === 'bear' && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
@@ -464,7 +466,7 @@ function meleeTalentProcs(c, m, s, w, d, crit, opts) {
   const sw = (r.buffs || []).find((b) => b.sweep > 0 && b.until > G.gameTime);
   if (sw && !opts.sweep) {
     const other = attackersOf(c).find((x) => x !== m && x.hp > 0 && inMelee(c, x));
-    if (other) { sw.sweep--; other.hp -= d; onMobDamaged(other); fx(other.x, other.y, '' + d, '#ffd23a'); if (other.hp <= 0) killMob(c, other); if (sw.sweep <= 0) sw.until = 0; }
+    if (other) { sw.sweep--; other.hp -= d; onMobDamaged(other); meterDmg(c, d, 'Sweeping Strikes'); fx(other.x, other.y, '' + d, '#ffd23a'); if (other.hp <= 0) killMob(c, other); if (sw.sweep <= 0) sw.until = 0; }
   }
 }
 /* talents that react to the character being hit */
@@ -481,7 +483,7 @@ function procs(c, m, s, w, slot) {
     if (Math.random() >= ch) continue;
     const sp = spellRow(p.spell); if (!sp) continue;
     for (const e of sp.ef || []) {
-      if (e.t === 2 && m.hp > 0) { const v = Math.round(e.lo + Math.random() * Math.max(0, e.hi - e.lo)); m.hp -= v; fx(m.x, m.y, v + ' ' + sp.n, '#ff9a3c'); break; }
+      if (e.t === 2 && m.hp > 0) { const v = Math.round(e.lo + Math.random() * Math.max(0, e.hi - e.lo)); m.hp -= v; fx(m.x, m.y, v + ' ' + sp.n, '#ff9a3c'); meterDmg(c, v, sp.n); break; }
       if (e.t === 6 && e.k === 'self') { const r = rt(c); (r.buffs = r.buffs || []).push({ name: sp.n, until: G.gameTime + (sp.dur || 10000) / 1000, auras: [[e.au, e.mi, e.lo]] }); dirty(c); fx(c.pos.x, c.pos.y, sp.n, '#9fe0ff'); break; }
     }
   }
@@ -703,7 +705,8 @@ function updateChar(c, dt) {
   r.scanT -= dt;
   if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); taxiDiscover(c); if (r.equipLater && !threatsOf(c).length) autoEquip(c); }
   const threats = threatsOf(c); r.threats = threats;
-  if (threats.length && !r.inFight) r.fightStart = G.gameTime; r.inFight = threats.length > 0;
+  if (typeof meterTick === 'function' && isActive(c)) meterTick(c);
+  if (threats.length && !r.inFight) { r.fightStart = G.gameTime; masteryFightRoll(c); } r.inFight = threats.length > 0;
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
   if (c.pet) petStep(c, dt);

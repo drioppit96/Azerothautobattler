@@ -282,6 +282,7 @@ function turnInQuest(c, q) {
   const got = [];
   for (const [id, n] of q.reward_items) { addItem(c, id, n); got.push((n > 1 ? n + ' x ' : '') + itemName(id)); }
   const ch = pickReward(c, q); if (ch) { const n = (q.choice_items.find((x) => x[0] === ch) || [0, 1])[1]; addItem(c, ch, n); got.push(itemName(ch) + ' (chosen reward)'); }
+  masteryQuest(c);
   log('Quest complete: ' + q.title + '. +' + xp + ' xp' + (cash ? ', +' + money(cash) : '') + (got.length ? '. Received: ' + got.join(', ') : '') + '.');
   rt(c).bagFull = bagFree(c) <= 0;
   autoEquip(c);

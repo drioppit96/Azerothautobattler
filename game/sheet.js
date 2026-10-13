@@ -38,6 +38,7 @@ function statsHtml(c) {
   if (res.length) h += '<div class="sgroup"><h5>Resistances</h5>' + res.map((k) => statRow(k[0].toUpperCase() + k.slice(1), s.res[k])).join('') + '</div>';
   if (s.sd || s.heal || s.mp5 || s.hp5) h += '<div class="sgroup"><h5>Other</h5>' + (s.sd ? statRow('Spell damage', s.sd) : '') + (s.heal ? statRow('Healing', s.heal) : '') + (s.mp5 ? statRow('Mana / 5 s', s.mp5) : '') + (s.hp5 ? statRow('Health / 5 s', s.hp5) : '') + '</div>';
   const r = rt(c); if (r.buffs && r.buffs.length) h += '<div class="sgroup"><h5>Buffs</h5>' + r.buffs.map((x) => '<div class="small">' + esc(x.name) + ' (' + Math.ceil(x.until - G.gameTime) + 's)</div>').join('') + '</div>';
+  if (typeof masterySheetHtml === 'function') h += masterySheetHtml(c);
   h += '<div class="sgroup"><h5>Gear</h5>' + statRow('Durability', Math.round(durabilityPct(c) * 100) + '%') + statRow('Repair cost', money(repairCost(c))) + '</div>';
   return h;
 }
@@ -176,6 +177,7 @@ function bindSheet() {
     if (SH.tab === 'bank' && bankClick(e)) return;
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
+    if (typeof rotationClick === 'function' && rotationClick(e)) return;
     if (SH.tab === 'talents' && talentClick(e)) return;
     if (SH.tab === 'prof' && professionsClick(e)) return;
     const g = e.target.closest('[data-go]'); if (g) { if (g.dataset.go === 'v') orderVendor(c); else orderRepair(c); closeSheet(); return; }
@@ -256,7 +258,8 @@ function behaviourHtml(c) {
   const stances = Object.keys(STANCES).filter((n) => c.known && c.known[n]);
   if (stances.length) h += '<div class="sgroup"><h5>Stance</h5><select data-cfgs="stance">' + stances.map((n) => '<option value="' + STANCES[n] + '"' + (cfg.stance === STANCES[n] ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> <span class="small muted">Abilities that need another stance are skipped.</span></div>';
   if (typeof consumablesHtml === 'function') h += consumablesHtml(c);
-  h += '<div class="sgroup"><h5>Abilities - checked from the top, the first that fits is used</h5>';
+  h += rotationHtml(c);
+  h += '<div class="sgroup' + ((cfg.rotation || 'custom') !== 'custom' ? ' dimmed' : '') + '"><h5>' + ((cfg.rotation || 'custom') !== 'custom' ? 'My own list (not used while a ready-made rotation is chosen)' : 'Abilities - checked from the top, the first that fits is used') + '</h5>';
   if (!cfg.rules.length) h += '<div class="muted small">No abilities yet.</div>';
   cfg.rules.forEach((rule, i) => {
     const id = c.known[rule.n]; const sp = id ? spellRow(id) : null; const meta = (CLASS_META[c.cls] || {})[rule.n] || { modes: genericModes(c, sp) };
@@ -293,6 +296,7 @@ function genericModes(c, sp) {
 function behaviourChange(e) {
   const t = e.target; const c = active(); if (!c || !c.cfg) return;
   if (typeof consumablesChange === 'function' && consumablesChange(e)) return;
+  if (typeof rotationChange === 'function' && rotationChange(e)) return;
   if (t.dataset.cfg) { c.cfg[t.dataset.cfg] = +t.value; if (t.dataset.cfg === 'standAt' && c.cfg.standAt <= c.cfg.sitAt) c.cfg.standAt = Math.min(100, c.cfg.sitAt + 10); }
   else if (t.dataset.cfgs) { c.cfg[t.dataset.cfgs] = t.value; if (t.dataset.cfgs === 'stance') { dirty(c); log('Switched to ' + STANCE_NAME[t.value] + '.'); } }
   else if (t.dataset.rmode != null) { const r = c.cfg.rules[+t.dataset.rmode]; r.mode = t.value; const m = ((CLASS_META[c.cls] || {})[r.n] || {}).def || {}; if (MODE_HAS_P[r.mode] && !r.p) r.p = m.p || (r.mode === 'multi' ? 2 : r.mode === 'rage' ? 40 : 30); }
@@ -309,7 +313,7 @@ function behaviourClick(e) {
 /* ------------------------------------------------------------- ability bar on the map */
 function renderAbar() {
   const el = $('abar'); if (!el) return; const c = active(); if (!c.cfg) return; const r = rt(c);
-  const items = c.cfg.rules.filter((x) => x.mode !== 'off' && c.known[x.n]);
+  const items = rulesOf(c).filter((x) => x.mode !== 'off' && c.known[x.n]);
   let h = '';
   for (const rule of items) {
     const sp = spellRow(c.known[rule.n]); if (!sp) continue; const u = abilityUsable(c, rule.n);

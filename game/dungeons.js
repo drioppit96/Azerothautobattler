@@ -81,7 +81,7 @@ function dungeonExitClick(x) {
   G.selected = { kind: 'dungeon', d: x.d }; renderInfo(G.selected);
 }
 function drawDungeonMarks(ctx, m) {
-  if (m.dmap) { drawDungeonExits(ctx, m); return; }
+  if (m.dmap) { if (typeof drawPullPlan === 'function') drawPullPlan(ctx, m); drawDungeonExits(ctx, m); return; }
   const list = dungeonsOnMap(m); if (!list.length) return;
   const c = active(); const R = m.cont ? 7 : 10;
   ctx.save(); ctx.textAlign = 'center';
@@ -136,7 +136,7 @@ function dungeonInfoHtml(d) {
   if (!running) h += '<button class="act" data-dg="run"' + (low ? ' disabled title="Needs level ' + (d.lmin - (d.kind === 'raid' ? 0 : 3)) + '"' : '') + '>' + (here ? 'Clear it' : 'Run it') + ' with a group of ' + d.players + '</button>' +
     '<button class="mini" data-dg="solo"' + (low ? ' disabled' : '') + '>Run it alone</button>' +
     (!here && d.entrance ? '<button class="mini" data-dg="go">Travel to the entrance</button>' : '');
-  h += '</div><label class="chk"><input type="checkbox" data-dgset="dgFullClear"' + (G.state.settings.dgFullClear ? ' checked' : '') + '> Kill every creature (otherwise: the bosses and what is in the way)</label>';
+  h += '</div>' + masteryDungeonHtml(c, d) + (typeof pullPlanHtml === 'function' && d.bosses.length ? pullPlanHtml(d) : '') + '<label class="chk"><input type="checkbox" data-dgset="dgFullClear"' + (G.state.settings.dgFullClear ? ' checked' : '') + '> Kill every creature (otherwise: the bosses and what is in the way)</label>';
   return h;
 }
 /* only walk (fly, sail) to the entrance */
@@ -149,6 +149,8 @@ function dungeonTravel(c, d) {
 function dungeonInfoClick(e, d) {
   const b = e.target.closest('[data-dg],[data-dgfloor]'); const c = active();
   if (e.target.dataset && e.target.dataset.dgset) { G.state.settings[e.target.dataset.dgset] = e.target.checked; save(); return true; }
+  if (e.target.dataset && e.target.dataset.dghire) { if (e.type !== 'change') return true; G.state.settings.dgHire = e.target.value; G.dgPlan = null; save(); renderInfo(G.selected); return true; }
+  if (e.target.closest && e.target.closest('[data-dgplan]')) { G.dgPlan = { map: d.map, cid: c.id, t: G.gameTime, p: partyPlan(c, d) }; save(); renderInfo(G.selected); return true; }
   if (!b) return false;
   if (b.dataset.dgfloor != null) { openDungeon(d, d.floors[+b.dataset.dgfloor]); return true; }
   const a = b.dataset.dg;
@@ -263,9 +265,15 @@ function makeParty(c, d) {
   // a companion does at least what a player of this level does in fitting gear; a raid is in raid gear
   const L = c.level; const typical = 3 + L * 1.2 + Math.max(0, L - 50) * 8;
   const myDps = Math.max(typical, (c.cls === 1 ? (s.mhDps + s.ohDps) * red * 1.3 : classDps(c, s, 1 - red))) * (raid ? 2.5 : 1);
-  roles.forEach((role, i) => {
+  // the companions: hired from the roster (their skill and knowledge of this place decide how well they play)
+  const plan = G.dgPlan && G.dgPlan.map === d.map && G.dgPlan.cid === c.id && G.dgPlan.t > G.gameTime - 900 ? G.dgPlan.p : partyPlan(c, d); G.dgPlan = null;
+  if (plan.fee) { const pay = Math.min(plan.fee, c.gold); c.gold -= pay; log('Hired ' + plan.members.length + ' companion' + (plan.members.length > 1 ? 's' : '') + ' for ' + money(pay) + '.'); }
+  else if (plan.members.length) log(plan.members.length + ' companions come along for free (first-timers).');
+  plan.members.forEach((x, i) => {
+    const role = x.role; const mm = x.m; const ex = execLevel(mm, d.map), aw = awareLevel(mm, d.map); const eff = 0.65 + 0.35 * ex / 10;
     const hp = Math.round(s.maxHp * (role === 'tank' ? 1.7 : role === 'healer' ? 0.95 : 1.05) * (raid ? 1.6 : 1));
-    out.push({ id: 'g' + i, comp: true, role, name: DG_NAMES[i % DG_NAMES.length] + (i >= DG_NAMES.length ? ' ' + (i / DG_NAMES.length | 0) : ''), maxhp: hp, hp, dps: myDps * (role === 'dps' ? 1.0 : role === 'tank' ? 0.55 : 0.15), armorRed: role === 'tank' ? 0.55 : 0.2,
+    out.push({ id: 'g' + i, rid: mm.id, cls: mm.cls, ex, aw, thr: role === 'tank' ? 3 * (0.7 + 0.3 * ex / 10) : role === 'healer' ? 0.5 : 0.55 + 0.35 * (1 - aw / 10),
+      comp: true, role, name: mm.name, maxhp: hp, hp, dps: myDps * (role === 'dps' ? 1.0 : role === 'tank' ? 0.55 : 0.15) * eff, armorRed: role === 'tank' ? 0.55 : 0.2,
       x: c.pos.x + Math.cos(i * 2.1) * 3, y: c.pos.y + Math.sin(i * 2.1) * 3, swing: Math.random() * 2, cast: 0, dead: false, taunt: 0 });
   });
   rt(c).party = out; rt(c).dmgLog = [];
@@ -279,11 +287,11 @@ function mobVictimKey(m, c) {
   if (m.gThr) for (const id in m.gThr) { const u = partyUnit(c, id); if (u && !u.dead && m.gThr[id] > best * 1.1) { key = id; best = m.gThr[id]; } }
   return key;
 }
-function gThreat(m, u, v) { m.gThr = m.gThr || {}; m.gThr[u.id] = (m.gThr[u.id] || 0) + v * (u.role === 'tank' ? 3 : u.role === 'healer' ? 0.5 : 0.7); }
+function gThreat(m, u, v) { m.gThr = m.gThr || {}; m.gThr[u.id] = (m.gThr[u.id] || 0) + v * (u.thr || (u.role === 'tank' ? 3 : u.role === 'healer' ? 0.5 : 0.7)); }
 function compTakeHit(c, u, m, d) {
   d = Math.max(1, Math.round(d * (1 - u.armorRed)));
   if (Math.random() < (u.role === 'tank' ? 0.25 : 0.08)) { fx(u.x, u.y, u.role === 'tank' ? 'parry' : 'dodge', '#cfc6b0'); return; }
-  u.hp -= d; fx(u.x, u.y, '-' + d, '#ff9a8a'); const r = rt(c); (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
+  u.hp -= d; meterGroup(c, u, 'taken', d); fx(u.x, u.y, '-' + d, '#ff9a8a'); const r = rt(c); (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
   if (u.hp <= 0) { u.hp = 0; u.dead = true; u.deadAt = G.gameTime; log(u.name + ' (' + u.role + ') has died.'); for (const x of threatsOf(c)) if (x.gThr) delete x.gThr[u.id]; }
 }
 function partyStep(c, dt) {
@@ -318,9 +326,12 @@ function partyStep(c, dt) {
       for (const o of p) if (!o.dead && o.hp / o.maxhp < low) { tgt = o; low = o.hp / o.maxhp; }
       if (petAlive(c) && c.pet.hp / c.pet.maxhp < low) { tgt = 'pet'; }
       if (!tgt) return;
-      u.cast = 2.5;
+      const ux = (u.ex == null ? 5 : u.ex) / 10;
+      if (Math.random() < 0.15 * (1 - ux)) { const alive = p.filter((o) => !o.dead); tgt = alive[Math.floor(Math.random() * alive.length)] || tgt; }      // healed the wrong one
+      u.cast = 2.5 + (0.2 + 1.8 * (1 - ux)) * Math.random();
       const v = Math.round(Math.max(12 + c.level * 4.5, inc * 2.5 * 1.25 / healers) * rnd(0.9, 1.1));
-      if (tgt === 'c') healSelf(c, v); else if (tgt === 'pet') c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); else { tgt.hp = Math.min(tgt.maxhp, tgt.hp + v); fx(tgt.x, tgt.y, '+' + v, '#5ee07a'); }
+      meterGroup(c, u, 'heal', tgt === 'c' ? Math.min(v, charStats(c).maxHp - c.hp) : tgt === 'pet' ? Math.min(v, c.pet.maxhp - c.pet.hp) : Math.min(v, tgt.maxhp - tgt.hp), 'Heals');
+      if (tgt === 'c') { const hp0 = c.hp; c.hp = Math.min(charStats(c).maxHp, c.hp + v); fx(c.pos.x, c.pos.y, '+' + Math.round(c.hp - hp0), '#5ee07a'); } else if (tgt === 'pet') c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); else { tgt.hp = Math.min(tgt.maxhp, tgt.hp + v); fx(tgt.x, tgt.y, '+' + v, '#5ee07a'); }
       for (const m of threats) gThreat(m, u, v * 0.5 / threats.length);
       return;
     }
@@ -329,7 +340,7 @@ function partyStep(c, dt) {
     if (u.role === 'tank') {
       const loose = threats.filter((x) => { const k = mobVictimKey(x, c); const v = partyUnit(c, k); return !(v && v.role === 'tank'); });
       m = loose.sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y))[0] || threats.find((x) => mobVictimKey(x, c) === u.id) || r.tgt;
-      if (m && mobVictimKey(m, c) !== u.id && u.taunt <= now && Math.hypot(m.x - u.x, m.y - u.y) < 30) {
+      if (m && mobVictimKey(m, c) !== u.id && u.taunt <= now && Math.hypot(m.x - u.x, m.y - u.y) < 30 && Math.random() < dt * (0.6 + 4 * (u.aw == null ? 5 : u.aw) / 10)) {
         const top = Math.max(m.charThreat || 0, m.petThreat || 0, ...Object.values(m.gThr || {}));
         m.gThr = m.gThr || {}; m.gThr[u.id] = top * 1.3 + 60 + c.level * 4; u.taunt = now + 6; fx(u.x, u.y, 'Taunt', '#9fc7ff');
       }
@@ -337,11 +348,11 @@ function partyStep(c, dt) {
     if (u.role === 'tank') for (const x of threats) if (x !== m && Math.hypot(x.x - u.x, x.y - u.y) < 10) gThreat(x, u, (c.level + 10) * dt * 2);      // shouts and area attacks keep the pack on the tank
     if (!m || m.st === 'dead') return;
     if (!mv(m.x, m.y, MELEE_RANGE - 0.5)) return;
-    u.swing -= dt; if (u.swing > 0) return; u.swing += 2.0;
+    u.swing -= dt; if (u.swing > 0) return; u.swing += 2.0; if (Math.random() < 0.4 * (1 - (u.ex == null ? 5 : u.ex) / 10)) u.swing += 0.3 + Math.random() * 1.2;
     const diff = m.lvl - c.level; if (Math.random() < 0.05 + Math.max(0, diff) * 0.02) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
     const arm = Math.max(0, m.armor + mobMods(m).armor); const red = 1 - clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
     let v = u.dps * 2.0 * rnd(0.85, 1.15) * red; if (Math.random() < 0.08) v *= 2;
-    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m); gThreat(m, u, v); fx(m.x, m.y, '' + v, '#e8d8b8');
+    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, u.role === 'tank' ? 'Tanking attacks' : 'Attacks'); fx(m.x, m.y, '' + v, '#e8d8b8');
     if (m.st === 'alive') engage(m, c);
     if (m.hp <= 0) killMob(c, m);
   });
@@ -388,6 +399,7 @@ function enterDungeon(c, d, o) {
 function leaveDungeon(c, msg) {
   const d = dungeonByMap(c.pos.map) || (c.order && dungeonByMap(c.order.map)); const r = rt(c);
   const o = c.order;
+  if (d && o && o.type === 'dungeon' && o.phase !== 'travel' && o.entered != null && !o.credited) { o.credited = true; masteryRunEnd(c, d, o); }
   if (d && c.pos.map === d.map && d.entrance) { c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o }; }
   r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = [];
   if (msg) log(msg);
@@ -420,7 +432,8 @@ function dungeonExitStep(c, o, d) {
 }
 /* through the portal: from inside to the entrance outside */
 function dungeonPortalOut(c, d) {
-  const r = rt(c);
+  const r = rt(c); const o = c.order;
+  if (o && o.type === 'dungeon' && o.entered != null && !o.credited) { o.credited = true; masteryRunEnd(c, d, o); }       // before the group leaves
   if (d.entrance) c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o };
   r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = [];
   if (isActive(c) && $('follow').checked) goToCharacter();
@@ -542,7 +555,7 @@ function updateDungeon(c, o, dt) {
   if (r.bagFull || bagFree(c) <= 0) { const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n); if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 3)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('Bags are full - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); } }
   if (G.gameTime - o.entered > DG_TIME_LIMIT * (d.kind === 'raid' ? 1.5 : 1)) { orderLeaveDungeon(c, null, 'Spent too long in ' + d.name + ' - left.'); return; }
   // before each pull: everyone back on their feet
-  const p = partyOf(c); if (p && p.some((u) => u.dead || u.hp < u.maxhp * 0.8)) { r.mv = null; o.since = G.gameTime; return; }
+  const p = partyOf(c); const ready = masteryReady(c); if (p && p.some((u) => u.dead || u.hp < u.maxhp * ready)) { r.mv = null; o.since = G.gameTime; return; }
   if (!o.target || o.target.st === 'dead' || o.target.unreach) {
     if (o.target && o.target.st === 'dead') o.lastProgress = G.gameTime;
     o.target = dungeonNext(c, d, o);
@@ -578,6 +591,7 @@ function dungeonDeath(c) {
   const d = dungeonByMap(c.pos.map); if (!d || !d.entrance) return false;
   const r = rt(c); const e = d.enter[(c.order && c.order.wing) || 0] || d.enter[0];
   if (r.party) for (const u of r.party) { u.dead = false; u.hp = u.maxhp; }
+  masteryWipe(c, d);
   const W = G.world[d.map]; if (W) for (const m of W.active) evade(W, m);
   c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o };
   r.dgReturn = { map: d.map, x: e.x, y: e.y, z: e.z };

@@ -326,3 +326,24 @@ label.chk.dim{opacity:.55}
 .cw-go{color:#9fe09f}
 .cw-foot{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .ufplayer .ufpor{cursor:pointer}
+.rotmodes{display:flex;flex-direction:column;gap:3px}
+.rotlist{columns:2;column-gap:14px;margin:4px 0 6px}
+.rotlist .small{break-inside:avoid;display:flex;align-items:center;gap:5px;margin:1px 0}
+.rotlist .sic{width:18px;height:18px}
+.sgroup.dimmed{opacity:.55}
+/* damage meter */
+#meter{position:absolute;right:8px;bottom:40px;width:300px;max-height:60%;overflow:auto;background:#120e08e8;border:1px solid #6b5631;border-radius:7px;padding:6px 7px;z-index:6;font-size:12px;box-shadow:0 4px 16px #000a}
+#meter[hidden]{display:none}
+.mt-head{display:flex;gap:4px;align-items:center;margin-bottom:4px}
+.mt-head select{flex:1;min-width:0;font-size:11px}
+.mt-tabs{display:flex;gap:2px}
+.mt-tabs .mini.on{background:var(--gold2);color:#1a1409}
+.mt-sum{margin-bottom:4px}
+.mt-row{position:relative;height:19px;margin-bottom:2px;background:#0008;border-radius:3px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0 5px}
+.mt-row i{position:absolute;left:0;top:0;bottom:0;opacity:.55}
+.mt-row span{position:relative;text-shadow:1px 1px 0 #000;color:#fff;white-space:nowrap}
+.mt-n{overflow:hidden;text-overflow:ellipsis;margin-right:6px}
+.mt-ab{margin:0 0 4px 8px;padding:2px 4px;border-left:2px solid #4a3e29}
+.mt-ab div{display:flex;justify-content:space-between;color:#cfc6b0}
+#btnMeter.on{background:var(--gold2);color:#1a1409}
+.mst .mst-m{margin:1px 0 1px 6px}

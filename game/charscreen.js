@@ -134,7 +134,7 @@ function renderCharSwitch(force) {
     const xpNeed = (G.d.xp.levels[c.level - 1] || {}).xp_to_next || 0;
     h += '<div class="cw-row' + (on ? ' on' : '') + '"><img src="' + racePortrait(c.race, c.gender) + '"><div class="cw-info"><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b> <span class="muted">level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</span>' +
       (xpNeed ? '<div class="bar xp cw-xp"><i style="width:' + Math.min(100, 100 * c.xp / xpNeed) + '%"></i></div>' : '') +
-      '<div class="small"><span class="cw-st' + (c.bg || on ? ' run' : '') + '">' + st + '</span> &middot; ' + esc(where) + ' &middot; ' + moneyHtml(c.gold) + '</div>' +
+      '<div class="small"><span class="cw-st' + (c.bg || on ? ' run' : '') + '">' + st + '</span> &middot; ' + esc(where) + ' &middot; ' + moneyHtml(c.gold) + (G.state.settings.showMastery !== false ? ' &middot; skill ' + stars(skillLevel(c)) : '') + '</div>' +
       '<div class="small muted">' + (t ? esc(t.t) + (t.d ? ' - ' + esc(t.d) : '') : 'No order') + '</div>' +
       (last && !on ? '<div class="small muted cw-last">' + fmtTime(last[0]) + ' ' + esc(last[1]) + '</div>' : '') + '</div>' +
       '<div class="cw-btns">' + (on ? '<span class="muted small">playing</span>' : '<button class="act" data-sw="1" data-id="' + c.id + '">Switch</button>') +

@@ -162,7 +162,7 @@ function mobAuraTick(W, m, dt) {
     a.t += dt;
     while (a.t >= a.every && m.hp > 0) {
       a.t -= a.every; const v = Math.round(a.val * (a.src ? charStats(a.src).dmgDone : 1));
-      m.hp -= v; fx(m.x, m.y, '' + v, a.leech ? '#c56cf0' : '#ff9a3c');
+      m.hp -= v; fx(m.x, m.y, '' + v, a.leech ? '#c56cf0' : '#ff9a3c'); if (a.src) meterDmg(a.src, v, a.key);
       if (a.src) { addThreat(m, a.src, v); if (a.leech && a.src.hp > 0) healSelf(a.src, v); }
       if (m.hp <= 0 && a.src) { killMob(a.src, m); return; }
     }
@@ -270,7 +270,7 @@ function applySpell(c, sp, tgt, ctx) {
           const lo = e.lo, hi = Math.max(e.lo, e.hi || e.lo);
           let v = Math.round((lo + Math.random() * (hi - lo)) * s.dmgDone);
           if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level)) { fx(m.x, m.y, 'resist', '#cfc6b0'); continue; }
-          m.hp -= v; onMobDamaged(m); fx(m.x, m.y, v + '', '#ffd23a');
+          m.hp -= v; onMobDamaged(m); fx(m.x, m.y, v + '', '#ffd23a'); meterDmg(c, v, sp.n);
           if (m.st === 'alive') engage(m, c);
           if (m.hp <= 0) killMob(c, m);
         }
@@ -280,7 +280,7 @@ function applySpell(c, sp, tgt, ctx) {
         if (sp.n === 'Execute' && tgt) {
           const rank = +((sp.r || '').replace(/\D/g, '') || 1); const extra = c.rage; c.rage = 0;
           const v = Math.round((e.lo + extra * rank * 3) * s.dmgDone * (1 - clamp((tgt.armor + mobMods(tgt).armor) / ((tgt.armor + mobMods(tgt).armor) + 400 + 85 * c.level), 0, 0.75)));
-          tgt.hp -= v; onMobDamaged(tgt); fx(tgt.x, tgt.y, v + ' Execute', '#ffd23a'); if (tgt.hp <= 0) killMob(c, tgt); did = true;
+          tgt.hp -= v; onMobDamaged(tgt); fx(tgt.x, tgt.y, v + ' Execute', '#ffd23a'); meterDmg(c, v, 'Execute'); if (tgt.hp <= 0) killMob(c, tgt); did = true;
         }
         break;
       case 6: case 35:
@@ -337,7 +337,7 @@ function ruleTarget(c, rule, sp, tgt) {
   const defT = name === 'Overpower' ? r.opTarget : tgt;
   if (rule.mode === 'elite') {
     // whenever ready, but only while a rare or elite creature is in the fight; no re-casting what is still up
-    if (!isTough(tgt) && !att.some(isTough)) return null;
+    if (!isTough(tgt) && !att.some(isTough) && !r.mWaste) return null;
     if (selfOnly || area) return selfOnly && buffLeft(c, sp.n) > 1 ? null : c;
     const deb = (sp.ef || []).some((e) => (e.t === 6 || e.t === 35) && e.k === 'enemy'); const a = defT && mobAura(defT, sp.n);
     if (deb && a && a.until - G.gameTime > 2 && !(sp.stack && a.stacks < sp.stack)) return null;
@@ -349,7 +349,7 @@ function ruleTarget(c, rule, sp, tgt) {
     if ((sp.ef || []).some((e) => e.au === 8 && (e.k === 'self' || e.k === 'friend')) && buffLeft(c, name) > 1) return null;
     const mp = usesMana(c) ? c.mana / Math.max(1, charStats(c).maxMana) * 100 : 100;
     switch (rule.mode) {
-      case 'heal': return att.length && hpPct < (rule.p || 35) ? c : null;
+      case 'heal': return att.length && hpPct < (rule.p || 35) * masteryLate(c) ? c : null;
       case 'finisher': {
         if (!tgt || r.cpTgt !== tgt || !r.cp) return null;
         const selfBuff = (sp.ef || []).some((e) => e.k === 'self' && (e.t === 6 || e.t === 35));
@@ -384,7 +384,7 @@ function ruleTarget(c, rule, sp, tgt) {
     case 'rage': return c.rage >= (rule.p || 0) ? defT : null;
     case 'lowrage': return att.length && c.rage < (rule.p || 20) ? c : null;
     case 'buff': return att.length && buffLeft(c, sp.n) < 8 ? c : null;
-    case 'emergency': return att.length && hpPct < (rule.p || 30) ? (selfOnly ? c : tgt) : null;
+    case 'emergency': return att.length && hpPct < (rule.p || 30) * masteryLate(c) ? (selfOnly ? c : tgt) : null;
     case 'multi': {
       if (att.length < (rule.p || 2)) return null;
       // a debuff-only shout (Demoralizing Shout, Piercing Howl ...): only when someone fighting us does not have it yet
@@ -411,9 +411,11 @@ function queuedCost(c, sp, name) { return c.cls === 1 ? [1, abilityCost(c, sp, n
 function useAbilities(c, tgt) {
   const r = rt(c); if (!c.cfg || !c.cfg.rules) return;
   if (r.cast) return;
+  if (masteryHesitating(c)) return;            // a moment of hesitation (less with more skill)
+  let fumbled = false;
   const dist_ = tgt ? Math.hypot(tgt.x - c.pos.x, tgt.y - c.pos.y) : 0;
   let wanted = false;
-  for (const rule of c.cfg.rules) {
+  for (const rule of rulesOf(c)) {
     if (rule.mode === 'off') continue;
     const u = abilityUsable(c, rule.n); if (!u.ok) continue; const sp = u.sp;
     const nextSwing = (sp.fl || []).includes('next_swing');
@@ -431,6 +433,7 @@ function useAbilities(c, tgt) {
     if (!abilityReady(c, rule.n, sp)) { if (c.cls !== 1 && (r.cd[rule.n] || 0) <= G.gameTime) wanted = true; continue; }
     const t = t0;
     const mob = t === c ? tgt : t;
+    if (!fumbled && masteryFumble(c)) { fumbled = true; continue; }      // the wrong button: something further down happens
     const melee = sp.rng && sp.rng[1] <= 6;
     if (melee && !inMelee(c, mob)) continue;
     if (c.cls !== 1 && t !== c && mob) {
@@ -442,7 +445,7 @@ function useAbilities(c, tgt) {
       if (FINISHERS[rule.n]) { r.cpUse = r.cp || 0; r.cp = 0; }
       if (rule.mode === 'opener' && t !== c) r.opened = mob;
       startCast(c, rule.n, sp, t === c ? c : mob);
-      r.cpUse = 0; r.noSpell = false;
+      r.cpUse = 0; r.noSpell = false; masteryAfterAction(c);
       return;
     }
     spendCost(c, sp, rule.n); startCooldown(c, rule.n, sp);
@@ -451,7 +454,7 @@ function useAbilities(c, tgt) {
     if (rule.n === 'Berserker Rage' && talentRank(c, 'Improved Berserker Rage')) c.rage = Math.min(100, c.rage + 5 * talentRank(c, 'Improved Berserker Rage'));
     if (rule.n === 'Overpower') r.opWindow = 0;
     if (rule.n === 'Revenge') r.revWindow = 0;
-    fx(c.pos.x, c.pos.y, rule.n, '#ffe9a8');
+    fx(c.pos.x, c.pos.y, rule.n, '#ffe9a8'); masteryAfterAction(c);
     return;
   }
   if (c.cls !== 1 && r.gcdUntil <= G.gameTime) r.noSpell = wanted || !usesMana(c) || c.mana < charStats(c).maxMana * 0.1;
@@ -460,7 +463,7 @@ function useAbilities(c, tgt) {
 function tryOpener(c, m) {
   if (!c.cfg || (rt(c).threats && rt(c).threats.length)) return false;
   for (const n of ['Charge', 'Intercept']) {
-    const rule = c.cfg.rules.find((x) => x.n === n); if (!rule || rule.mode !== 'opener') continue;
+    const rule = rulesOf(c).find((x) => x.n === n); if (!rule || rule.mode !== 'opener') continue;
     const u = abilityUsable(c, n); if (!u.ok || !abilityReady(c, n, u.sp)) continue;
     const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d < 8 || d > 25) continue;
     spendCost(c, u.sp, n); startCooldown(c, n, u.sp);

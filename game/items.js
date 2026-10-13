@@ -418,7 +418,7 @@ function autoEat(c) {
 }
 function autoPotion(c) {
   const at = c.cfg ? c.cfg.potionAt : 30; if (!at) return; const r = rt(c);
-  if ((r.potionCd || 0) > G.gameTime) return; const s = charStats(c); if (c.hp > s.maxHp * at / 100) return;
+  if ((r.potionCd || 0) > G.gameTime) return; const s = charStats(c); if (c.hp > s.maxHp * at * masteryLate(c) / 100) return;
   let best = -1, bv = 0;
   c.bags.forEach((x, i) => { const u = useInfo(x.id); const it = itemRow(x.id); if (u && u.kind === 'potion' && (!it.rl || it.rl <= c.level) && u.hi > bv) { bv = u.hi; best = i; } });
   if (best >= 0) useItem(c, best, true);

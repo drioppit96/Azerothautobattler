@@ -309,7 +309,7 @@ function spellHit(c, sp, e, m, opts) {
   if (Math.random() * 100 < miss) { fx(m.x, m.y, 'resist', '#cfc6b0'); if (m.st === 'alive') engage(m, c); return 0; }
   let crit = false; if (Math.random() * 100 < spellMod(c, sp, 7, spellCritChance(c))) { v *= 1.5 + spellMod(c, sp, 15, 0) / 100; crit = true; }
   v = Math.max(1, Math.round(v));
-  m.hp -= v; onMobDamaged(m); addThreat(m, c, v);
+  m.hp -= v; onMobDamaged(m); addThreat(m, c, v); meterDmg(c, v, sp.n);
   fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#ffe58a');
   if (m.st === 'alive') engage(m, c);
   if (m.hp <= 0) killMob(c, m);
@@ -317,7 +317,7 @@ function spellHit(c, sp, e, m, opts) {
 }
 function healSelf(c, v, label) {
   const s = charStats(c); v = Math.round(v * (1 + (s.healPct || 0) / 100));
-  const before = c.hp; c.hp = Math.min(s.maxHp, c.hp + v); fx(c.pos.x, c.pos.y, '+' + Math.round(c.hp - before), '#5ee07a');
+  const before = c.hp; c.hp = Math.min(s.maxHp, c.hp + v); fx(c.pos.x, c.pos.y, '+' + Math.round(c.hp - before), '#5ee07a'); meterHeal(c, c.hp - before, label || 'Heal');
   return v;
 }
 function spellHeal(c, sp, e, lo, hi) {
@@ -486,7 +486,7 @@ function classMeleeHit(c, m, s, w, d, crit, opts) {
     else if (b.imbue === 'Frostbrand Weapon' && Math.random() < 9 * spd / 60) { v = 10 + L * 1.5; school = 4; }
     else if (b.imbue === 'Windfury Weapon' && Math.random() < 0.2) { fx(c.pos.x, c.pos.y, 'Windfury', '#9fe0ff'); playerSwing(c, m, s, w, { extra: true, bonus: L * 0.9, yellow: true, name: 'Windfury' }); if (m.hp <= 0) return; continue; }
     if (v <= 0) continue;
-    v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; addThreat(m, c, v); fx(m.x, m.y + 1, '' + v, school === 2 ? '#ff9a3c' : school === 4 ? '#9fd8ff' : '#ffe98a');
+    v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; addThreat(m, c, v); meterDmg(c, v, b.imbue || b.name); fx(m.x, m.y + 1, '' + v, school === 2 ? '#ff9a3c' : school === 4 ? '#9fd8ff' : '#ffe98a');
   }
 }
 
@@ -572,7 +572,7 @@ function petStep(c, dt) {
   else v = rnd(st.dmin, st.dmax) * (1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75));
   v = Math.max(1, Math.round(v));
   if (Math.random() < 0.06) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
-  m.hp -= v; onMobDamaged(m); addThreat(m, { isPet: true, tank: !!kind.tank }, v); fx(m.x, m.y, '' + v, '#d7b98a');
+  m.hp -= v; onMobDamaged(m); addThreat(m, { isPet: true, tank: !!kind.tank }, v); meterDmg(c, v, kind.firebolt ? 'Firebolt' : 'Attack', true); fx(m.x, m.y, '' + v, '#d7b98a');
   if (kind.tank && (m.petThreat || 0) <= (m.charThreat || 0) * 1.15 && (P.growlT || 0) <= G.gameTime) { m.petThreat = (m.charThreat || 0) * 1.3 + 20 + c.level * 3; P.growlT = G.gameTime + 5; fx(P.x, P.y, p.kind === 'hunter' ? 'Growl' : 'Torment', '#d7b98a'); }
   if (m.st === 'alive') engage(m, c);
   if (m.hp <= 0) killMob(c, m);
@@ -620,7 +620,7 @@ function rangedStep(c, m, dt, d) {
     if (Math.random() * 100 < s.crit) v *= 2;
   } else { if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level)) { fx(m.x, m.y, 'miss', '#cfc6b0'); return true; } }
   if (w.wand) { const ws = (typeof talentRank === 'function') ? talentRank(c, 'Wand Specialization') : 0; if (ws) v *= 1 + (c.cls === 5 ? 0.05 : 0.125) * ws; }
-  v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m); addThreat(m, c, v);
+  v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m); addThreat(m, c, v); meterDmg(c, v, w.wand ? 'Shoot (wand)' : 'Auto Shot');
   fx(m.x, m.y, '' + v, '#fff'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
   return true;
 }
@@ -632,7 +632,7 @@ function rangedHit(c, m, bonus, pct, name) {
   if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level) - s.hit) { fx(m.x, m.y, 'miss', '#cfc6b0'); if (m.st === 'alive') engage(m, c); return 0; }
   v *= 1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75);
   let crit = false; if (Math.random() * 100 < s.crit) { v *= 2; crit = true; }
-  v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m); addThreat(m, c, v);
+  v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m); addThreat(m, c, v); meterDmg(c, v, name || 'Shot');
   fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#fff'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
   return v;
 }
@@ -689,7 +689,7 @@ function oocStep(c) {
   if (G.gameTime - (r.oocT || -9) < 0.5) return false;   // checked twice a second
   r.oocT = G.gameTime;
   const s = charStats(c); const hpPct = c.hp / s.maxHp * 100; const mp = usesMana(c) && s.maxMana ? c.mana / s.maxMana * 100 : 100;
-  for (const rule of c.cfg.rules) {
+  for (const rule of rulesOf(c)) {
     if (rule.mode === 'off') continue;
     const u = abilityUsable(c, rule.n); if (!u.ok) continue; const sp = u.sp;
     const [pt, cost] = spellCost(c, sp, rule.n); if (powerOf(c, pt) < cost) continue;
@@ -755,7 +755,7 @@ function combatRange(c, m) {
 function classDps(c, s, red) {
   if (c.cls === 1 || c.cls === 4 || c.cls === 2 || (c.cls === 11 && c.form) || c.cls === 7) return Math.max(1, (s.mhDps + s.ohDps) * (1 - red) * s.dmgDone * 1.35);
   let best = 0;
-  for (const rule of c.cfg.rules || []) {
+  for (const rule of rulesOf(c) || []) {
     if (rule.mode === 'off' || !c.known[rule.n]) continue; const sp = spellRow(c.known[rule.n]); if (!sp) continue;
     const e = (sp.ef || []).find((x) => x.t === 2 && x.k === 'enemy'); if (!e) continue;
     const v = (effValue(c, sp, e, e.lo) + effValue(c, sp, e, Math.max(e.lo, e.hi))) / 2 + (e.coef || 0.4) * (s.sd || 0);
