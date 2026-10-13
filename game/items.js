@@ -468,9 +468,23 @@ function autoSellNearVendor(c) {
   r.lastSell = G.gameTime;
   if (junkCount(c)) sellJunk(c);
   if (G.state.settings.autoRepair && v.repair && repairCost(c)) repairAll(c);
-  autoBuyBags(c, v); autoBuyGear(c, v);
+  autoBuyBags(c, v); autoBuyGear(c, v); autoBuyFood(c, v);
 }
 /* buy the biggest bag this vendor sells into an empty bag slot, keeping some money (player-like) */
+/* keep some food: buy a stack of the best food this vendor sells when less than 10 are left */
+function autoBuyFood(c, v) {
+  if (!v || G.state.settings.autoBuyFood === false) return;
+  let have = 0; for (const x of c.bags) { const u = useInfo(x.id); if (u && u.kind === 'food') have += x.n; }
+  if (have >= 10) return;
+  let best = null;
+  for (const x of vendorItems(v.e)) {
+    const it = itemRow(x.id); const u = useInfo(x.id); if (!it || !u || u.kind !== 'food' || !u.tick || (it.rl || 0) > c.level) continue;
+    const val = u.tick * u.dur / u.every; if (!best || val > best.val) best = { id: x.id, val, price: itemBuy(x.id) };
+  }
+  if (!best) return;
+  const n = Math.min(20, Math.floor(c.gold * 0.15 / Math.max(1, best.price))); if (n < 5 || bagFree(c) <= 0) return;
+  if (addItem(c, best.id, n)) { c.gold -= n * best.price; log('Bought ' + n + ' x ' + itemName(best.id) + ' for ' + money(n * best.price) + '.'); }
+}
 /* buy equipment upgrades a vendor sells, spending at most a third of the money (while leveling automatically) */
 function autoBuyGear(c, v) {
   if (!v || !G.state.settings.autoEquip || !c.order || !(c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling'))) return;
@@ -516,7 +530,7 @@ function updateVendor(c, o, dt) {
   if (o.auto || G.state.settings.autoSellJunk) sellJunk(c);
   const vv = vendorList().find((x) => x.e === o.e);
   if ((o.repair || G.state.settings.autoRepair) && repairCost(c)) { if (vv && vv.repair) repairAll(c); }
-  autoBuyBags(c, vv); autoBuyGear(c, vv);
+  autoBuyBags(c, vv); autoBuyGear(c, vv); autoBuyFood(c, vv);
   log('At ' + o.label + '.');
   c.order = o.resume || null; if (o.resume) { o.resume.wait = 0; o.resume.noSell = junkCount(c) === 0 && bagFree(c) <= 0; }
   renderOrder(); if (!o.resume && !G.headless) openSheet('vendor');

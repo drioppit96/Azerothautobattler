@@ -47,7 +47,7 @@ function learnTalent(c, t, quiet) {
 function resetTalents(c) {
   const D = classTalents(c.cls);
   for (const n in D.abil) { if (c.known) delete c.known[n]; }
-  c.talents = {}; dirty(c); log('Talents reset.');
+  c.talents = {}; delete c.cfg.weaponSpec; dirty(c); log('Talents reset.');
 }
 function weaponSpecName(c) {
   const w = c.equip[15] && itemRow(c.equip[15].id); const s = w ? w.s : -1;
@@ -62,7 +62,8 @@ function autoTalents(c, quiet) {
   const b = builds[c.cfg.talentBuild] || builds[Object.keys(builds)[0]]; let n = 0;
   for (const [name0, want] of b.order) {
     if (talentFree(c) <= 0) break;
-    const name = name0 === '*WEAPON*' ? weaponSpecName(c) : name0; const t = D.byName[name]; if (!t) continue;
+    if (name0 === '*WEAPON*' && !c.cfg.weaponSpec) c.cfg.weaponSpec = weaponSpecName(c);      // decided once, at the first point
+    const name = name0 === '*WEAPON*' ? c.cfg.weaponSpec : name0; const t = D.byName[name]; if (!t) continue;
     while (((c.talents || {})[t.id] || 0) < want && talentFree(c) > 0 && !talentBlock(c, t)) { learnTalent(c, t, quiet); n++; }
     if (((c.talents || {})[t.id] || 0) < want) break;          // keep the order: wait for the next level
   }

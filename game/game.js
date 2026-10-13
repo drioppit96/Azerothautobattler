@@ -635,7 +635,8 @@ function frame(ts) {
   const sp = G.state.settings.speed;
   if (sp > 0) {
     G.acc += dt * sp;
-    while (G.acc >= STEP) { G.acc -= STEP; G.gameTime += STEP; for (const c of G.state.characters) updateChar(c, STEP); worldTick(STEP); }
+    let n = 0; while (G.acc >= STEP && n++ < 400) { G.acc -= STEP; G.gameTime += STEP; for (const c of G.state.characters) updateChar(c, STEP); worldTick(STEP); }
+    if (G.acc > STEP * 40) G.acc = 0;          // the computer is too slow for this speed: drop the backlog instead of freezing
     for (const f of G.fx) f.t += dt * sp; G.fx = G.fx.filter((f) => f.t < 1.2);
   }
   const c = active();

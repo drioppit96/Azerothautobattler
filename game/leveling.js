@@ -236,6 +236,7 @@ function orderLeveling(c) {
 function updateLeveling(c, o, dt) {
   const r = rt(c);
   if (c.level >= MAX_LEVEL) { log(c.name + ' reached level ' + MAX_LEVEL + '. Leveling finished.'); c.order = null; renderOrder(); save(); return; }
+  if (!r.threats.length && (r.bagFull || bagFree(c) <= 0) && !o.noSell && junkCount(c)) { if (o.mode === 'travel') { o.mode = 'pick'; o.trip = null; } bagsFull(c, o); return; }
   if (!r.threats.length && (durabilityPct(c) < 0.35 || worstDurability(c) < 0.1) && G.gameTime - (o.repairT || -1e9) > 600) {
     if (o.mode === 'travel') { o.mode = 'pick'; o.trip = null; }
     o.repairT = G.gameTime; const v = nearestVendor(c, true);

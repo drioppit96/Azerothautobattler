@@ -214,3 +214,8 @@ code{background:#000;padding:0 4px;border-radius:3px}
 .tal.max{border-color:#ffd100}.tal.max b{color:#ffd100;border-color:#ffd100}
 .qlevel{margin-bottom:8px}.qlevel button{width:100%;margin-bottom:3px}
 @media (max-width:800px){.taltrees{grid-template-columns:1fr}}
+
+.brand{white-space:nowrap}
+#maptabs button{white-space:nowrap}
+.seg button{padding:5px 9px}
+@media (max-width:1450px){#top{gap:8px}.brand{font-size:17px}#top .chk{font-size:13px}}
