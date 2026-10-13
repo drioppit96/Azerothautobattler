@@ -90,6 +90,7 @@ function renderSheet() {
   $('sheetTitle').textContent = c.name + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
   $('sheet').classList.toggle('wide', SH.tab === 'talents');
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
+  if (SH.tab === 'prof') { $('sheetLeft').innerHTML = professionsHtml(c); $('sheetBags').innerHTML = bagsHtml(c); return; }
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
@@ -106,6 +107,7 @@ function instFromEl(el) {
   if (el.dataset.slot != null) return c.equip[el.dataset.slot] ? { inst: c.equip[el.dataset.slot], where: 'eq', slot: +el.dataset.slot } : null;
   if (el.dataset.bag != null) return c.bagSlots[el.dataset.bag] ? { inst: c.bagSlots[el.dataset.bag], where: 'bagslot', i: +el.dataset.bag } : null;
   if (el.dataset.buy != null) return { inst: makeInst(+el.dataset.buy, 1), where: 'vendor', price: itemBuy(+el.dataset.buy) };
+  if (el.dataset.iid != null) return { inst: { id: +el.dataset.iid, n: 1 }, where: 'info' };
   return null;
 }
 function showItemTip(ev, ref) {
@@ -164,6 +166,7 @@ function bindSheet() {
     const c = active();
     if (behaviourClick(e)) return;
     if (SH.tab === 'talents' && talentClick(e)) return;
+    if (SH.tab === 'prof' && professionsClick(e)) return;
     const g = e.target.closest('[data-go]'); if (g) { if (g.dataset.go === 'v') orderVendor(c); else orderRepair(c); closeSheet(); return; }
     const va = e.target.closest('[data-vact]'); if (va) { if (va.dataset.vact === 'junk') sellJunk(c); else repairAll(c); renderSheet(); return; }
     const bb = e.target.closest('[data-buyb]'); if (bb) { buyItem(c, +bb.dataset.buyb); renderSheet(); return; }
@@ -171,7 +174,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (!talentChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('dblclick', (e) => {
     const el = e.target.closest('[data-idx],[data-slot]'); if (!el) return; const c = active();
     if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id); if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }
@@ -182,7 +185,7 @@ function bindSheet() {
     if (!$('iact').hidden) return;
     const tl = e.target.closest('[data-tal]');
     if (tl) { const tip = $('itip'); tip.innerHTML = talentTip(active(), tl.dataset.tal); tip.hidden = false; const r = tip.getBoundingClientRect(); let x = e.clientX + 16, y = e.clientY + 12; if (x + r.width > window.innerWidth - 4) x = e.clientX - r.width - 16; if (y + r.height > window.innerHeight - 4) y = window.innerHeight - r.height - 4; tip.style.left = x + 'px'; tip.style.top = y + 'px'; return; }
-    const el = e.target.closest('[data-idx],[data-slot],[data-bag],[data-buy]');
+    const el = e.target.closest('[data-idx],[data-slot],[data-bag],[data-buy],[data-iid]');
     if (!el) { hideItemTip(); return; } showItemTip(e, instFromEl(el));
   });
   sh.addEventListener('mouseleave', hideItemTip);

@@ -136,6 +136,7 @@ function lootMob(c, m) {
   }
   if (got.length) log('Looted: ' + got.join(', '));
   if (bagFree(c) <= 0) rt(c).bagFull = true;
+  if (c.prof) checkRecipeItems(c);
   autoEquip(c);
   refreshGear();
 }
@@ -239,6 +240,7 @@ function killMob(c, m) {
   log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
   lootMob(c, m);
   onKill(c, m);
+  if (c.prof) onKillProf(c, m);
   if (c.order && c.order.type === 'grind') c.order.kills = (c.order.kills || 0) + 1;
   if (c.order && c.order.type === 'leveling' && c.order.grind) c.order.grind.kills = (c.order.grind.kills || 0) + 1;
   const r = rt(c); if (r.tgt === m) r.tgt = null;
@@ -498,7 +500,11 @@ function fleeStep(c, dt, danger) {
   for (const m of danger) { const dx = c.pos.x - m.x, dy = c.pos.y - m.y, d = Math.hypot(dx, dy) || 1; ax += dx / d; ay += dy / d; }
   const L = Math.hypot(ax, ay) || 1; ax /= L; ay /= L;
   r.cast = null;
-  if (!r.fleeing) { r.fleeing = { t: 0 }; log(c.name + ' runs from ' + (danger[0].info ? danger[0].info[1] : 'a creature') + ' (level ' + danger[0].lvl + ').'); }
+  if (!r.fleeing) {
+    r.fleeing = { t: 0 }; log(c.name + ' runs from ' + (danger[0].info ? danger[0].info[1] : 'a creature') + ' (level ' + danger[0].lvl + ').');
+    // running from the same kind of danger again and again on the way: this way is too dangerous now
+    const o = c.order; if (o) { o.flees = (o.flees || []).filter((t) => G.gameTime - t < 300).concat([G.gameTime]); if (o.flees.length >= 7) { o.flees = []; if (typeof fleeLoop === 'function') fleeLoop(c, o); } }
+  }
   r.fleeing.t += dt; r.outT = 0;
   if (!passable(c.pos.map, c.pos.x + ax * 6, c.pos.y + ay * 6)) {
     const base = Math.atan2(ay, ax);
@@ -620,7 +626,13 @@ function approach(c, m) {
   }
   const reach = c.cls === 1 ? MELEE_RANGE + 1 : Math.max(MELEE_RANGE + 1, combatRange(c, m) - 1);
   if (d <= reach) {
-    if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank && d > MELEE_RANGE + 1) { r0.petGo = m; m.petThreat = Math.max(m.petThreat || 0, 1); }
+    if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank && d > MELEE_RANGE + 1) {
+      // send the pet in first and wait until it is there (up to 6 seconds)
+      r0.petGo = m; r0.tgt = m; const P = r0.pet; const pd = Math.hypot(P.x - m.x, P.y - m.y);
+      if (r0.petGoM !== m) { r0.petGoM = m; r0.petGoT = G.gameTime; }
+      if (pd > MELEE_RANGE + 1 && G.gameTime - r0.petGoT < 6 && m.st === 'alive') return 'moving';
+      m.petThreat = Math.max(m.petThreat || 0, 30);
+    }
     engage(m, c); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); return 'engaged';
   }
   if (d <= 25 && c.cls === 1 && tryOpener(c, m)) return 'moving';
@@ -679,6 +691,7 @@ function updateChar(c, dt) {
   if (r.interact) { if (interactStep(c, dt)) return; }
   if (restStep(c)) return;
   if (c.cls !== 1 && oocStep(c)) return;
+  if (c.prof && profStep(c)) return;
   const o = c.order;
   if (!o) return;
   if (o.type === 'travel') {
@@ -690,6 +703,8 @@ function updateChar(c, dt) {
   else if (o.type === 'questing') updateQuesting(c, o, dt);
   else if (o.type === 'leveling') updateLeveling(c, o, dt);
   else if (o.type === 'vendor' || o.type === 'sell') updateVendor(c, o, dt);
+  else if (o.type === 'trainer') updateTrainer(c, o, dt);
+  else if (o.type === 'patrol') updatePatrol(c, o, dt);
 }
 function replanTravel(c, o) {
   const p = planPath(c, o.target); o.path = p.pts; o.idx = 1; o.total = o.done + p.total; o.replan = false;

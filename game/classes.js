@@ -166,7 +166,7 @@ Object.assign(CLASS_META, {
     'Demoralizing Roar': R('', ['off', 'multi', 'debuff'], { mode: 'multi', p: 2 }),
     'Swipe': R('', ['off', 'multi'], { mode: 'multi', p: 2 }),
     'Maul': R('', ['off', 'rage', 'spam'], { mode: 'rage', p: 25 }),
-    'Rip': R('', ['off', 'finisher'], { mode: 'off', p: 4 }),
+    'Rip': R('', ['off', 'finisher'], { mode: 'finisher', p: 4 }),
     'Ferocious Bite': R('', ['off', 'finisher'], { mode: 'finisher', p: 4 }),
     'Rake': R('', ['off', 'debuff'], { mode: 'debuff' }),
     'Claw': R('', ['off', 'spam'], { mode: 'spam' }),
@@ -573,6 +573,7 @@ function petStep(c, dt) {
   v = Math.max(1, Math.round(v));
   if (Math.random() < 0.06) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
   m.hp -= v; onMobDamaged(m); addThreat(m, { isPet: true, tank: !!kind.tank }, v); fx(m.x, m.y, '' + v, '#d7b98a');
+  if (kind.tank && (m.petThreat || 0) <= (m.charThreat || 0) * 1.15 && (P.growlT || 0) <= G.gameTime) { m.petThreat = (m.charThreat || 0) * 1.3 + 20 + c.level * 3; P.growlT = G.gameTime + 5; fx(P.x, P.y, p.kind === 'hunter' ? 'Growl' : 'Torment', '#d7b98a'); }
   if (m.st === 'alive') engage(m, c);
   if (m.hp <= 0) killMob(c, m);
 }
@@ -622,6 +623,18 @@ function rangedStep(c, m, dt, d) {
   v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m); addThreat(m, c, v);
   fx(m.x, m.y, '' + v, '#fff'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
   return true;
+}
+
+/* one shot of a hunter ability with the ranged weapon (Multi-Shot, Aimed Shot) */
+function rangedHit(c, m, bonus, pct, name) {
+  const w = rangedWeapon(c); if (!w || !m || m.st === 'dead') return 0; const s = charStats(c);
+  let v = (rnd(w.min, w.max) + s.rap / 14 * w.speed) * (pct || 100) / 100 + (bonus || 0);
+  if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level) - s.hit) { fx(m.x, m.y, 'miss', '#cfc6b0'); if (m.st === 'alive') engage(m, c); return 0; }
+  v *= 1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75);
+  let crit = false; if (Math.random() * 100 < s.crit) { v *= 2; crit = true; }
+  v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m); addThreat(m, c, v);
+  fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#fff'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
+  return v;
 }
 
 /* ------------------------------------------------------------------ regeneration and resting */

@@ -88,6 +88,7 @@ function questWants(c, id) {
 }
 function isJunk(c, id) {
   if (questWants(c, id)) return false;
+  if (c.prof && profKeeps(c, id)) return false;
   if (itemQuality(id) === 0) return true;
   const r = itemRow(id); const l = lootRow(id);
   const cls = r ? r.c : l ? l[3] : -1, sub = r ? r.s : l ? l[4] : -1;
@@ -108,6 +109,7 @@ function junkCount(c) { let n = 0; for (const s of c.bags) if (isJunk(c, s.id)) 
 /* the bags are full: sell at a vendor when auto-sell is on, otherwise stop. */
 function bagsFull(c, o) {
   const r = rt(c);
+  if (c.prof && !junkCount(c) && (o.type === 'leveling' || o.type === 'patrol' || o.type === 'grind' || o.type === 'questing')) { r.sellMats = true; if (junkCount(c)) log('Bags are full - selling gathered materials too.'); }
   if (G.state.settings.autoSellJunk && junkCount(c) && !o.noSell) {
     const v = nearestVendor(c);
     if (v) {
@@ -174,7 +176,8 @@ function weaponInfo(inst) {
   const it = inst && !isBroken(inst) ? itemRow(inst.id) : null;
   if (!it || !it.dm || it.c !== 2) return null;
   const d = it.dm[0]; let lo = 0, hi = 0; for (const x of it.dm) { lo += x[0]; hi += x[1]; }
-  return { min: lo, max: hi, speed: (it.dl || 2000) / 1000, name: it.n, school: d[2] || 0, it, inst };
+  const ed = inst.ench && inst.ench.dmg ? inst.ench.dmg : 0;
+  return { min: lo + ed, max: hi + ed, speed: (it.dl || 2000) / 1000, name: it.n, school: d[2] || 0, it, inst };
 }
 function charStats(c) {
   const r = rt(c);
@@ -190,6 +193,7 @@ function charStats(c) {
     if (it.bl && +slot === 16) s.blockValue += it.bl;
     for (const [t, v] of (it.st || [])) { if (STAT_KEY[t]) s[STAT_KEY[t]] += v; else if (t === 1) s.hpBonus += v; else if (t === 0) s.manaBonus += v; }
     if (it.res) for (const k in it.res) s.res[k] += it.res[k];
+    if (inst.ench) { const e = inst.ench; for (const [k, v] of e.st || []) s[k] += v; s.hpBonus += e.hp || 0; s.manaBonus += e.mana || 0; s.armorBonus += e.armor || 0; if (e.res) for (const k in s.res) s.res[k] += e.res; }
     for (const f of it.fx || []) {
       if (f.trigger === 1) { for (const [au, mi, v] of spellAuras(f.id)) if (!applyAura(s, au, mi, v)) s.unknown.push(f.id); }
       else if (f.trigger === 2) s.procs.push({ spell: f.id, ppm: f.ppm || 0, chance: f.chance || 0, slot: +slot });
@@ -205,12 +209,12 @@ function charStats(c) {
   const stance = c.cls === 1 && c.cfg ? c.cfg.stance : null;
   if (stance === 'd') { s.dmgDone *= 0.9; s.dmgTaken *= 0.9; } else if (stance === 'z') { s.crit += 3; s.dmgTaken *= 1.1; }
   // derived numbers
+  if (c.form === 'bear') { s.armorItems *= c.known && c.known['Dire Bear Form'] ? 4.6 : 2.8; s.sta = Math.round(s.sta * (c.known && c.known['Dire Bear Form'] ? 1.25 : 1.1)); }
   s.armor = Math.max(0, s.armorItems + s.armorBonus + s.agi * 2);
   s.maxHp = b.maxHp + (s.sta - b.sta) * 10 + s.hpBonus;
   s.maxMana = b.power ? b.power + Math.max(0, s.int - 20) * 15 + Math.min(20, s.int) + s.manaBonus : 0;
   s.ap = Math.max(0, classAp(c.cls, c.level, s) + s.ap + (c.form === 'cat' ? c.level * 2 + s.agi : c.form === 'bear' ? c.level * 3 : 0));
   s.rap = Math.max(0, (c.cls === 3 ? s.agi * 2 + c.level * 2 - 10 : c.cls === 1 || c.cls === 4 ? s.agi + c.level - 10 : 0) + s.rap);
-  if (c.form === 'bear') { s.armorItems *= c.known && c.known['Dire Bear Form'] ? 4.6 : 2.8; s.sta = Math.round(s.sta * (c.known && c.known['Dire Bear Form'] ? 1.25 : 1)); }
   s.crit += 5 + s.agi / (CRIT_RATIO[c.cls] || 20);
   s.dodge += (c.cls === 4 ? 0 : 0.75) + s.agi / (DODGE_RATIO[c.cls] || 20) + (s.def - c.level * 5) * 0.04;
   s.parry += canParry(c) ? 5 + (s.def - c.level * 5) * 0.04 : 0;
@@ -606,6 +610,7 @@ function tooltipHtml(c, inst, opts) {
   if (!it) { h += '<div class="muted">Sell price: ' + moneyHtml(itemSell(id)) + '</div>'; return h; }
   if (it.bo) h += '<div>' + (inst.bound ? 'Soulbound' : G.d.items.meta.bonding[it.bo]) + '</div>';
   if (it.mc === 1) h += '<div>Unique</div>';
+  if (inst.ench) h += '<div style="color:#1eff00">' + esc(inst.ench.n) + '</div>';
   const inv = G.d.items.meta.inventory[it.t] || ''; const sub = it.c === 2 ? WEAPON_SUB[it.s] : it.c === 4 ? ARMOR_SUB[it.s] : '';
   if (inv || sub) h += '<div class="tt-row"><span>' + esc(inv) + '</span><span>' + esc(sub || '') + '</span></div>';
   if (it.dm) {

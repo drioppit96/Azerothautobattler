@@ -12,6 +12,7 @@ const TRANSPORTS = [
   { side: '', name: 'the boat between Ratchet and Booty Bay', a: { map: 1, x: -985.6, y: -3796.7 }, b: { map: 0, x: -14285.0, y: 554.0 } },
   { side: 'Alliance', name: 'the boat between Menethil Harbor and Theramore', a: { map: 0, x: -3892.0, y: -600.0 }, b: { map: 1, x: -3996.0, y: -4724.0 } },
   { side: 'Alliance', name: 'the boat between Menethil Harbor and Auberdine', a: { map: 0, x: -3725.0, y: -584.0 }, b: { map: 1, x: 6421.0, y: 817.0 } },
+  { side: 'Alliance', name: 'the Deeprun Tram between Stormwind and Ironforge', a: { map: 0, x: -8352.0, y: 523.0 }, b: { map: 0, x: -4839.0, y: -1320.0 }, secs: 110 },
   { side: 'Alliance', name: "the boat between Auberdine and Rut'theran Village", a: { map: 1, x: 6544.0, y: 917.0 }, b: { map: 1, x: 8553.0, y: 1020.0 } },
 ];
 
@@ -60,6 +61,21 @@ function flightRoute(c, a, b) {
 
 /* ------------------------------------------------------------------ trip planning */
 /* legs from the character to dest {map, x, y}: walk / fly / ship. Dijkstra over flight masters and ports. */
+const CITY_ZONES = new Set(['Orgrimmar', 'Thunder Bluff', 'Undercity', 'Stormwind City', 'Stormwind', 'Ironforge', 'Darnassus']);
+/* extra cost (seconds) of walking straight from a to b through zones far above the character's level */
+function walkDanger(c, map, a, b) {
+  if (typeof zoneAt !== 'function' || !G.d.zoneLevels) return 0;
+  G.zoneLvCache = G.zoneLvCache || {};
+  const d = Math.hypot(b.x - a.x, b.y - a.y); const n = Math.min(40, Math.ceil(d / 150)); let pen = 0;
+  for (let k = 1; k < n; k++) {
+    const z = zoneAt(map, a.x + (b.x - a.x) * k / n, a.y + (b.y - a.y) * k / n); if (!z) continue;
+    if (CITY_ZONES.has(z.name)) continue;
+    let lv = G.zoneLvCache[z.name];
+    if (lv === undefined) { const zl = (G.d.zoneLevels.zones || []).find((x) => x.zone === z.name); lv = G.zoneLvCache[z.name] = zl ? (zl.p10 || zl.min || 0) : 0; }
+    if (lv > c.level + 8) pen += Math.min(600, (lv - c.level) * 40);
+  }
+  return pen;
+}
 function planTrip(c, dest, opts) {
   opts = opts || {};
   const nodes = [{ k: 'S', map: c.pos.map, x: c.pos.x, y: c.pos.y }, { k: 'D', map: dest.map, x: dest.x, y: dest.y }];
@@ -72,9 +88,9 @@ function planTrip(c, dest, opts) {
     if (u < 0 || u === 1) break; done[u] = true; const a = nodes[u];
     for (let v = 0; v < N; v++) {
       if (done[v] || v === u) continue; const b = nodes[v]; let cost = Infinity, leg = null;
-      if (a.map === b.map) { cost = Math.hypot(a.x - b.x, a.y - b.y) / RUN_SPEED * 1.3; leg = { kind: 'walk', map: b.map, x: b.x, y: b.y }; }
+      if (a.map === b.map) { cost = Math.hypot(a.x - b.x, a.y - b.y) / RUN_SPEED * 1.3 + walkDanger(c, a.map, a, b); leg = { kind: 'walk', map: b.map, x: b.x, y: b.y }; }
       if (a.k === 'T' && b.k === 'T') { const f = flightRoute(c, a.id, b.id); if (f && f.secs + 20 < cost && (c.gold || 0) >= f.cost) { cost = f.secs + 20; leg = { kind: 'fly', from: a.id, to: b.id, pts: f.pts, cost: f.cost, secs: f.secs }; } }
-      if (a.k === 'P' && b.k === 'P' && a.t === b.t && a.end !== b.end) { cost = SHIP_TIME; leg = { kind: 'ship', t: a.t, map: b.map, x: b.x, y: b.y }; }
+      if (a.k === 'P' && b.k === 'P' && a.t === b.t && a.end !== b.end) { cost = TRANSPORTS[a.t].secs || SHIP_TIME; leg = { kind: 'ship', t: a.t, map: b.map, x: b.x, y: b.y }; }
       if (dist[u] + cost < dist[v]) { dist[v] = dist[u] + cost; prev[v] = { u, leg }; }
     }
   }
@@ -117,7 +133,7 @@ function tripStep(c, t) {
   if (l.kind === 'ship') {
     const tr = TRANSPORTS[l.t]; const from = tr.a.map === l.map && tr.a.x === l.x ? tr.b : tr.a;
     if (Math.hypot(from.x - c.pos.x, from.y - c.pos.y) > 6 || from.map !== c.pos.map) { if (from.map !== c.pos.map) return 'fail'; const ok = goTo(c, from.x, from.y, 4); if (r.blocked) { r.blocked = false; return 'fail'; } if (!ok) return 'busy'; }
-    r.mv = null; r.riding = { t: 0, total: SHIP_TIME, to: { map: l.map, x: l.x, y: l.y }, name: tr.name };
+    r.mv = null; r.riding = { t: 0, total: tr.secs || SHIP_TIME, to: { map: l.map, x: l.x, y: l.y }, name: tr.name };
     log('Taking ' + tr.name + '.'); t.i++; return 'busy';
   }
   return 'fail';
@@ -263,6 +279,7 @@ function updateLeveling(c, o, dt) {
     updateGrind(c, o.grind, dt); if (c.order !== o && c.order && c.order.type !== 'vendor') c.order = o;
     return;
   }
+  if (o.mode === 'pick' && c.prof && profAutoTrain(c, o)) return;
   if (o.mode === 'pick') { levelingPick(c, o); return; }
   // questing in the chosen zone (zone questing logic; calls levelingIdle when the zone has nothing for now)
   if (G.gameTime - (o.recheck || 0) > 300) { o.recheck = G.gameTime; abandonStale(c); }
@@ -317,4 +334,18 @@ function levelingText(c, o) {
   if (o.mode === 'pick') return { t: 'Level up', d: 'choosing the next zone' };
   const q = o.fq && G.q.byId[o.fq];
   return { t: 'Level up: questing in ' + (o.zones[0] || '...'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') };
+}
+/* the character keeps running from the same dangerous creatures: give up what leads it there */
+function fleeLoop(c, o) {
+  const r = rt(c); r.mv = null;
+  if (o.type === 'leveling' && o.mode === 'travel') {
+    log('The way to ' + (o.zones[0] || 'the next zone') + ' leads past creatures far too strong - choosing again.');
+    o.avoid = o.avoid || {}; if (o.zones[0]) o.avoid[o.zones[0]] = c.level + 2; o.mode = 'pick'; o.trip = null; return;
+  }
+  if ((o.type === 'leveling' || o.type === 'questing') && o.fq) {
+    const q = G.q.byId[o.fq]; log('"' + (q ? q.title : o.fq) + '" leads past creatures far too strong - skipping it for now.');
+    o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.fq = null; o.wt = null; o.ftrip = null; return;
+  }
+  if (o.type === 'leveling' && o.mode === 'grind' && o.grind) { o.badSpots = (o.badSpots || []).concat([{ map: c.pos.map, x: o.grind.cx, y: o.grind.cy }]).slice(-30); o.mode = 'pick'; o.grind = null; return; }
+  if (o.type === 'travel' || o.type === 'trainer') { log('The way is too dangerous - order cancelled.'); c.order = o.resume || null; renderOrder(); }
 }

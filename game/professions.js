@@ -1,0 +1,457 @@
+'use strict';
+/* professions.js - professions: learning them at trainers (with a "find trainer" walk), skill ranks, recipes, crafting,
+   enchanting gear, gathering nodes (herbs, ore) that stay hidden on the map until gathered once, skinning,
+   and a gathering route (checkpoints the character walks in a loop, gathering every node it passes). */
+
+const PROF_PRIMARY_MAX = 2;
+const GATHER_KIND = { 182: 'herb', 186: 'ore' };
+const SKINNING = 393;
+const NODE_SEE = 45;                  // yards: nodes this close to the route are noticed
+const NODE_RESPAWN = [420, 900];      // seconds until a gathered node is back
+const PROF_RANK_NAMES = ['Apprentice', 'Journeyman', 'Expert', 'Artisan'];
+const INV_SLOT = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 20: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 11: 10, 12: 12, 16: 14, 13: 15, 17: 15, 21: 15, 14: 16, 22: 16, 23: 16, 15: 17, 25: 17, 26: 17 };
+
+function PD() { return G.d.prof; }
+function profState(c) { if (!c.prof) c.prof = { skills: {}, recipes: {}, found: {}, route: null }; return c.prof; }
+function hasProf(c, id) { return !!(c.prof && c.prof.skills[id]); }
+function profSkill(c, id) { const s = c.prof && c.prof.skills[id]; return s ? s.v : 0; }
+function profName(id) { const s = PD() && PD().skills[id]; return s ? s.n : 'profession ' + id; }
+function profKind(id) { const s = PD() && PD().skills[id]; return s ? s.kind : 'craft'; }
+function primaryCount(c) { let n = 0; for (const id in profState(c).skills) if (profKind(id) !== 'secondary') n++; return n; }
+function profRankIdx(c, id) { const s = profState(c).skills[id]; if (!s) return -1; return PD().skills[id].ranks.findIndex((r) => r[1] === s.max); }
+function profNextRank(c, id) {
+  const ranks = PD().skills[id].ranks; const cur = profRankIdx(c, id); const next = ranks[cur + 1];
+  if (!next) return null;
+  const s = profState(c).skills[id];
+  return { idx: cur + 1, spell: next[0], max: next[1], lvl: next[2], cost: next[3], ready: c.level >= next[2] && (!s || s.v >= ranks[cur][1] - 25) };
+}
+
+/* ------------------------------------------------------------------ indexes */
+function profIndex() {
+  if (G.profIdx) return G.profIdx;
+  const byItem = {}, reag = {}, made = {};
+  for (const sid in PD().recipes) {
+    const r = PD().recipes[sid];
+    if (r.item) byItem[r.item] = +sid;
+    for (const [it] of r.re || []) (reag[it] = reag[it] || new Set()).add(r.skill);
+    if (r.cr) made[r.cr[0]] = r.skill;
+  }
+  const gathered = new Set();
+  for (const e in PD().nodes) { const o = G.d.go && G.d.go.objects[e]; for (const row of (o && G.d.go.loot[o[2]]) || []) gathered.add(row[0]); }
+  return (G.profIdx = { byItem, reag, made, gathered });
+}
+function skinLoot(entry) {
+  if (!G.skinIdx) { G.skinIdx = {}; for (const s of G.d.skinning || []) if (s.kind === 'Skinning') G.skinIdx[s.entry] = s.loot; }
+  return G.skinIdx[entry] || null;
+}
+/* items a character with professions keeps (never sold as junk) */
+function profKeeps(c, id) {
+  if (!c.prof || !Object.keys(c.prof.skills).length || !PD()) return false;
+  if (rt(c).sellMats) return false;                     // bags full and nothing else to sell: materials go too
+  const X = profIndex();
+  if (X.reag[id]) for (const sk of X.reag[id]) if (c.prof.skills[sk]) return true;
+  if (X.byItem[id]) { const r = PD().recipes[X.byItem[id]]; if (r && c.prof.skills[r.skill] && !c.prof.recipes[X.byItem[id]]) return true; }
+  if (X.gathered.has(id) && (c.prof.skills[182] || c.prof.skills[186])) return true;
+  const it = itemRow(id); if (it && it.c === 7 && c.prof.skills[SKINNING] && /Leather|Hide|Scale/.test(it.n)) return true;
+  return false;
+}
+
+/* ------------------------------------------------------------------ learning */
+function learnProfession(c, id, rank) {
+  const P = profState(c); const R = PD().skills[id].ranks[rank];
+  const s = P.skills[id] || (P.skills[id] = { v: 1, max: 0 });
+  s.max = R[1];
+  if (rank === 0) for (const sid in PD().recipes) { const r = PD().recipes[sid]; if (r.skill === +id && r.free) P.recipes[sid] = 1; }
+  log((rank === 0 ? 'Learned ' : 'Trained ') + PROF_RANK_NAMES[rank] + ' ' + profName(id) + ' (skill up to ' + R[1] + ').');
+}
+function unlearnProfession(c, id) {
+  const P = profState(c); delete P.skills[id];
+  for (const sid in P.recipes) if (PD().recipes[sid] && PD().recipes[sid].skill === +id) delete P.recipes[sid];
+  log('Unlearned ' + profName(id) + '.'); save();
+}
+/* everything this trainer can teach the character now: the profession, its next rank, new recipes */
+function trainAt(c, npc, focus) {
+  const P = profState(c); const skills = (PD().trainers[npc] || []).slice().sort((a, b) => (b === focus) - (a === focus));
+  let spent = 0, learned = 0;
+  for (const sk of skills) {
+    if (!P.skills[sk]) {
+      if (sk !== focus) continue;
+      if (profKind(sk) !== 'secondary' && primaryCount(c) >= PROF_PRIMARY_MAX) { log('You already have two main professions - unlearn one first.'); continue; }
+      const R = PD().skills[sk].ranks[0];
+      if (c.level < R[2]) { log(profName(sk) + ' can be learned from level ' + R[2] + '.'); continue; }
+      if (c.gold < R[3]) { log('Not enough money to learn ' + profName(sk) + ' (' + money(R[3]) + ').'); continue; }
+      c.gold -= R[3]; spent += R[3]; learnProfession(c, sk, 0);
+    }
+    const nx = profNextRank(c, sk);
+    if (nx && nx.ready && c.gold >= nx.cost) { c.gold -= nx.cost; spent += nx.cost; learnProfession(c, sk, nx.idx); }
+    const v = profSkill(c, sk);
+    const list = Object.keys(PD().recipes).filter((sid) => { const r = PD().recipes[sid]; return r.skill === sk && !P.recipes[sid] && !r.item && r.learn <= v && (r.trainers.includes(+npc) || r.trainers.length === 0); })
+      .sort((a, b) => PD().recipes[a].learn - PD().recipes[b].learn);
+    for (const sid of list) { const r = PD().recipes[sid]; if (c.gold < r.cost) break; c.gold -= r.cost; spent += r.cost; P.recipes[sid] = 1; learned++; }
+  }
+  if (learned) log('Learned ' + learned + ' new recipe' + (learned > 1 ? 's' : '') + (spent ? ' (' + money(spent) + ' in total)' : '') + '.');
+  else if (!spent) log('Nothing new to learn here right now.');
+  save(); refreshGear();
+}
+/* recipe items (Recipe: ..., Pattern: ..., Plans: ...) in the bags are learned when the skill is high enough */
+function checkRecipeItems(c) {
+  if (!c.prof || !PD()) return; const X = profIndex();
+  for (let i = c.bags.length - 1; i >= 0; i--) {
+    const sid = X.byItem[c.bags[i].id]; if (!sid) continue; const r = PD().recipes[sid];
+    if (!c.prof.skills[r.skill] || c.prof.recipes[sid] || profSkill(c, r.skill) < r.learn) continue;
+    c.prof.recipes[sid] = 1; log('Learned ' + r.n + ' from ' + itemName(c.bags[i].id) + '.');
+    if (--c.bags[i].n <= 0) c.bags.splice(i, 1);
+  }
+}
+
+/* ------------------------------------------------------------------ skill ups */
+function chanceByColor(col) { return col === 'orange' ? 1 : col === 'yellow' ? 0.75 : col === 'green' ? 0.25 : 0; }
+function recipeColor(c, r) { const v = profSkill(c, r.skill); if (v < r.learn) return 'red'; if (v < r.y) return 'orange'; if (v < r.g) return 'yellow'; if (v < r.gr) return 'green'; return 'grey'; }
+function gatherColor(v, req) { if (v < req) return 'red'; if (v < req + 25) return 'orange'; if (v < req + 50) return 'yellow'; if (v < req + 100) return 'green'; return 'grey'; }
+function skillUp(c, id, col) {
+  const s = profState(c).skills[id]; if (!s || s.v >= s.max) return;
+  if (Math.random() >= chanceByColor(col)) return;
+  s.v++; if (s.v % 5 === 0 || s.v === s.max) log('Your skill in ' + profName(id) + ' has increased to ' + s.v + '.');
+  if (s.max - s.v === 25 && profNextRank(c, id)) log('Visit a ' + profName(id) + ' trainer to learn the next rank.');
+}
+function skinReq(L) { return L <= 10 ? Math.max(1, (L - 10) * 10 + 1) : L * 5; }
+
+/* ------------------------------------------------------------------ crafting */
+const ENCH_TIER = { Minor: 1, Lesser: 2, '': 3, Greater: 5, Superior: 7, Major: 9 };
+/* a rough bonus from the enchant's name: Enchant Bracer - Lesser Strength -> +2 strength ... */
+function enchantBonus(name) {
+  const m = / - (Minor |Lesser |Greater |Superior |Major )?(.*)$/.exec(name) || [];
+  const tier = ENCH_TIER[(m[1] || '').trim()] || 3; const what = (m[2] || '').trim(); const b = { n: name.replace(/^(Enchant|Imbue) /, '') };
+  const stat = { Strength: 'str', Agility: 'agi', Stamina: 'sta', Intellect: 'int', Spirit: 'spi' }[what];
+  if (stat) b.st = [[stat, tier]];
+  else if (/Health/.test(what)) b.hp = [5, 15, 25, 35, 50, 65, 80, 100, 120][tier - 1];
+  else if (/Mana/.test(what)) b.mana = [5, 20, 30, 40, 55, 65, 80, 100, 120][tier - 1];
+  else if (/Stats/.test(what)) b.st = ['str', 'agi', 'sta', 'int', 'spi'].map((k) => [k, Math.max(1, Math.round(tier / 2))]);
+  else if (/Protection|Defense|Deflect|Armor|Absorption/.test(what)) b.armor = tier * 10;
+  else if (/Resistance/.test(what)) b.res = tier;
+  else if (/Striking|Impact|Beastslayer|Crusader|Fiery|Icy|Lifestealing|Demonslaying|Unholy/.test(what)) b.dmg = Math.max(1, tier - (/Impact/.test(what) ? -1 : 0));
+  else if (/Skinning|Mining|Herbalism|Fishing/.test(what)) b.none = true;
+  else if (/Haste|Agility|Dodge/.test(what)) b.st = [['agi', tier]];
+  return b;
+}
+function enchantSlot(r) {
+  const sl = r.slot; if (!sl) return null;
+  if (sl[0] === 2) return 15;
+  for (const t in INV_SLOT) if (sl[2] & (1 << +t)) return INV_SLOT[t];
+  return null;
+}
+function craftCount(c, sid) {
+  const r = PD().recipes[sid]; let n = Infinity;
+  for (const [it, k] of r.re || []) n = Math.min(n, Math.floor(bagCount(c, it) / k));
+  return n === Infinity ? 0 : n;
+}
+function craft(c, sid, times) {
+  const r = PD().recipes[sid]; if (!r || !profState(c).recipes[sid]) return 0;
+  let done = 0; const made = {};
+  for (let k = 0; k < (times || 1); k++) {
+    if (craftCount(c, sid) < 1) break;
+    if (r.ench) {
+      const slot = enchantSlot(r); const inst = slot != null ? c.equip[slot] : null;
+      if (!inst) { log('Nothing to enchant: ' + r.n + ' needs an item in that slot.'); break; }
+      if (r.ench && /2H Weapon/.test(r.ench) && (itemRow(inst.id) || {}).t !== 17) { log(r.n + ' needs a two-handed weapon.'); break; }
+      for (const [it, n] of r.re || []) removeItem(c, it, n);
+      inst.ench = enchantBonus(r.ench); dirty(c);
+      log('Enchanted ' + itemName(inst.id, inst) + ': ' + inst.ench.n + '.');
+    } else if (r.cr) {
+      if (bagFree(c) <= 0 && !c.bags.some((x) => x.id === r.cr[0] && x.n < itemStack(r.cr[0]))) { log('Bags are full.'); break; }
+      for (const [it, n] of r.re || []) removeItem(c, it, n);
+      const n = irnd(r.cr[1] || 1, Math.max(r.cr[1] || 1, r.cr[2] || 1)); addItem(c, r.cr[0], n); made[r.cr[0]] = (made[r.cr[0]] || 0) + n;
+    } else break;
+    skillUp(c, r.skill, recipeColor(c, r)); done++;
+  }
+  for (const id in made) log('Created ' + made[id] + ' x ' + itemName(+id) + '.');
+  if (done) { checkRecipeItems(c); autoEquip(c); save(); refreshGear(); }
+  return done;
+}
+
+/* ------------------------------------------------------------------ nodes */
+function nodeGrid(map) {
+  G.nodeGrid = G.nodeGrid || {};
+  if (G.nodeGrid[map]) return G.nodeGrid[map];
+  const g = new Map();
+  for (const e in PD().nodes) {
+    const [kind, req] = PD().nodes[e];
+    objSpawns(+e).forEach((s, i) => {
+      if (s[0] !== map) return;
+      const n = { e: +e, i, x: s[1], y: s[2], kind, req, key: e + ':' + i };
+      const k = gk(cell(n.x), cell(n.y)); let a = g.get(k); if (!a) g.set(k, a = []); a.push(n);
+    });
+  }
+  return (G.nodeGrid[map] = g);
+}
+function nodesNear(map, x, y, rad, fn) {
+  const g = nodeGrid(map); const c0 = cell(x - rad), c1 = cell(x + rad), r0 = cell(y - rad), r1 = cell(y + rad);
+  for (let cx = c0; cx <= c1; cx++) for (let cy = r0; cy <= r1; cy++) { const a = g.get(gk(cx, cy)); if (a) for (const n of a) if (Math.hypot(n.x - x, n.y - y) <= rad) fn(n); }
+}
+function nodeFree(n) { return !(G.nodeUsed && G.nodeUsed[n.key] > G.gameTime); }
+function canGather(c, n) { const sk = n.kind === 'herb' ? 182 : 186; return hasProf(c, sk) && profSkill(c, sk) >= n.req; }
+/* the nearest node the character can gather (free, reachable, not next to dangerous creatures) */
+function findNode(c, rad) {
+  const r = rt(c); let best = null, bd = 1e9; const W = ensureWorld(c.pos.map);
+  nodesNear(c.pos.map, c.pos.x, c.pos.y, rad, (n) => {
+    if (!canGather(c, n) || !nodeFree(n) || (r.nodeBan && r.nodeBan[n.key] > G.gameTime)) return;
+    const d = Math.hypot(n.x - c.pos.x, n.y - c.pos.y); if (d >= bd) return;
+    let bad = false; mobsNear(W, n.x, n.y, 30, (m) => { if (!bad && m.st === 'alive' && behOf(m, c) === 'A' && dangerous(m, c) && Math.hypot(m.x - n.x, m.y - n.y) < aggroRadius(m, c) + 6) bad = true; });
+    if (!bad) { bd = d; best = n; }
+  });
+  return best;
+}
+function gatherNode(c, n) {
+  const sk = n.kind === 'herb' ? 182 : 186;
+  startInteract(c, n.kind === 'herb' ? 'Herb Gathering' : 'Mining', () => {
+    if (!nodeFree(n)) return;
+    lootGo(c, n.e);
+    G.nodeUsed = G.nodeUsed || {}; G.nodeUsed[n.key] = G.gameTime + rnd(NODE_RESPAWN[0], NODE_RESPAWN[1]);
+    const P = profState(c); if (!P.found[n.key]) P.found[n.key] = [c.pos.map, Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10, n.kind, n.e];
+    skillUp(c, sk, gatherColor(profSkill(c, sk), n.req));
+    const o = c.order; if (o && o.type === 'patrol') o.gathered = (o.gathered || 0) + 1;
+    if (bagFree(c) <= 0) rt(c).bagFull = true;
+    save();
+  }, n.kind === 'herb' ? 2.5 : 3.5);
+}
+/* walk to a node and gather it. returns true while busy with it */
+function gatherStep(c, o, rad) {
+  const r = rt(c);
+  if (o.node && (!nodeFree(o.node) || !canGather(c, o.node))) o.node = null;
+  if (!o.node) { if (G.gameTime - (o.nodeT || -9) < 1) return false; o.nodeT = G.gameTime; o.node = findNode(c, rad); if (!o.node) return false; o.nodeSince = G.gameTime; }
+  const n = o.node;
+  if (G.gameTime - o.nodeSince > 60) { r.nodeBan = r.nodeBan || {}; r.nodeBan[n.key] = G.gameTime + 600; o.node = null; return false; }
+  if (!goTo(c, n.x, n.y, 3)) { if (r.blocked) { r.blocked = false; r.nodeBan = r.nodeBan || {}; r.nodeBan[n.key] = G.gameTime + 600; o.node = null; } return true; }
+  o.node = null; gatherNode(c, n); return true;
+}
+
+/* ------------------------------------------------------------------ skinning */
+function skinnable(c, m) { if (!hasProf(c, SKINNING) || !m || m.skinned) return false; const l = skinLoot(m.e); return !!(l && l.length) && profSkill(c, SKINNING) >= skinReq(m.lvl); }
+function onKillProf(c, m) { if (skinnable(c, m)) { const r = rt(c); r.skin = (r.skin || []).filter((x) => G.gameTime - x.t < 40).concat([{ m, x: m.x, y: m.y, t: G.gameTime }]); } }
+function skinStep(c) {
+  const r = rt(c); if (!r.skin || !r.skin.length) return false;
+  const s = r.skin[0];
+  if (G.gameTime - s.t > 45 || s.m.st !== 'dead') { r.skin.shift(); return false; }
+  if (!goTo(c, s.x, s.y, 3)) { if (r.blocked) { r.blocked = false; r.skin.shift(); } return true; }
+  r.skin.shift();
+  startInteract(c, 'Skinning', () => {
+    const got = [];
+    for (const l of skinLoot(s.m.e) || []) { if (Math.random() * 100 >= l.chance) continue; const n = irnd(l.min || 1, l.max || 1); if (addItem(c, l.item, n)) got.push((n > 1 ? n + ' x ' : '') + itemName(l.item)); }
+    s.m.skinned = true; if (got.length) log('Skinned: ' + got.join(', ') + '.');
+    skillUp(c, SKINNING, gatherColor(profSkill(c, SKINNING), skinReq(s.m.lvl)));
+    if (bagFree(c) <= 0) r.bagFull = true;
+  }, 2);
+  return true;
+}
+/* called by updateChar when nothing else is going on: skin corpses, gather nodes near the way while leveling */
+function profStep(c) {
+  if (!c.prof || !PD()) return false; const r = rt(c);
+  if (r.sellMats && bagFree(c) > 4) r.sellMats = false;
+  if (bagFree(c) <= 2) return false;
+  if (skinStep(c)) return true;
+  const o = c.order; if (!o || G.state.settings.gatherWhileLeveling === false) return false;
+  if (o.type !== 'leveling' && o.type !== 'questing' && o.type !== 'grind') return false;
+  if (!c.prof.skills[182] && !c.prof.skills[186]) return false;
+  r.gw = r.gw || {};
+  return gatherStep(c, r.gw, 30);
+}
+
+/* ------------------------------------------------------------------ orders: find trainer, gathering route */
+function trainerSpots(c, skill) {
+  const out = [];
+  for (const e in PD().trainers) {
+    if (!PD().trainers[e].includes(+skill)) continue;
+    const h = G.d.hostility.creatures[e]; if (!h || h[1][behIndex(c)] !== 'F') continue;
+    for (const s of G.spawnMap.get(+e) || []) if (s[0] === 0 || s[0] === 1) out.push({ e: +e, map: s[0], x: s[1], y: s[2] });
+  }
+  return out;
+}
+function orderTrainer(c, skill) {
+  const spots = trainerSpots(c, skill);
+  if (!spots.length) { log('No ' + profName(skill) + ' trainer found for your faction.'); return; }
+  spots.sort((a, b) => (a.map !== c.pos.map) - (b.map !== c.pos.map) || Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
+  let best = null;
+  for (const s of spots.slice(0, 10)) { const trip = planTrip(c, { map: s.map, x: s.x, y: s.y }); if (trip && (!best || trip.secs < best.trip.secs)) best = { s, trip }; }
+  if (best) {
+    const s = best.s, trip = best.trip;
+    const resume = c.order && c.order.type !== 'trainer' ? c.order : null;
+    c.order = { type: 'trainer', skill: +skill, e: s.e, map: s.map, x: s.x, y: s.y, trip, label: mobName(s.e), resume };
+    rt(c).mv = null; rt(c).tgt = null;
+    log('Order: walk to ' + mobName(s.e) + ' to train ' + profName(skill) + '.');
+    save(); renderOrder(); return;
+  }
+  log('Cannot find a way to a ' + profName(skill) + ' trainer.');
+}
+/* while leveling: a profession can learn its next rank - visit a trainer on the way (once per level) */
+function profAutoTrain(c, o) {
+  if (G.state.settings.autoTrainProf === false || o.profTrainLv === c.level) return false;
+  for (const id in profState(c).skills) {
+    const nx = profNextRank(c, +id); if (!nx || !nx.ready || c.gold < nx.cost * 1.5 + 500) continue;
+    o.profTrainLv = c.level; log(profName(+id) + ' can learn ' + PROF_RANK_NAMES[nx.idx] + ' now - visiting a trainer first.');
+    orderTrainer(c, +id); return c.order && c.order.type === 'trainer';
+  }
+  return false;
+}
+function updateTrainer(c, o, dt) {
+  const st = tripStep(c, o.trip);
+  if (st === 'busy') return;
+  if (st === 'fail') { log('Could not reach ' + o.label + '.'); c.order = o.resume || null; renderOrder(); return; }
+  if (Math.hypot(o.x - c.pos.x, o.y - c.pos.y) > 5 && c.pos.map === o.map) { goTo(c, o.x, o.y, 4); if (rt(c).blocked) { rt(c).blocked = false; c.order = o.resume || null; } return; }
+  c.order = o.resume || null;
+  startInteract(c, 'Training', () => { trainAt(c, o.e, o.skill); renderOrder(); }, 1.5);
+  renderOrder();
+}
+function routeOf(c) { return profState(c).route; }
+function orderPatrol(c) {
+  const R = routeOf(c); if (!R || R.pts.length < 2) { log('Set at least two checkpoints for the gathering route first.'); return; }
+  if (!c.prof.skills[182] && !c.prof.skills[186] && !c.prof.skills[SKINNING]) log('No gathering profession yet - the route is walked anyway (learn Herbalism, Mining or Skinning at a trainer).');
+  let best = 0, bd = 1e9; R.pts.forEach((p, i) => { const d = Math.hypot(p.x - c.pos.x, p.y - c.pos.y); if (d < bd) { bd = d; best = i; } });
+  const trip = R.map !== c.pos.map || bd > 400 ? planTrip(c, { map: R.map, x: R.pts[best].x, y: R.pts[best].y }) : null;
+  if (R.map !== c.pos.map && !trip) { log('Cannot find a way to the gathering route.'); return; }
+  c.order = { type: 'patrol', i: best, laps: 0, gathered: 0, trip, started: G.gameTime, label: 'gathering route' };
+  rt(c).mv = null; rt(c).tgt = null;
+  log('Order: walk the gathering route (' + R.pts.length + ' checkpoints).'); save(); renderOrder();
+}
+function updatePatrol(c, o, dt) {
+  const r = rt(c); const R = routeOf(c);
+  if (!R || R.pts.length < 2) { c.order = null; renderOrder(); return; }
+  if (r.bagFull || bagFree(c) <= 0) { bagsFull(c, o); return; }
+  if (o.trip) { const st = tripStep(c, o.trip); if (st === 'busy') return; if (st === 'fail') { log('Could not reach the gathering route.'); c.order = null; renderOrder(); return; } o.trip = null; }
+  if (gatherStep(c, o, NODE_SEE)) return;
+  const p = R.pts[o.i % R.pts.length];
+  if (goTo(c, p.x, p.y, 3) || r.blocked) {
+    if (r.blocked) { r.blocked = false; log('Checkpoint ' + (o.i + 1) + ' cannot be reached - skipping it.'); }
+    o.i = (o.i + 1) % R.pts.length; if (o.i === 0 && !R.open) o.laps++;
+    if (R.open && o.i === 0) { R.pts.reverse(); o.i = 1; o.laps++; }
+  }
+}
+function patrolText(c, o) {
+  const R = routeOf(c);
+  return { t: 'Gathering route', d: (o.trip ? tripText(o.trip) : 'checkpoint ' + ((o.i % (R ? R.pts.length : 1)) + 1) + '/' + (R ? R.pts.length : 0)) + ', lap ' + (o.laps + 1) + ', ' + (o.gathered || 0) + ' nodes gathered' + (o.node ? ' - going to ' + objName(o.node.e) : '') };
+}
+
+/* ------------------------------------------------------------------ route editing on the map */
+function routeEditStart() {
+  const c = active(); const P = profState(c);
+  if (!P.route || P.route.map !== G.map.map) P.route = { map: G.map.map, pts: [], open: false };
+  G.routeEdit = true; closeSheet(); renderRouteBar(); log('Click the map to add checkpoints to the gathering route.');
+}
+function routeAddPoint(w) {
+  const c = active(); const R = profState(c).route;
+  if (!R || R.map !== G.map.map) { profState(c).route = { map: G.map.map, pts: [], open: false }; }
+  if (!passable(G.map.map, w.x, w.y)) { log('Cannot walk there.'); return; }
+  profState(c).route.pts.push({ x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 }); save(); renderRouteBar();
+}
+function renderRouteBar() {
+  let el = $('routebar');
+  if (!G.routeEdit) { if (el) el.hidden = true; return; }
+  if (!el) { el = document.createElement('div'); el.id = 'routebar'; $('mapwrap').appendChild(el); el.onclick = routeBarClick; }
+  const R = routeOf(active()); const n = R ? R.pts.length : 0;
+  el.hidden = false;
+  el.innerHTML = '<b>Gathering route</b> - click the map to add checkpoints (' + n + ')' +
+    '<label class="chk"><input type="checkbox" data-ropen' + (R && R.open ? ' checked' : '') + '> walk back and forth</label>' +
+    '<button class="mini" data-r="undo"' + (n ? '' : ' disabled') + '>Undo</button><button class="mini" data-r="clear"' + (n ? '' : ' disabled') + '>Clear</button>' +
+    '<button class="mini" data-r="done">Done</button><button class="act" data-r="start"' + (n >= 2 ? '' : ' disabled') + '>Start route</button>';
+}
+function routeBarClick(e) {
+  const c = active(); const R = routeOf(c);
+  if (e.target.dataset && e.target.dataset.ropen != null) { if (R) R.open = e.target.checked; save(); return; }
+  const b = e.target.closest('[data-r]'); if (!b) return; const a = b.dataset.r;
+  if (a === 'undo' && R) R.pts.pop();
+  if (a === 'clear' && R) R.pts = [];
+  if (a === 'done') G.routeEdit = false;
+  if (a === 'start') { G.routeEdit = false; orderPatrol(c); }
+  save(); renderRouteBar();
+}
+
+/* ------------------------------------------------------------------ drawing */
+function drawProfOverlay(ctx, m) {
+  const c = active(); if (!c.prof) return;
+  const R = c.prof.route;
+  if (R && R.map === m.map && R.pts.length && (G.routeEdit || (c.order && c.order.type === 'patrol') || G.state.settings.showRoute !== false)) {
+    ctx.save(); ctx.setLineDash([7, 5]); ctx.strokeStyle = 'rgba(120,230,120,.9)'; ctx.lineWidth = 2.2; ctx.beginPath();
+    R.pts.forEach((p, i) => { const [x, y] = w2s(p.x, p.y); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+    if (!R.open && R.pts.length > 2) { const [x, y] = w2s(R.pts[0].x, R.pts[0].y); ctx.lineTo(x, y); }
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center';
+    R.pts.forEach((p, i) => { const [x, y] = w2s(p.x, p.y); ctx.fillStyle = '#1c3a1c'; ctx.strokeStyle = '#9cf09c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#d8ffd8'; ctx.fillText(String(i + 1), x, y + 3.5); });
+    ctx.textAlign = 'start'; ctx.restore();
+  }
+  if (G.state.settings.showNodes === false) return;
+  const sz = Math.max(3, Math.min(6, G.scale * 1.5));
+  for (const k in c.prof.found) {
+    const f = c.prof.found[k]; if (f[0] !== m.map || !inMap(m, f[1], f[2])) continue;
+    const [x, y] = w2s(f[1], f[2]); if (x < -8 || y < -8 || x > G.cw + 8 || y > G.ch + 8) continue;
+    const up = nodeFree({ key: k });
+    ctx.globalAlpha = up ? 1 : 0.4;
+    if (f[3] === 'herb') { ctx.fillStyle = '#5fe06a'; ctx.strokeStyle = '#0b3010'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y - sz - 1); ctx.quadraticCurveTo(x + sz + 1, y, x, y + sz + 1); ctx.quadraticCurveTo(x - sz - 1, y, x, y - sz - 1); ctx.fill(); ctx.stroke(); }
+    else { ctx.fillStyle = '#e0a050'; ctx.strokeStyle = '#3a2208'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y - sz); ctx.lineTo(x + sz, y); ctx.lineTo(x, y + sz); ctx.lineTo(x - sz, y); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ------------------------------------------------------------------ the professions window */
+function profBar(c, id) { const s = profState(c).skills[id]; return '<div class="bar xp pbar"><i style="width:' + (100 * s.v / Math.max(1, s.max)) + '%"></i><span>' + s.v + ' / ' + s.max + '</span></div>'; }
+function reagHtml(c, r) { return (r.re || []).map(([it, n]) => { const have = bagCount(c, it); return '<span class="reag' + (have >= n ? '' : ' miss') + '" data-iid="' + it + '">' + esc(itemName(it)) + ' ' + Math.min(have, 999) + '/' + n + '</span>'; }).join(' '); }
+function professionsHtml(c) {
+  if (!PD()) return '<div class="muted">professions.json is missing (run script\\wow_professions_json.py).</div>';
+  const P = profState(c); let h = '<div class="prof">';
+  const mine = Object.keys(P.skills).map(Number);
+  h += '<div class="sgroup"><h5>Your professions</h5>';
+  if (!mine.length) h += '<div class="muted small">None yet. Pick up to two main professions and any of the secondary ones below.</div>';
+  for (const id of mine) {
+    const nx = profNextRank(c, id); const ri = profRankIdx(c, id);
+    h += '<div class="prow"><b>' + esc(profName(id)) + '</b> <span class="muted small">' + (PROF_RANK_NAMES[ri] || '') + '</span>' + profBar(c, id) +
+      '<button class="mini" data-ptrain="' + id + '" title="Walks to the nearest trainer and learns new ranks and recipes">Find trainer</button>' +
+      '<button class="mini red" data-punlearn="' + id + '" title="Forget this profession">&#10005;</button>' +
+      (nx ? '<div class="small muted">Next: ' + PROF_RANK_NAMES[nx.idx] + ' (up to ' + nx.max + ') at level ' + nx.lvl + ', skill ' + (PD().skills[id].ranks[ri][1] - 25) + ', ' + money(nx.cost) + (nx.ready ? ' - <span class="up">ready, visit a trainer</span>' : '') + '</div>' : '') + '</div>';
+  }
+  h += '</div><div class="sgroup"><h5>Learn a profession</h5><div class="plearn">';
+  for (const id of Object.keys(PD().skills).map(Number).filter((x) => !P.skills[x])) {
+    const prim = profKind(id) !== 'secondary'; const block = prim && primaryCount(c) >= PROF_PRIMARY_MAX;
+    h += '<button class="mini" data-ptrain="' + id + '"' + (block ? ' disabled title="You already have two main professions"' : '') + '>' + esc(profName(id)) + (prim ? '' : ' <span class="muted">(secondary)</span>') + '</button>';
+  }
+  h += '</div><div class="small muted">The button walks to the nearest trainer of your faction (by flight path and ship if needed) and learns it there.</div></div>';
+  // crafting
+  for (const id of mine) {
+    const list = Object.keys(P.recipes).filter((sid) => PD().recipes[sid] && PD().recipes[sid].skill === id).sort((a, b) => PD().recipes[b].learn - PD().recipes[a].learn);
+    if (profKind(id) === 'gather' && !list.length) continue;
+    h += '<div class="sgroup"><h5>' + esc(profName(id)) + ' - recipes (' + list.length + ')</h5>';
+    if (!list.length) h += '<div class="muted small">No recipes yet - visit a trainer.</div>';
+    for (const sid of list) {
+      const r = PD().recipes[sid]; const col = recipeColor(c, r); const n = craftCount(c, sid);
+      const it = r.cr ? itemRow(r.cr[0]) : null;
+      h += '<div class="rrow">' + (it && it.ic ? '<img class="sic" src="../icons/' + it.ic.toLowerCase() + '.jpg" alt="">' : '<span class="sic"></span>') +
+        '<div class="rname"><b class="rc-' + col + '"' + (r.cr ? ' data-iid="' + r.cr[0] + '"' : '') + '>' + esc(r.n) + '</b>' + (n ? ' <span class="muted">[' + n + ']</span>' : '') + '<div class="small">' + reagHtml(c, r) + '</div></div>' +
+        '<button class="mini" data-pcraft="' + sid + '"' + (n ? '' : ' disabled') + '>' + (r.ench ? 'Enchant' : 'Craft') + '</button>' +
+        (r.ench ? '' : '<button class="mini" data-pcraftall="' + sid + '"' + (n > 1 ? '' : ' disabled') + '>All</button>') + '</div>';
+    }
+    h += '<div class="small muted">Colors: <span class="rc-orange">orange</span> always raises the skill, <span class="rc-yellow">yellow</span> usually, <span class="rc-green">green</span> rarely, <span class="rc-grey">grey</span> never.</div></div>';
+  }
+  // gathering
+  const R = P.route; const nf = Object.keys(P.found).length;
+  h += '<div class="sgroup"><h5>Gathering route</h5><div class="small">' + (R && R.pts.length ? R.pts.length + ' checkpoints on ' + (R.map === 0 ? 'Eastern Kingdoms' : 'Kalimdor') + (R.open ? ', walked back and forth' : ', walked in a loop') : 'No route yet.') + '</div>' +
+    '<div class="pbtns"><button class="mini" data-proute="edit">Edit route on the map</button><button class="mini" data-proute="clear"' + (R && R.pts.length ? '' : ' disabled') + '>Clear route</button><button class="act" data-proute="start"' + (R && R.pts.length >= 2 ? '' : ' disabled') + '>Start route</button></div>' +
+    '<div class="small muted">The character walks from checkpoint to checkpoint and gathers every herb or ore it can (within ' + NODE_SEE + ' yards), fights what attacks it, skins its kills (Skinning) and sells junk when the bags are full. Nodes are hidden on the map until gathered once (' + nf + ' found so far).</div>' +
+    '<label class="chk"><input type="checkbox" data-pset="gatherWhileLeveling"' + (G.state.settings.gatherWhileLeveling !== false ? ' checked' : '') + '> Gather nodes near the way while leveling and questing</label>' +
+    '<label class="chk"><input type="checkbox" data-pset="autoTrainProf"' + (G.state.settings.autoTrainProf !== false ? ' checked' : '') + '> Visit a trainer for the next rank by itself while leveling</label>' +
+    '<label class="chk"><input type="checkbox" data-pset="showNodes"' + (G.state.settings.showNodes !== false ? ' checked' : '') + '> Show found nodes on the map</label></div>';
+  return h + '</div>';
+}
+function professionsClick(e) {
+  const c = active(); const b = e.target.closest('[data-ptrain],[data-punlearn],[data-pcraft],[data-pcraftall],[data-proute]'); if (!b) return false;
+  const d = b.dataset;
+  if (d.ptrain) { orderTrainer(c, +d.ptrain); closeSheet(); return true; }
+  if (d.punlearn) { if (confirm('Forget ' + profName(+d.punlearn) + ' and all its recipes?')) unlearnProfession(c, +d.punlearn); renderSheet(); return true; }
+  if (d.pcraft) { craft(c, d.pcraft, 1); renderSheet(); return true; }
+  if (d.pcraftall) { craft(c, d.pcraftall, 999); renderSheet(); return true; }
+  if (d.proute === 'edit') { routeEditStart(); return true; }
+  if (d.proute === 'clear') { profState(c).route = null; save(); renderSheet(); return true; }
+  if (d.proute === 'start') { orderPatrol(c); closeSheet(); return true; }
+  return false;
+}
+function professionsChange(e) {
+  const t = e.target; if (!t.dataset || t.dataset.pset == null) return false;
+  G.state.settings[t.dataset.pset] = t.checked; save(); syncNodeToggle(); return true;
+}
+function syncNodeToggle() { const n = $('shownodes'); if (n) n.checked = G.state.settings.showNodes !== false; }

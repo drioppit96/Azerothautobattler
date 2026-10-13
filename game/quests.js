@@ -406,6 +406,20 @@ function phaseTimeout(o, key, secs) {
   if (o.phaseKey !== key) { o.phaseKey = key; o.phaseT = G.gameTime; }
   return G.gameTime - o.phaseT > secs;
 }
+/* walking to a far quest giver: use the tram, boats or known flight paths when that is quicker */
+function farGo(c, o, x, y, stop) {
+  const key = Math.round(x) + ',' + Math.round(y);
+  if (Math.hypot(x - c.pos.x, y - c.pos.y) < 900) { o.ftrip = null; return goTo(c, x, y, stop); }
+  if (!o.ftrip || o.ftrip.key !== key) {
+    const t = planTrip(c, { map: c.pos.map, x, y });
+    o.ftrip = t && t.legs.some((l) => l.kind !== 'walk') ? Object.assign(t, { key }) : { key, none: true };
+  }
+  if (o.ftrip.none) return goTo(c, x, y, stop);
+  const st = tripStep(c, o.ftrip);
+  if (st === 'busy') return false;
+  if (st === 'fail') { o.ftrip.none = true; return false; }
+  o.ftrip.none = true; return goTo(c, x, y, stop);
+}
 function questStep(c, q, o) {
   const r = rt(c);
   if (!c.quests[q.id]) {
@@ -413,7 +427,7 @@ function questStep(c, q, o) {
     const s = nearestOf(c, giverSpawns(q.giver)); if (!s) return '!Cannot find the quest giver of "' + q.title + '" on this map.';
     o.phase = 'pick up ' + q.title; o.where = spotName(s);
     if (phaseTimeout(o, 'p' + q.id, 600 + s.d / RUN_SPEED * 2.5)) { o.phaseKey = null; return '!Could not get to ' + spotName(s) + ' for "' + q.title + '".'; }
-    if (goTo(c, s.x, s.y, 3.5)) acceptQuest(c, q);
+    if (farGo(c, o, s.x, s.y, 3.5)) acceptQuest(c, q);
     else if (r.blocked) { r.blocked = false; return '!Route to ' + spotName(s) + ' is blocked by dangerous creatures.'; }
     return 'busy';
   }
@@ -429,7 +443,7 @@ function questStep(c, q, o) {
   const t = nearestOf(c, giverSpawns(q.turnin)); if (!t) return '!Cannot find where to turn in "' + q.title + '".';
   o.phase = 'turn in ' + q.title; o.where = spotName(t);
   if (phaseTimeout(o, 't' + q.id, 900 + t.d / RUN_SPEED * 2.5)) { o.phaseKey = null; return '!Could not get to ' + spotName(t) + ' to turn in "' + q.title + '".'; }
-  const arrived = goTo(c, t.x, t.y, 3.5);
+  const arrived = farGo(c, o, t.x, t.y, 3.5);
   if (!arrived && r.blocked) { r.blocked = false; return '!Route to ' + spotName(t) + ' is blocked by dangerous creatures.'; }
   if (arrived) { if (!turnInQuest(c, q)) return '!Bags are too full to receive the rewards of "' + q.title + '".'; return 'done'; }
   return 'busy';

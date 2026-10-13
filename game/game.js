@@ -77,6 +77,25 @@ function bestMapFor(pos) {
   }
   return best || G.maps[0];
 }
+/* high resolution maps: maps_hd/<same name>.png (or .jpg / .webp) drawn over the original map in the same place.
+   Optional maps_hd/hd_maps.json: { "Durotar": { "crop": [x, y, w, h] } } = the part of the HD picture that matches the original map. */
+const HD_EXT = ['.png', '.jpg', '.webp'];
+function hdOn() { return G.state && G.state.settings.hdMaps !== false; }
+function loadHd(m) {
+  G.imgHd = G.imgHd || {};
+  if (m.name in G.imgHd || m.world) return;
+  G.imgHd[m.name] = null;
+  const base = '../maps_hd/' + encodeURIComponent(m.file.split('/').pop().replace(/\.[a-z]+$/i, ''));
+  const tryExt = (i) => { if (i >= HD_EXT.length) return; loadImage(base + HD_EXT[i]).then((img) => { if (img) { G.imgHd[m.name] = img; G.hdAny = true; renderHdToggle(); } else tryExt(i + 1); }); };
+  if (G.hdList && !G.hdList.some((f) => f.replace(/\.[a-z]+$/i, '') === decodeURIComponent(base.split('/').pop()))) return;
+  tryExt(0);
+}
+function renderHdToggle() {
+  const b = $('hdmaps'); if (!b) return;
+  b.checked = hdOn(); const lab = b.parentNode;
+  lab.title = G.hdAny ? 'High resolution maps (from the maps_hd folder) over the original ones' : 'No high resolution map found for this zone. Put them in the maps_hd folder with the same file names as in maps (png, jpg or webp).';
+  lab.classList.toggle('dim', !(G.imgHd && G.imgHd[G.map && G.map.name]));
+}
 function setMap(m, keepView, onChar) {
   G.map = m; G.navHover = null; $('tip').hidden = true;
   if (m.world) G.mobs = []; else buildMobsForMap();
@@ -89,6 +108,8 @@ function setMap(m, keepView, onChar) {
     G.img[m.name] = null; fitMap();
     loadImage('../' + m.file).then((img) => { if (img) { G.img[m.name] = img; done(); } else delete G.img[m.name]; });
   } else done();
+  if (hdOn()) loadHd(m);
+  renderHdToggle();
   renderNav();
 }
 
@@ -305,6 +326,8 @@ function orderText(c) {
   if (o.type === 'quest') return { t: 'Quest: ' + o.label, d: (o.phase || '') + (o.where ? ' - ' + o.where : '') };
   if ((o.type === 'questing' || o.type === 'quest' || o.type === 'leveling') && o.wobj && G.q.byId[o.wobj[0]] && active().quests[o.wobj[0]] && o.phase === G.q.byId[o.wobj[0]].title) { const q = G.q.byId[o.wobj[0]]; const ob = q.objectives[o.wobj[1]]; o.where = (ob.type === 'Collect' ? 'collect ' : ob.id < 0 ? 'use ' : 'kill ') + ob.name + ' ' + progText(active(), q, o.wobj[1]); }
   if (o.type === 'leveling') return levelingText(c, o);
+  if (o.type === 'patrol') return patrolText(c, o);
+  if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
   if (o.type === 'questing') { const q = o.fq && G.q.byId[o.fq]; return { t: 'Questing: ' + (o.zones[o.zi] || 'done'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') }; }
   if (o.type === 'sell' || o.type === 'vendor') return { t: 'Vendor: ' + o.label, d: o.resume ? 'Selling junk, then back to work' : 'Walking to the vendor' };
   return { t: o.type, d: '' };
@@ -374,7 +397,7 @@ function showMenu(sx, sy, sel) {
   m.innerHTML = '<h4>' + esc(title) + '</h4>' +
     '<button data-a="travel">Travel here</button>' +
     '<button data-a="grind">Grind around here</button>' + extra +
-    '<button disabled>Gather around here (stage 5)</button>' +
+    '<button data-a="route">Add a gathering route checkpoint here</button>' +
     '<button data-a="close" style="color:#9a8f77">Cancel</button>';
   m.hidden = false; G.menuOpen = true;
   const w = $('mapwrap').clientWidth, h = $('mapwrap').clientHeight;
@@ -382,6 +405,7 @@ function showMenu(sx, sy, sel) {
   m.onclick = (ev) => {
     const a = ev.target.dataset && ev.target.dataset.a; if (!a) return;
     if (a === 'travel') orderTravel(c, target, label);
+    else if (a === 'route') { if (!G.routeEdit) routeEditStart(); routeAddPoint(target); }
     else if (a === 'grind') orderGrind(c, target.x, target.y, 100, null, 'around ' + (sel.kind === 'ground' ? label : title));
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));
@@ -397,7 +421,12 @@ function draw() {
   ctx.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, G.cw, G.ch);
   const img = G.img[G.map.name]; const m = G.map;
-  if (img) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); }
+  if (img) {
+    ctx.imageSmoothingQuality = 'high';
+    const hd = hdOn() && G.imgHd && G.imgHd[m.name];
+    if (hd) { const cr = (G.hdCal && G.hdCal[m.name] && G.hdCal[m.name].crop) || [0, 0, hd.naturalWidth, hd.naturalHeight]; ctx.drawImage(hd, cr[0], cr[1], cr[2], cr[3], G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); }
+    else ctx.drawImage(img, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale);
+  }
   if (!img) { ctx.fillStyle = '#9a8f77'; ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText('Loading map ...', G.cw / 2, G.ch / 2); ctx.textAlign = 'start'; }
   if (m.world) { drawNavOverlay(ctx); return; }
   if ($('showterrain') && $('showterrain').checked) drawTerrain(ctx, m);
@@ -473,6 +502,7 @@ function draw() {
     for (const q of G.qMarks) { if (q.map !== m.map) continue; const [x, y] = w2s(q.x, q.y); if (x < -9 || y < -9 || x > G.cw + 9 || y > G.ch + 9) continue; ctx.fillStyle = q.t === '?' ? '#ffd23a' : '#ffe14d'; ctx.strokeText(q.t, x, y - 6); ctx.fillText(q.t, x, y - 6); }
     ctx.textAlign = 'start';
   }
+  drawProfOverlay(ctx, m);
   // the pet
   if (c.pet && !c.pet.dead && rt(c).pet && c.pos.map === m.map && !rt(c).ghost) {
     const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
@@ -563,6 +593,7 @@ function bindInput() {
     const [sx, sy] = pos(e);
     if (e.button === 2) return;
     if (G.map.world || G.map.cont) { const h = navHit(sx, sy); if (h && h.def) { const w = s2w(sx, sy); setMap(h.def); } return; }
+    if (G.routeEdit) { const w0 = s2w(sx, sy); if (inMap(G.map, w0.x, w0.y)) routeAddPoint(w0); return; }
     const hit = pickAt(sx, sy, d.touch ? 18 : 8);
     const w = s2w(sx, sy);
     const sel = hit || { kind: 'ground', x: w.x, y: w.y };
@@ -630,6 +661,8 @@ function bindInput() {
   };
   $('btnLoad').onclick = () => $('fileLoad').click();
   $('btnChars').onclick = () => charScreen(false);
+  $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
+  $('hdmaps').onchange = () => { G.state.settings.hdMaps = $('hdmaps').checked; save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
     try { const s = JSON.parse(await f.text()); if (!s.characters || !s.characters.length) throw new Error('no characters'); G.state = s; save(); location.reload(); }
@@ -677,6 +710,8 @@ async function boot() {
     try { G.d.vendorItems = await J('../gamedata/vendor_items.json'); } catch (e) { G.d.vendorItems = null; }
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }
     try { G.d.eventMobs = new Set(await J('../gamedata/event_mobs.json')); } catch (e) { G.d.eventMobs = null; }
+    try { G.d.prof = await J('../gamedata/professions.json'); } catch (e) { G.d.prof = null; console.warn('professions.json not found - no professions'); }
+    try { G.d.skinning = await J('../gamedata/skinning.json'); } catch (e) { G.d.skinning = null; }
     try { G.d.pets = await J('../gamedata/pets.json'); } catch (e) { G.d.pets = null; }
     try { G.d.stances = await J('../gamedata/spell_stances.json'); } catch (e) { G.d.stances = null; }
     try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }
@@ -691,6 +726,8 @@ async function boot() {
     loadMsg('maps ...');
     let manifest = null; try { manifest = await J('../files.json'); } catch (e) { manifest = null; }
     const files = manifest ? manifest.maps : await listDir('../maps/', '.png');
+    G.hdList = manifest && manifest.maps_hd ? manifest.maps_hd : null;
+    try { G.hdCal = await J('../maps_hd/hd_maps.json'); } catch (e) { G.hdCal = null; }
     const has = (f) => !files.length || files.includes(f.split('/').pop());
     G.maps = DATA.maps.filter((m) => has(m.file) && (m.map === 0 || m.map === 1));
     if (has(WORLD_MAP.file) && files.length) G.maps.push(WORLD_MAP);
@@ -718,7 +755,7 @@ async function boot() {
     goToCharacter();
     loadGrid(c.pos.map);
     setSpeed(G.state.settings.speed === undefined ? 1 : G.state.settings.speed);
-    renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); bindSheet();
+    renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); bindSheet(); syncNodeToggle();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');
     $('loading').style.display = 'none';
     requestAnimationFrame(frame);

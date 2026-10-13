@@ -61,8 +61,9 @@ const PLAYSTYLES = {
 };
 function defaultCfg() { return { style: 'balanced', sitAt: 70, standAt: 100, eatAt: 60, potionAt: 30, drinkAt: 45, wandAt: 20, form: 'auto', stance: 'b', rules: [], autoTalents: true, talentBuild: 'arms' }; }
 /* hunter pet abilities and other spells that are no use to the character itself */
-const NOT_MINE = new Set(['Bite', 'Claw', 'Dash', 'Dive', 'Growl', 'Cower', 'Prowl', 'Screech', 'Furious Howl', 'Lightning Breath', 'Scorpid Poison', 'Thunderstomp', 'Shell Shield', 'Cobra Reflexes', 'Natural Armor', 'Great Stamina',
-  'Fire Resistance', 'Frost Resistance', 'Shadow Resistance', 'Nature Resistance', 'Arcane Resistance', 'Charge', 'Immolation Trap Effect', 'Explosive Trap Effect', 'Hellfire Effect', 'Ritual of Doom Effect', 'Pounce Bleed', 'Moonkin Aura', 'Chilled', 'Frostbite', 'Impact', 'Master of Elements', 'Lightwell Renew', 'Healing Way', 'Eye for an Eye', 'Throw',
+const PET_SPELLS = new Set(['Bite', 'Claw', 'Dash', 'Dive', 'Growl', 'Cower', 'Prowl', 'Screech', 'Furious Howl', 'Lightning Breath', 'Scorpid Poison', 'Thunderstomp', 'Shell Shield', 'Cobra Reflexes', 'Natural Armor', 'Great Stamina',
+  'Fire Resistance', 'Frost Resistance', 'Shadow Resistance', 'Nature Resistance', 'Arcane Resistance', 'Charge']);
+const NOT_MINE = new Set(['Immolation Trap Effect', 'Explosive Trap Effect', 'Hellfire Effect', 'Ritual of Doom Effect', 'Pounce Bleed', 'Moonkin Aura', 'Chilled', 'Frostbite', 'Impact', 'Master of Elements', 'Lightwell Renew', 'Healing Way', 'Eye for an Eye', 'Throw',
   'Shoot Bow', 'Shoot Gun', 'Shoot Crossbow', 'Auto Shot', 'Shoot', 'Poisons', 'Beast Training']);
 
 /* ------------------------------------------------------------- learning */
@@ -76,7 +77,7 @@ function classAbilityList(cls) {
     const src = sp.src || [];
     if (!src.includes('class')) continue;
     if ((sp.fl || []).some((f) => f === 'passive' || f === 'hidden' || (f === 'ranged' && cls !== 3))) continue;
-    if (NOT_MINE.has(sp.n) && !(cls === 1 && sp.n === 'Charge')) continue;
+    if (NOT_MINE.has(sp.n) || (cls === 3 && PET_SPELLS.has(sp.n))) continue;
     (groups[sp.n] = groups[sp.n] || []).push(Object.assign({ id: +id }, sp));
   }
   // abilities that come from talents: rank 1 is the talent's own spell
@@ -234,6 +235,11 @@ function applySpell(c, sp, tgt, ctx) {
     switch (e.t) {
       case 17: case 58: case 121: case 31: {
         if (weaponDone || !tgt) break; weaponDone = true;
+        if (c.cls === 3 && (sp.fl || []).includes('ranged') && rangedWeapon(c)) {       // Multi-Shot, Aimed Shot: the bow or gun
+          const nT = sp.n === 'Multi-Shot' ? areaTargets(c, 10, true).filter((x) => x !== tgt).slice(0, 2).concat([tgt]) : [tgt];
+          for (const m of nT) rangedHit(c, m, e.t === 31 ? 0 : effValue(c, sp, e, e.lo), e.t === 31 ? e.lo : 100, sp.n);
+          did = true; break;
+        }
         const nTargets = sp.n === 'Whirlwind' ? areaTargets(c, AOE_RADIUS, true).slice(0, 4) : [tgt];
         for (const m of nTargets) {
           const bonus = e.t === 31 ? 0 : e.lo;
@@ -335,10 +341,13 @@ function ruleTarget(c, rule, sp, tgt) {
     switch (rule.mode) {
       case 'heal': return att.length && hpPct < (rule.p || 35) ? c : null;
       case 'finisher': {
-        if (!tgt || r.cpTgt !== tgt || (r.cp || 0) < Math.min(rule.p || 3, 5)) return null;
-        if ((sp.ef || []).some((e) => e.k === 'self' && (e.t === 6 || e.t === 35)) && buffLeft(c, name) > 1) return null;
-        if (tgt.hp / tgt.maxhp < 0.15 && name !== 'Eviscerate' && name !== 'Ferocious Bite') return null;
-        return tgt;
+        if (!tgt || r.cpTgt !== tgt || !r.cp) return null;
+        const selfBuff = (sp.ef || []).some((e) => e.k === 'self' && (e.t === 6 || e.t === 35));
+        const dmg = (sp.ef || []).some((e) => e.t === 2 || (e.au === 3 && e.k === 'enemy'));
+        if (selfBuff && (buffLeft(c, name) > 1 || tgt.hp / tgt.maxhp < 0.5)) return null;        // Slice and Dice: only on a fresh target
+        if (r.cp >= Math.min(rule.p || 3, 5)) return tgt;
+        if (dmg && name !== 'Rupture' && name !== 'Rip' && tgt.hp / tgt.maxhp < 0.2) return tgt;                   // finish it off with what there is
+        return null;
       }
       case 'lowmana': return att.length && mp < (rule.p || 20) && (name !== 'Life Tap' || hpPct > 50) ? c : null;
       case 'execute': return tgt && tgt.hp / tgt.maxhp * 100 < (rule.p || 20) ? tgt : null;

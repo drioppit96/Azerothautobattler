@@ -19,6 +19,8 @@
     <label class="chk"><input type="checkbox" id="showroutes"> Routes</label>
     <label class="chk" title="Red: cannot walk there (mountains, cliffs, lava). Blue: swimming."><input type="checkbox" id="showterrain"> Terrain</label>
     <label class="chk"><input type="checkbox" id="showmobs" checked> Creatures</label>
+    <label class="chk" title="Herb and ore nodes you have gathered once"><input type="checkbox" id="shownodes" checked> Nodes</label>
+    <label class="chk"><input type="checkbox" id="hdmaps" checked> HD map</label>
     <div class="seg" id="speed">
       <button data-s="0" title="Pause">&#10074;&#10074;</button>
       <button data-s="1" class="on">1x</button>
@@ -57,7 +59,7 @@
 </div>
 <div id="sheet" class="modal" hidden>
   <div class="sheet-win">
-    <div class="sheet-head"><nav id="sheetTabs"><button data-tab="char" class="on">Character</button><button data-tab="talents">Talents</button><button data-tab="beh">Abilities &amp; behaviour</button><button data-tab="vendor">Vendor</button></nav><span id="sheetTitle"></span><button id="sheetClose" class="mini">&#10005;</button></div>
+    <div class="sheet-head"><nav id="sheetTabs"><button data-tab="char" class="on">Character</button><button data-tab="talents">Talents</button><button data-tab="beh">Abilities &amp; behaviour</button><button data-tab="prof">Professions</button><button data-tab="vendor">Vendor</button></nav><span id="sheetTitle"></span><button id="sheetClose" class="mini">&#10005;</button></div>
     <div class="sheet-body"><section id="sheetLeft"></section><section id="sheetBags"></section></div>
   </div>
 </div>
@@ -76,6 +78,7 @@
 <script src="quests.js"></script>
 <script src="talents.js"></script>
 <script src="leveling.js"></script>
+<script src="professions.js"></script>
 <script src="charscreen.js"></script>
 <script src="game.js"></script>
 </body>
