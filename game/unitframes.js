@@ -48,9 +48,12 @@ function renderUnitFrames() {
   const box = $('unitframes'); if (!box) return;
   const c = active(); if (!c) return; const r = rt(c); const s = charStats(c);
   /* the character on top across the whole card, below it the creatures it fights (up to five), the same size */
-  const W = box.clientWidth || 254;
-  const sp = Math.min(1.6, (W - 4) / UF.w), se = sp * 0.94;
-  if (box._w !== W) { box._w = W; box.innerHTML = ''; box._me = null; box._en = []; }
+  /* the width of the card, not counting a scrollbar of the left column: with many creatures the column grows, a scrollbar
+     comes and goes, and the frames would rescale back and forth with it */
+  const lc = $('left'); const sb = lc ? lc.offsetWidth - lc.clientWidth - (parseFloat(getComputedStyle(lc).borderRightWidth) || 0) : 0;
+  const W = (box.clientWidth || 254) + Math.max(0, sb);
+  if (!box._w || Math.abs(box._w - W) > 2) { box._w = W; box.innerHTML = ''; box._me = null; box._en = []; }
+  const sp = Math.min(1.6, (box._w - 4 - 18) / UF.w), se = sp * 0.94;
   // the character
   if (!box._me) {
     box._me = ufMake(sp, true); box._me.classList.add('ufplayer'); box.appendChild(box._me);

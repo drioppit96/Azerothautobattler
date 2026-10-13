@@ -15,7 +15,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/
 #maptabs button:hover,.mini:hover,.seg button:hover{border-color:var(--gold)}
 .seg{display:flex}.seg button{border-radius:0;padding:5px 12px}.seg button:first-child{border-radius:4px 0 0 4px}.seg button:last-child{border-radius:0 4px 4px 0}
 .chk{color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
-#left{grid-area:left;display:flex;flex-direction:column;gap:8px;padding:8px;background:var(--panel);border-right:1px solid var(--line);overflow:auto}
+#left{grid-area:left;display:flex;flex-direction:column;gap:8px;padding:8px;background:var(--panel);border-right:1px solid var(--line);overflow:auto;scrollbar-gutter:stable}
 #right{grid-area:right;padding:8px;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
 .card{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:10px}
 .card.grow{flex:1;min-height:120px;display:flex;flex-direction:column}
@@ -281,7 +281,9 @@ label.chk.dim{opacity:.55}
 
 #charCard{padding-top:6px;padding-bottom:6px}
 
-.obtns{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.obtns{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:8px}
+.obtns button{padding:4px 7px;font-size:12px}
+.obtns .obtn button:last-child{padding-left:5px;padding-right:5px}
 .obtns .obtn{display:inline-flex}
 .obtns .obtn button:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
 .obtns .obtn button:last-child{border-top-left-radius:0;border-bottom-left-radius:0;border-left:0;padding-left:6px;padding-right:6px}

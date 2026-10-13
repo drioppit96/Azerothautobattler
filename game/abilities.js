@@ -51,8 +51,10 @@ const STANCE_NAME = { b: 'Battle Stance', d: 'Defensive Stance', z: 'Berserker S
 const MODE_TEXT = {
   off: 'Never', spam: 'Whenever ready', rage: 'When rage at least', buff: 'Keep the buff up', opener: 'To open a fight',
   debuff: 'Keep on my target', debuffAll: 'Keep on every attacker', multi: 'When attackers at least', emergency: 'When my health below %',
-  flee: 'When the target flees', lowrage: 'When rage below', stack: 'Keep stacks on target',
+  flee: 'When the target flees', lowrage: 'When rage below', stack: 'Keep stacks on target', elite: 'Only against rare or elite',
 };
+/* rare, elite, rare elite and boss creatures */
+function isTough(m) { return !!(m && m.rank >= 1); }
 const MODE_HAS_P = { rage: 1, multi: 1, emergency: 1, lowrage: 1, stack: 1 };
 const PLAYSTYLES = {
   aggressive: 'Aggressive - walks straight through, ignores aggro ranges, pulls the nearest target even in packs. Still runs from creatures far above its level.',
@@ -333,6 +335,14 @@ function ruleTarget(c, rule, sp, tgt) {
   if (name === 'Charge' || name === 'Intercept') return null;          // used by the pull logic
   if (area && !safeForAoe(c)) return null;
   const defT = name === 'Overpower' ? r.opTarget : tgt;
+  if (rule.mode === 'elite') {
+    // whenever ready, but only while a rare or elite creature is in the fight; no re-casting what is still up
+    if (!isTough(tgt) && !att.some(isTough)) return null;
+    if (selfOnly || area) return selfOnly && buffLeft(c, sp.n) > 1 ? null : c;
+    const deb = (sp.ef || []).some((e) => (e.t === 6 || e.t === 35) && e.k === 'enemy'); const a = defT && mobAura(defT, sp.n);
+    if (deb && a && a.until - G.gameTime > 2 && !(sp.stack && a.stacks < sp.stack)) return null;
+    return defT;
+  }
   if (c.cls !== 1) {
     // totems, seals and weapon imbues that are still up; heal-over-time already ticking
     if (/Totem$/.test(name) && ((r.totemDmg && r.totemDmg.name === name && r.totemDmg.until > G.gameTime + 2) || buffLeft(c, name) > 2)) return null;
@@ -413,6 +423,7 @@ function useAbilities(c, tgt) {
       if (rule.mode === 'spam') ok = true;
       else if (rule.mode === 'rage') ok = pw >= (rule.p || 0);
       else if (rule.mode === 'multi') ok = attackersOf(c).length >= (rule.p || 2) && pw >= (rule.r || 0);
+      else if (rule.mode === 'elite') ok = isTough(tgt);
       if (ok && pw >= cost && (r.cd[rule.n] || 0) <= G.gameTime) r.queued = { name: rule.n, sp };
       continue;
     }

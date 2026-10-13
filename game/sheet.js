@@ -256,7 +256,7 @@ function behaviourHtml(c) {
     const cd = sp && (sp.cd || sp.catcd) ? ((sp.cd || sp.catcd) / 1000) + 's cd' : '';
     h += '<div class="arow' + (rule.mode === 'off' ? ' off' : '') + '">' + spellIcon(sp) +
       '<div class="aname"><b>' + esc(rule.n) + '</b> <span class="muted small">' + esc(sp && sp.r ? sp.r : '') + '</span><div class="small muted">' + [cost, castS ? castS.toFixed(1) + 's cast' : sp && isChanneled(sp) ? 'channeled' : '', cd].filter(Boolean).join(', ') + (u.ok ? '' : ' <span style="color:#e6b93c">' + esc(u.why) + '</span>') + '</div></div>' +
-      '<select data-rmode="' + i + '">' + meta.modes.map((m) => '<option value="' + m + '"' + (rule.mode === m ? ' selected' : '') + '>' + MODE_TEXT[m] + '</option>').join('') + '</select>' +
+      '<select data-rmode="' + i + '">' + ruleModes(rule.n, meta.modes).map((m) => '<option value="' + m + '"' + (rule.mode === m ? ' selected' : '') + '>' + MODE_TEXT[m] + '</option>').join('') + '</select>' +
       (MODE_HAS_P[rule.mode] ? '<input type="number" data-rp="' + i + '" value="' + (rule.p || 0) + '" min="0" max="100" step="' + (rule.mode === 'multi' || rule.mode === 'stack' ? 1 : 5) + '">' : '<span class="pfill"></span>') +
       '<span class="updn"><button class="mini" data-up="' + i + '"' + (i ? '' : ' disabled') + '>&#9650;</button><button class="mini" data-dn="' + i + '"' + (i < cfg.rules.length - 1 ? '' : ' disabled') + '>&#9660;</button></span></div>';
   });
@@ -265,6 +265,11 @@ function behaviourHtml(c) {
   if (up.length) h += '<div class="sgroup"><h5>Coming with levels (learned automatically)</h5>' + up.map((x) => '<div class="small">Level ' + x.lv + ': ' + esc(x.n) + (x.r ? ' (' + esc(x.r) + ')' : '') + (x.isNew ? ' <span class="up">new</span>' : '') + '</div>').join('') + '</div>';
   h += '<div class="sgroup small muted">Modes: <b>Keep on my target</b> re-applies a debuff (Rend, Hamstring...) only when it has run out. <b>Keep on every attacker</b> spreads it to each creature hitting you. <b>When attackers at least</b> is for area abilities. Heroic Strike and Cleave replace the next swing.</div>';
   return h + '</div>';
+}
+/* every fighting ability can also be kept for rare and elite creatures only */
+function ruleModes(n, modes) {
+  if (modes.includes('elite') || n === 'Charge' || n === 'Intercept' || modes.every((m) => ['off', 'conjure', 'pet', 'petheal', 'form', 'heal'].includes(m))) return modes;
+  return modes.concat(['elite']);
 }
 /* rule modes for abilities without a hand-made entry */
 function genericModes(c, sp) {

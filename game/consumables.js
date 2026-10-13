@@ -4,11 +4,11 @@
    weightstones and weapon oils, dynamite and bombs. Each kind has rules in the tactics window (when to use it). */
 
 const CONS_MODES = {
-  buff: ['off', 'buff', 'fight', 'emergency'],
+  buff: ['off', 'buff', 'fight', 'elite', 'emergency'],
   bandage: ['off', 'afterfight', 'emergency'],
-  mana: ['off', 'lowmana', 'fight'],
+  mana: ['off', 'lowmana', 'fight', 'elite'],
   weapon: ['off', 'buff'],
-  bomb: ['off', 'fight', 'multi', 'spam'],
+  bomb: ['off', 'fight', 'elite', 'multi', 'spam'],
 };
 Object.assign(MODE_TEXT, { afterfight: 'After a fight, health below %', fight: 'At the start of a fight', lowmana: 'When mana/power below %' });
 Object.assign(MODE_HAS_P, { afterfight: 1, lowmana: 1 });
@@ -157,6 +157,7 @@ function consumablesFight(c, m) {
     else if (rule.mode === 'emergency') go = hpPct < (rule.p || 30) && (u.kind !== 'buff' || !consBuffUp(c, u));
     else if (rule.mode === 'lowmana') go = u.ptype === 0 ? mp < (rule.p || 15) : powerOf(c, u.ptype) < (rule.p || 15);
     else if (rule.mode === 'multi') go = att >= (rule.p || 3);
+    else if (rule.mode === 'elite') { const tough = isTough(m) || (r.threats || []).some(isTough); go = tough && (u.kind === 'bomb' || (u.kind === 'buff' ? !consBuffUp(c, u) : u.kind === 'mana' ? (u.ptype === 0 ? mp < 60 : powerOf(c, u.ptype) < 30) : true)); }
     else if (rule.mode === 'spam') go = true;
     if (!go) continue;
     const i = consBagIndex(c, id); if (i >= 0 && useConsumable(c, i, 'rule')) { r.usedIn = m; return; }
