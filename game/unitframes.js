@@ -79,7 +79,8 @@ function renderUnitFrames() {
     const info = m.info; const beh = behOf(m, c);
     ufSet(e, 'id', m, () => {
       e._bg.style.backgroundImage = 'url(' + ufFrameTexture(m.rank) + ')';
-      const p = '../portraits/small/' + m.e + '.png';
+      // portraits/by_name/<entry>_<name>.png is the creature's own picture (portraits/small is by model id, not creature)
+      const p = G.portraits[m.e] ? '../portraits/by_name/' + encodeURIComponent(G.portraits[m.e]) : '../ui/CharacterFrame/TemporaryPortrait-Monster.png';
       e._img.onerror = () => { e._img.onerror = null; e._img.src = '../ui/CharacterFrame/TemporaryPortrait-Monster.png'; };
       e._img.src = p;
       e._name.textContent = info ? info[1] : 'Creature';

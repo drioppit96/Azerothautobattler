@@ -66,10 +66,11 @@ function mapCoords(m, x, y) { return [((m.yl - y) / (m.yl - m.yr) * 100).toFixed
 
 function fitMap() {
   const [W, H] = mapSize(G.map);
-  G.scale = G.ch > G.cw * 1.15 ? Math.max(G.cw / W, G.ch / H) * 0.9 : Math.min(G.cw / W, G.ch / H);
+  G.scale = G.ch > G.cw * 1.15 && !G.map.dmap ? Math.max(G.cw / W, G.ch / H) * 0.9 : Math.min(G.cw / W, G.ch / H);
   G.ox = (G.cw - W * G.scale) / 2; G.oy = (G.ch - H * G.scale) / 2;
 }
 function bestMapFor(pos) {
+  if (typeof dungeonMapAt === 'function') { const dm = dungeonMapAt(pos); if (dm) return dm; }
   let best = null;
   for (const m of G.maps) {
     if (m.map !== pos.map || !inMap(m, pos.x, pos.y)) continue;
@@ -122,6 +123,7 @@ function buildMobsForMap() {
   const W = ensureWorld(m.map);
   for (const mob of W.list) {
     if (!inMap(m, mob.hx, mob.hy)) continue;
+    if (m.dmap && !mobOnFloor(mob, m)) continue;
     mob.beh = c ? behOf(mob, c) : 'N'; out.push(mob);
   }
   G.mobs = out;
@@ -201,6 +203,7 @@ function planPath(c, target) {
   let pts = [from, to]; let via = 'straight line';
   const direct = dist(from, to);
   const ghost = !!(c.rt && c.rt.ghost);
+  if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) return dungeonPath(c, from, Object.assign({}, to, { z: target.z }));
   if (typeof gridOf === 'function' && gridOf(c.pos.map) && direct > 6) {
     const gp = gridPath(c, from, to, ghost);
     if (gp) {
@@ -293,34 +296,11 @@ function stopOrder(c) {
 }
 /* --------------------------------------------------------------------- UI */
 function renderChar() {
-  const c = active(); const s = charStats(c); const r = rt(c);
-  const xpNext = (G.d.xp.levels[c.level - 1] || {}).xp_to_next || 1;
+  /* the left card holds only the unit frames (the character and what it fights); stats and money are in the character window */
+  const c = active(); const s = charStats(c);
   if (c.hp == null || c.hp > s.maxHp) c.hp = s.maxHp;
-  let status = 'Idle';
-  if (r.ghost) status = 'Ghost - running to the corpse';
-  else if (r.flying) status = 'Flying to ' + G.d.taxi.nodes[r.flying.to].n;
-  else if (r.riding) status = 'Travelling on ' + r.riding.name;
-  else if (r.fleeing) status = 'Fleeing';
-  else if (r.threats && r.threats.length) status = 'In combat: ' + (r.tgt && r.tgt.info ? r.tgt.info[1] : '...');
-  else if (r.cast) status = 'Casting ' + r.cast.name;
-  else if (r.drinking) status = 'Drinking';
-  else if (r.resting) status = 'Resting';
-  else if (c.order) status = 'Working on an order';
-  if (!$('charTop')) $('charCard').innerHTML = '<div id="charTop"></div><div id="unitframes"></div><div id="charStats"></div>';
-  $('charTop').innerHTML =
-    '<h3>Character</h3><div class="name" id="cname" title="Click to rename" style="cursor:pointer">' + esc(c.name) + '</div>' +
-    '<div class="sub">Level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + ' &middot; ' + status + '</div>' +
-    '<div class="bar hp"><i style="width:' + (100 * Math.max(0, c.hp) / s.maxHp) + '%"></i><span>' + Math.round(c.hp) + ' / ' + s.maxHp + '</span></div>' +
-    (() => { const pt = powerType(c); const v = Math.round(powerOf(c, pt)), mx = Math.max(1, Math.round(powerMax(c, pt))); return '<div class="bar ' + ['mana', 'rage', '', 'energy'][pt] + '"><i style="width:' + (100 * v / mx) + '%"></i><span>' + powerName(pt) + ' ' + v + ' / ' + mx + '</span></div>'; })() +
-    (c.pet ? '<div class="bar pet"><i style="width:' + (c.pet.dead ? 0 : 100 * c.pet.hp / c.pet.maxhp) + '%"></i><span>' + esc(c.pet.name) + (c.pet.dead ? ' (dead)' : ' ' + Math.round(c.pet.hp) + ' / ' + c.pet.maxhp) + '</span></div>' : '') +
-    '<div class="bar xp"><i style="width:' + (100 * c.xp / xpNext) + '%"></i><span>XP ' + c.xp + ' / ' + xpNext + '</span></div>';
-  $('charStats').innerHTML =
-    '<div class="stats"><div>Strength <b>' + s.str + '</b></div><div>Agility <b>' + s.agi + '</b></div><div>Stamina <b>' + s.sta + '</b></div>' +
-    '<div>Intellect <b>' + s.int + '</b></div><div>Spirit <b>' + s.spi + '</b></div><div>Armor <b>' + Math.round(s.armor) + '</b></div>' +
-    (isCaster(c) || c.cls === 2 || c.cls === 7 || (c.cls === 11 && !c.form) ? '<div>Spell power <b>' + Math.round(s.sd || 0) + '</b></div><div>Spell crit <b>' + spellCritChance(c).toFixed(1) + '%</b></div>' : c.cls === 3 ? '<div>Ranged AP <b>' + Math.round(s.rap) + '</b></div><div>Crit <b>' + s.crit.toFixed(1) + '%</b></div>' : '<div>Attack power <b>' + s.ap + '</b></div><div>Crit <b>' + s.crit.toFixed(1) + '%</b></div>') + '</div>' +
-    '<div class="kv" style="margin-top:6px"><span>Money</span><span style="color:#ffd866">' + money(c.gold) + '</span></div>';
+  if (!$('unitframes')) $('charCard').innerHTML = '<div id="unitframes"></div>';
   renderUnitFrames();
-  $('cname').onclick = () => { const n = prompt('Name:', c.name); if (n && n.trim()) { c.name = n.trim().slice(0, 20); save(); renderChar(); } };
 }
 function orderText(c) {
   const o = c.order; if (!o) return null;
@@ -330,6 +310,7 @@ function orderText(c) {
   if ((o.type === 'questing' || o.type === 'quest' || o.type === 'leveling') && o.wobj && G.q.byId[o.wobj[0]] && active().quests[o.wobj[0]] && o.phase === G.q.byId[o.wobj[0]].title) { const q = G.q.byId[o.wobj[0]]; const ob = q.objectives[o.wobj[1]]; o.where = (ob.type === 'Collect' ? 'collect ' : ob.id < 0 ? 'use ' : 'kill ') + ob.name + ' ' + progText(active(), q, o.wobj[1]); }
   if (o.type === 'leveling') return levelingText(c, o);
   if (o.type === 'patrol') return patrolText(c, o);
+  if (o.type === 'dungeon') return dungeonText(c, o);
   if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
   if (o.type === 'questing') { const q = o.fq && G.q.byId[o.fq]; return { t: 'Questing: ' + (o.zones[o.zi] || 'done'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') }; }
   if (o.type === 'sell' || o.type === 'vendor') return { t: 'Vendor: ' + o.label, d: o.resume ? 'Selling junk, then back to work' : 'Walking to the vendor' };
@@ -355,6 +336,8 @@ function renderOrder() {
 }
 function renderInfo(sel) {
   const el = $('infoCard');
+  if (sel && sel.kind === 'dungeon') { el.innerHTML = dungeonInfoHtml(sel.d); el.onclick = (e) => dungeonInfoClick(e, sel.d); el.onchange = (e) => dungeonInfoClick(e, sel.d); return; }
+  el.onclick = null; el.onchange = null;
   if (!sel) { el.innerHTML = '<h3>Selection</h3><div class="muted">Click a creature, a graveyard or the ground on the map.</div>'; return; }
   const c = active();
   if (sel.kind === 'mob') {
@@ -506,6 +489,7 @@ function draw() {
     ctx.textAlign = 'start';
   }
   drawProfOverlay(ctx, m);
+  drawDungeonMarks(ctx, m); drawParty(ctx, m);
   // the pet
   if (c.pet && !c.pet.dead && rt(c).pet && c.pos.map === m.map && !rt(c).ghost) {
     const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
@@ -595,6 +579,7 @@ function bindInput() {
     const d = G.drag; G.drag = null; if (!d || d.moved) return;
     const [sx, sy] = pos(e);
     if (e.button === 2) return;
+    const dh = !G.routeEdit && dungeonHit(sx, sy); if (dh) { openDungeon(dh); return; }
     if (G.map.world || G.map.cont) { const h = navHit(sx, sy); if (h && h.def) { const w = s2w(sx, sy); setMap(h.def); } return; }
     if (G.routeEdit) { const w0 = s2w(sx, sy); if (inMap(G.map, w0.x, w0.y)) routeAddPoint(w0); return; }
     const hit = pickAt(sx, sy, d.touch ? 18 : 8);
@@ -620,6 +605,8 @@ function bindInput() {
       if (G.drag.moved) { G.ox = G.drag.ox + sx - G.drag.x; G.oy = G.drag.oy + sy - G.drag.y; $('follow').checked = false; }
     }
     if (e.pointerType === 'touch') return;
+    G.dgHover = G.drag && G.drag.moved ? null : dungeonHit(sx, sy);
+    if (G.dgHover) { const tip = $('tip'); tip.innerHTML = dungeonTip(G.dgHover); tip.hidden = false; tip.style.left = (sx + 14) + 'px'; tip.style.top = (sy + 14) + 'px'; cv.style.cursor = 'pointer'; G.navHover = null; return; }
     if (G.map.world || G.map.cont) {
       G.navHover = G.drag && G.drag.moved ? null : navHit(sx, sy); const tip = $('tip');
       if (G.navHover) { tip.innerHTML = navTip(G.navHover); tip.hidden = false; tip.style.left = (sx + 14) + 'px'; tip.style.top = (sy + 14) + 'px'; cv.style.cursor = G.navHover.def ? 'pointer' : 'default'; }
@@ -713,6 +700,7 @@ async function boot() {
     try { G.d.vendorItems = await J('../gamedata/vendor_items.json'); } catch (e) { G.d.vendorItems = null; }
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }
     try { G.d.eventMobs = new Set(await J('../gamedata/event_mobs.json')); } catch (e) { G.d.eventMobs = null; }
+    try { G.d.dungeons = await J('../gamedata/dungeons.json'); } catch (e) { G.d.dungeons = null; console.warn('dungeons.json not found - no dungeons'); }
     try { G.d.prof = await J('../gamedata/professions.json'); } catch (e) { G.d.prof = null; console.warn('professions.json not found - no professions'); }
     try { G.d.skinning = await J('../gamedata/skinning.json'); } catch (e) { G.d.skinning = null; }
     try { G.d.pets = await J('../gamedata/pets.json'); } catch (e) { G.d.pets = null; }
@@ -723,6 +711,7 @@ async function boot() {
     G.spawnList = Object.entries(G.d.spawns.spawns).map(([e, l]) => [+e, l]);
     G.spawnMap = new Map(G.spawnList);
     for (const m of DATA.mobs) G.mobIdx[m[0]] = m;
+    if (G.d.dungeons && G.d.dungeons.mobs) for (const m of G.d.dungeons.mobs) if (!G.mobIdx[m[0]]) G.mobIdx[m[0]] = m;
     G.nav = makeNav(G.d.navgraph);
     loadMsg('quest index ...'); buildQuestIndex();
 

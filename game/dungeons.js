@@ -1,0 +1,442 @@
+'use strict';
+/* dungeons.js - 5-player dungeons and raids: their entrances on the world maps, the dungeon maps (one picture per
+   floor, from gamedata/dungeons.json and maps_dungeon/), walking inside (a path graph made from where the creatures
+   and objects stand), and running a dungeon with a group of companions (tank, healers, damage dealers). */
+
+const DG_COLORS = { dungeon: '#b28cff', raid: '#ff9a3c' };
+const DG_ROLE_COLOR = { tank: '#5aa0ff', healer: '#5ee07a', dps: '#ff6a5a' };
+const DG_NAMES = ['Garrick', 'Mira', 'Tolvar', 'Selene', 'Brann', 'Kaela', 'Dorn', 'Ysra', 'Halvar', 'Nessa', 'Borik', 'Lyra', 'Thane', 'Iris', 'Korg', 'Vela', 'Rurik', 'Sana', 'Ulric', 'Fenna'];
+const DG_TIME_LIMIT = 8 * 3600;      // game seconds before a run gives up (raids get half as much again)
+
+function dungeonList() { return (G.d.dungeons && G.d.dungeons.dungeons) || []; }
+function dungeonByMap(id) { G.dgIdx = G.dgIdx || {}; if (!(id in G.dgIdx)) G.dgIdx[id] = dungeonList().find((d) => d.map === id) || null; return G.dgIdx[id]; }
+function isDungeonMap(id) { return !!dungeonByMap(id); }
+function inDungeon(c) { return isDungeonMap(c.pos.map); }
+
+/* ------------------------------------------------------------------ maps */
+function dungeonMapDef(d, f) {
+  G.dgMaps = G.dgMaps || {};
+  f = f || d.floors[0]; if (!f) return null;
+  const k = d.map + ':' + f.n;
+  if (!G.dgMaps[k]) G.dgMaps[k] = { name: d.name + (d.floors.length > 1 ? ' - ' + (f.name || 'Level ' + (d.floors.indexOf(f) + 1)) : ''), file: f.file, map: d.map, xt: f.xt, xb: f.xb, yl: f.yl, yr: f.yr, dungeon: d, floor: f, dmap: true };
+  return G.dgMaps[k];
+}
+/* the floor a point is on: inside the floor's area and, for floors on top of each other, in its height band */
+function dungeonFloorAt(d, x, y, z) {
+  let best = null, bs = -1e9;
+  for (const f of d.floors) {
+    if (x > f.xt || x < f.xb || y > f.yl || y < f.yr) continue;
+    let s = 0;
+    const banded = f.z0 > -9999 || f.z1 < 999999;
+    if (z != null && banded) { if (z >= f.z0 && z <= f.z1) s = 100; else s = -Math.min(Math.abs(z - f.z0), Math.abs(z - f.z1)); }
+    else s = 10;
+    if (z != null && f.zc != null) s -= Math.abs(z - f.zc) * 0.05;
+    s -= (f.xt - f.xb) * (f.yl - f.yr) * 1e-7;            // the smaller drawing when both fit
+    if (s > bs) { bs = s; best = f; }
+  }
+  return best || d.floors[0];
+}
+function dungeonMapAt(pos) { const d = dungeonByMap(pos.map); return d ? dungeonMapDef(d, dungeonFloorAt(d, pos.x, pos.y, pos.z)) : null; }
+function mobOnFloor(m, map) { if (m.floorN == null) m.floorN = dungeonFloorAt(map.dungeon, m.hx, m.hy, m.z).n; return m.floorN === map.floor.n; }
+
+/* ------------------------------------------------------------------ entrances on the world maps */
+function dungeonsOnMap(m) {
+  if (m.world || m.dmap) return [];
+  return dungeonList().filter((d) => d.entrance && d.entrance.map === m.map && inMap(m, d.entrance.x, d.entrance.y));
+}
+function drawDungeonMarks(ctx, m) {
+  const list = dungeonsOnMap(m); if (!list.length) return;
+  const c = active(); const R = m.cont ? 7 : 10;
+  ctx.save(); ctx.textAlign = 'center';
+  for (const d of list) {
+    const [x, y] = w2s(d.entrance.x, d.entrance.y); if (x < -20 || y < -20 || x > G.cw + 20 || y > G.ch + 20) continue;
+    const col = DG_COLORS[d.kind] || '#b28cff'; const hov = G.dgHover === d;
+    ctx.shadowColor = col; ctx.shadowBlur = hov ? 16 : 8;
+    ctx.fillStyle = '#1a1020'; ctx.strokeStyle = col; ctx.lineWidth = hov ? 3 : 2.2;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, 6.3); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+    // a portal swirl
+    ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let a = 0; a < 9.5; a += 0.3) { const rr = R * 0.75 * a / 9.5; const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr; if (a) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+    ctx.stroke();
+    if (!m.cont || hov || G.scale > 2.2) {
+      const lv = d.lmin + (d.lmax && d.lmax !== d.lmin ? '-' + d.lmax : '');
+      ctx.font = 'bold ' + (m.cont ? 10 : 12) + 'px Segoe UI'; ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+      const t = (m.cont && !hov ? d.short : d.name) + ' (' + lv + ')';
+      ctx.fillStyle = c && c.level >= d.lmin ? '#ffe9a8' : '#ff9a8a';
+      ctx.strokeText(t, x, y - R - 5); ctx.fillText(t, x, y - R - 5);
+    }
+  }
+  ctx.restore();
+}
+function dungeonHit(sx, sy) {
+  if (!G.map) return null; const R = G.map.cont ? 11 : 14; let best = null, bd = R * R;
+  for (const d of dungeonsOnMap(G.map)) { const [x, y] = w2s(d.entrance.x, d.entrance.y); const dd = (x - sx) ** 2 + (y - sy) ** 2; if (dd < bd) { bd = dd; best = d; } }
+  return best;
+}
+function openDungeon(d, floor) {
+  const m = dungeonMapDef(d, floor); if (!m) { log('No map for ' + d.name + '.'); return; }
+  if ($('follow').checked && active().pos.map !== d.map) $('follow').checked = false;
+  setMap(m); G.selected = { kind: 'dungeon', d }; renderInfo(G.selected);
+}
+function dungeonTip(d) {
+  const c = active(); const lv = d.lmin + (d.lmax && d.lmax !== d.lmin ? ' - ' + d.lmax : '+');
+  return '<b>' + esc(d.name) + '</b><br>' + (d.kind === 'raid' ? 'Raid, ' + d.players + ' players' : 'Dungeon, 5 players') + '<br>Level ' + lv + (c.level < d.lmin ? ' <span style="color:#ff8a7a">(too low)</span>' : '') + '<br><span class="muted">Click to open the dungeon map</span>';
+}
+function dungeonInfoHtml(d) {
+  const c = active(); const o = c.order; const here = c.pos.map === d.map;
+  const running = o && o.type === 'dungeon' && o.map === d.map;
+  const W = G.world[d.map];
+  const dead = (e) => W && W.list.some((m) => m.e === e) && W.list.filter((m) => m.e === e).every((m) => m.st === 'dead');
+  let h = '<h3>' + (d.kind === 'raid' ? 'Raid' : 'Dungeon') + '</h3><div class="name" style="font-size:16px">' + esc(d.name) + '</div>' +
+    '<div class="sub">Level ' + d.lmin + (d.lmax && d.lmax !== d.lmin ? ' - ' + d.lmax : '+') + ' &middot; ' + d.players + ' players</div>';
+  if (d.floors.length > 1) h += '<div class="dgfloors">' + d.floors.map((f, i) => '<button class="mini' + (G.map.dmap && G.map.floor === f && G.map.dungeon === d ? ' on' : '') + '" data-dgfloor="' + i + '">' + esc(f.name || 'Level ' + (i + 1)) + '</button>').join('') + '</div>';
+  if (d.bosses.length) h += '<div class="small" style="margin:6px 0">' + d.bosses.map((b) => '<div' + (dead(b.e) ? ' style="color:#7a7a7a;text-decoration:line-through"' : '') + '>&#9760; ' + esc(b.n) + '</div>').join('') + '</div>';
+  const low = c.level < d.lmin - (d.kind === 'raid' ? 0 : 3);
+  h += '<div class="dgbtns">';
+  if (!G.map.dmap || G.map.dungeon !== d) h += '<button class="mini" data-dg="map">Open the dungeon map</button>';
+  if (running) h += '<button class="act red" data-dg="leave">Leave the dungeon</button>';
+  else h += '<button class="act" data-dg="run"' + (low ? ' disabled title="Needs level ' + (d.lmin - (d.kind === 'raid' ? 0 : 3)) + '"' : '') + '>' + (here ? 'Clear it' : 'Run it') + ' with a group of ' + d.players + '</button>' +
+    '<button class="mini" data-dg="solo"' + (low ? ' disabled' : '') + '>Run it alone</button>' +
+    (!here && d.entrance ? '<button class="mini" data-dg="go">Travel to the entrance</button>' : '');
+  h += '</div><label class="chk"><input type="checkbox" data-dgset="dgFullClear"' + (G.state.settings.dgFullClear ? ' checked' : '') + '> Kill every creature (otherwise: the bosses and what is in the way)</label>';
+  return h;
+}
+function dungeonInfoClick(e, d) {
+  const b = e.target.closest('[data-dg],[data-dgfloor]'); const c = active();
+  if (e.target.dataset && e.target.dataset.dgset) { G.state.settings[e.target.dataset.dgset] = e.target.checked; save(); return true; }
+  if (!b) return false;
+  if (b.dataset.dgfloor != null) { openDungeon(d, d.floors[+b.dataset.dgfloor]); return true; }
+  const a = b.dataset.dg;
+  if (a === 'map') openDungeon(d);
+  else if (a === 'run') orderDungeon(c, d, true);
+  else if (a === 'solo') orderDungeon(c, d, false);
+  else if (a === 'go' && d.entrance) { const t = planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }); if (t) { c.order = { type: 'dungeon', map: d.map, phase: 'travel', trip: t, onlyTravel: true, label: d.name }; log('Order: travel to ' + d.name + '.'); save(); renderOrder(); } else log('No way to ' + d.name + ' found.'); }
+  else if (a === 'leave') leaveDungeon(c, 'Left ' + d.name + '.');
+  renderInfo(G.selected); return true;
+}
+
+/* ------------------------------------------------------------------ walking inside: a path graph */
+function dungeonGraph(mapId) {
+  G.dgGraph = G.dgGraph || {};
+  if (G.dgGraph[mapId]) return G.dgGraph[mapId];
+  const pts = []; const seen = new Set();
+  const add = (x, y, z) => { const k = Math.round(x / 2) + ',' + Math.round(y / 2) + ',' + Math.round(z / 3); if (seen.has(k)) return; seen.add(k); pts.push({ x, y, z, nb: [] }); };
+  for (const [, l] of G.spawnList) for (const s of l) if (s[0] === mapId) add(s[1], s[2], s[3]);
+  const ob = G.d.objects && G.d.objects.objects; if (ob) for (const e in ob) for (const s of ob[e]) if (s[0] === mapId) add(s[1], s[2], s[3]);
+  const d = dungeonByMap(mapId); if (d) { for (const en of d.enter) add(en.x, en.y, en.z); for (const b of d.bosses) add(b.x, b.y, b.z); }
+  const CELLG = 25; const grid = new Map(); pts.forEach((p, i) => { const k = Math.floor(p.x / CELLG) + ',' + Math.floor(p.y / CELLG); (grid.get(k) || grid.set(k, []).get(k)).push(i); });
+  if (d) pts.forEach((p) => { p.f = dungeonFloorAt(d, p.x, p.y, p.z); });
+  const link = (i, j, w) => { const p = pts[i]; if (p.nb.some((x) => x[0] === j)) return; p.nb.push([j, w]); pts[j].nb.push([i, w]); };
+  pts.forEach((p, i) => {
+    const cx = Math.floor(p.x / CELLG), cy = Math.floor(p.y / CELLG); const near = [], far = [];
+    for (let a = -6; a <= 6; a++) for (let b = -6; b <= 6; b++) for (const j of grid.get((cx + a) + ',' + (cy + b)) || []) {
+      if (j <= i) continue; const q = pts[j]; const dd = Math.hypot(q.x - p.x, q.y - p.y); const dz = Math.abs(q.z - p.z);
+      if (dd <= 22 && dz <= Math.max(4, dd * 0.7)) near.push([dd + dz * 1.5, j]);
+      else if (dd <= 150 && p.f && p.f === q.f && dz <= Math.max(6, dd * 0.35) && walkLine(p.f, p, q)) far.push([dd + dz, j]);    // a straight walk on the drawn floor
+    }
+    near.sort((a, b) => a[0] - b[0]); for (const [w, j] of near.slice(0, 6)) link(i, j, w);
+    far.sort((a, b) => a[0] - b[0]); for (const [w, j] of far.slice(0, 8)) link(i, j, w);
+  });
+  // join the separate pieces (stairs and ramps between floors have few creatures on them): the closest pair each time
+  for (let pass = 0; pass < 60; pass++) {
+    const comp = new Int32Array(pts.length).fill(-1); let nc = 0;
+    for (let i = 0; i < pts.length; i++) { if (comp[i] >= 0) continue; const st = [i]; comp[i] = nc; while (st.length) { const u = st.pop(); for (const [v] of pts[u].nb) if (comp[v] < 0) { comp[v] = nc; st.push(v); } } nc++; }
+    if (nc <= 1) break;
+    let merged = 0; const done = new Set();
+    for (let k = 0; k < nc; k++) {
+      if (done.has(k)) continue; let best = null, bd = 90;
+      for (let i = 0; i < pts.length; i++) {
+        if (comp[i] !== k) continue; const p = pts[i]; const cx = Math.floor(p.x / CELLG), cy = Math.floor(p.y / CELLG);
+        for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) for (const j of grid.get((cx + a) + ',' + (cy + b)) || []) {
+          if (comp[j] === k) continue; const q = pts[j]; const dd = Math.hypot(q.x - p.x, q.y - p.y) + Math.abs(q.z - p.z) * 1.5; if (dd < bd) { bd = dd; best = [i, j]; }
+        }
+      }
+      if (best) { link(best[0], best[1], bd * 1.5); done.add(k); done.add(comp[best[1]]); merged++; }
+    }
+    if (!merged) break;
+  }
+  return (G.dgGraph[mapId] = { pts, grid, CELLG });
+}
+/* the walkable cells of a floor picture (made by script/make_dungeon_maps.py) */
+function floorWalk(f) {
+  if (f._walk !== undefined) return f._walk;
+  if (!f.walk) return (f._walk = null);
+  const bin = atob(f.walk.bits); const W = f.walk.w, H = f.walk.h; const a = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) a[i] = (bin.charCodeAt(i >> 3) >> (7 - (i & 7))) & 1;
+  return (f._walk = { W, H, a });
+}
+function walkAt(f, x, y) {
+  const w = floorWalk(f); if (!w) return true;
+  const px = Math.floor((f.yl - y) / (f.yl - f.yr) * w.W), py = Math.floor((f.xt - x) / (f.xt - f.xb) * w.H);
+  if (px < 0 || py < 0 || px >= w.W || py >= w.H) return false;
+  return !!w.a[py * w.W + px];
+}
+function walkLine(f, p, q) {
+  const w = floorWalk(f); if (!w) return false;
+  const cell = Math.min((f.yl - f.yr) / w.W, (f.xt - f.xb) / w.H); const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / Math.max(1, cell));
+  for (let k = 1; k < n; k++) { const t = k / n; if (!walkAt(f, p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t)) return false; }
+  return true;
+}
+function dgNearest(g, x, y, z) {
+  let best = -1, bd = 1e18; const cx = Math.floor(x / g.CELLG), cy = Math.floor(y / g.CELLG);
+  for (let rad = 1; rad <= 6 && best < 0; rad += 2) for (let a = -rad; a <= rad; a++) for (let b = -rad; b <= rad; b++) for (const j of g.grid.get((cx + a) + ',' + (cy + b)) || []) {
+    const p = g.pts[j]; const dd = Math.hypot(p.x - x, p.y - y) + (z != null ? Math.abs(p.z - z) * 2 : 0); if (dd < bd) { bd = dd; best = j; }
+  }
+  return best;
+}
+/* path from the character to target {x, y, z?} along the graph; points carry z */
+function dungeonPath(c, from, to) {
+  const g = dungeonGraph(c.pos.map); const direct = { pts: [{ x: from.x, y: from.y }, { x: to.x, y: to.y, z: to.z }], total: Math.hypot(to.x - from.x, to.y - from.y), via: 'straight' };
+  if (!g.pts.length) return direct;
+  const s = dgNearest(g, from.x, from.y, c.pos.z), e = dgNearest(g, to.x, to.y, to.z);
+  if (s < 0 || e < 0 || s === e) return direct;
+  const N = g.pts.length; const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1); dist[s] = 0;
+  const heap = [[0, s]]; const push = (it) => { heap.push(it); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const t = heap[0], l = heap.pop(); if (heap.length) { heap[0] = l; let i = 0; for (;;) { const a = 2 * i + 1, b = a + 1; let m = i; if (a < heap.length && heap[a][0] < heap[m][0]) m = a; if (b < heap.length && heap[b][0] < heap[m][0]) m = b; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return t; };
+  let n = 0;
+  while (heap.length && n++ < 60000) { const [dv, u] = pop(); if (dv > dist[u]) continue; if (u === e) break; for (const [v, w] of g.pts[u].nb) { const nd = dv + w; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push([nd, v]); } } }
+  if (prev[e] < 0) return Object.assign(direct, { noPath: true });
+  const chain = []; for (let v = e; v >= 0; v = prev[v]) chain.push(g.pts[v]); chain.reverse();
+  // drop points that lie almost on the straight line between their neighbours
+  const pts = [{ x: from.x, y: from.y }];
+  for (let i = 0; i < chain.length; i++) { const p = chain[i]; const nx = chain[i + 1]; const pv = pts[pts.length - 1]; if (nx && Math.abs((p.x - pv.x) * (nx.y - pv.y) - (p.y - pv.y) * (nx.x - pv.x)) / Math.max(1, Math.hypot(nx.x - pv.x, nx.y - pv.y)) < 1.2 && Math.abs(p.z - pv.z || 0) < 2) continue; pts.push({ x: p.x, y: p.y, z: p.z }); }
+  pts.push({ x: to.x, y: to.y, z: to.z });
+  let total = 0; for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return { pts, total, via: 'through the dungeon', d: dist[e] };
+}
+function dungeonReach(c, m) { const p = dungeonPath(c, c.pos, { x: m.x, y: m.y, z: m.z }); return p.noPath ? Infinity : p.d || p.total; }
+
+/* ------------------------------------------------------------------ the group */
+function partyOf(c) { return rt(c).party || null; }
+function partyUnit(c, id) { const p = partyOf(c); return p ? p.find((u) => u.id === id) : null; }
+function makeParty(c, d) {
+  const n = Math.max(0, (d.players || 5) - 1); const s = charStats(c); const out = [];
+  const tanks = n >= 19 ? (n >= 39 ? 4 : 2) : 1, heals = n >= 19 ? Math.ceil((n + 1) / 5) : 1;
+  const roles = []; for (let i = 0; i < n; i++) roles.push(i < tanks ? 'tank' : i < tanks + heals ? 'healer' : 'dps');
+  const red = 1 - clamp(fbArmor(c.level) / (fbArmor(c.level) + 400 + 85 * c.level), 0, 0.75);
+  const raid = (d.players || 5) > 5;
+  // a companion does at least what a player of this level does in fitting gear; a raid is in raid gear
+  const L = c.level; const typical = 3 + L * 1.2 + Math.max(0, L - 50) * 8;
+  const myDps = Math.max(typical, (c.cls === 1 ? (s.mhDps + s.ohDps) * red * 1.3 : classDps(c, s, 1 - red))) * (raid ? 2.5 : 1);
+  roles.forEach((role, i) => {
+    const hp = Math.round(s.maxHp * (role === 'tank' ? 1.7 : role === 'healer' ? 0.95 : 1.05) * (raid ? 1.6 : 1));
+    out.push({ id: 'g' + i, comp: true, role, name: DG_NAMES[i % DG_NAMES.length] + (i >= DG_NAMES.length ? ' ' + (i / DG_NAMES.length | 0) : ''), maxhp: hp, hp, dps: myDps * (role === 'dps' ? 1.0 : role === 'tank' ? 0.55 : 0.15), armorRed: role === 'tank' ? 0.55 : 0.2,
+      x: c.pos.x + Math.cos(i * 2.1) * 3, y: c.pos.y + Math.sin(i * 2.1) * 3, swing: Math.random() * 2, cast: 0, dead: false, taunt: 0 });
+  });
+  rt(c).party = out; rt(c).dmgLog = [];
+  return out;
+}
+function partyAlive(c) { const p = partyOf(c); return p ? p.filter((u) => !u.dead) : []; }
+/* who a creature hits: the one with the most threat (a little more is needed to take it away) */
+function mobVictimKey(m, c) {
+  let key = 'c', best = m.charThreat || 0;
+  if (petAlive(c) && (m.petThreat || 0) > best * 1.1) { key = 'p'; best = m.petThreat; }
+  if (m.gThr) for (const id in m.gThr) { const u = partyUnit(c, id); if (u && !u.dead && m.gThr[id] > best * 1.1) { key = id; best = m.gThr[id]; } }
+  return key;
+}
+function gThreat(m, u, v) { m.gThr = m.gThr || {}; m.gThr[u.id] = (m.gThr[u.id] || 0) + v * (u.role === 'tank' ? 3 : u.role === 'healer' ? 0.5 : 0.7); }
+function compTakeHit(c, u, m, d) {
+  d = Math.max(1, Math.round(d * (1 - u.armorRed)));
+  if (Math.random() < (u.role === 'tank' ? 0.25 : 0.08)) { fx(u.x, u.y, u.role === 'tank' ? 'parry' : 'dodge', '#cfc6b0'); return; }
+  u.hp -= d; fx(u.x, u.y, '-' + d, '#ff9a8a'); const r = rt(c); (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
+  if (u.hp <= 0) { u.hp = 0; u.dead = true; u.deadAt = G.gameTime; log(u.name + ' (' + u.role + ') has died.'); for (const x of threatsOf(c)) if (x.gThr) delete x.gThr[u.id]; }
+}
+function partyStep(c, dt) {
+  const p = partyOf(c); if (!p || !p.length) return; const r = rt(c);
+  const threats = r.threats || []; const now = G.gameTime;
+  if (r.dmgLog && r.dmgLog.length > 60) r.dmgLog = r.dmgLog.filter((x) => now - x[0] < 10);
+  // incoming damage per second over the last 8 seconds (the healers keep up with it)
+  let inc = 0; for (const [t, v] of r.dmgLog || []) if (now - t < 8) inc += v; inc /= 8;
+  const healers = p.filter((u) => u.role === 'healer' && !u.dead).length || 1;
+  p.forEach((u, i) => {
+    if (u.dead) {
+      // out of combat a healer brings them back; with every healer dead it takes longer (a soulstone, a long walk back)
+      const healer = p.some((h) => h.role === 'healer' && !h.dead);
+      if (!threats.length && !r.ghost && now - u.deadAt > (healer ? 12 : 30)) { u.dead = false; u.hp = Math.round(u.maxhp * 0.6); u.x = c.pos.x; u.y = c.pos.y; log(u.name + ' is back on their feet.'); }
+      return;
+    }
+    const mv = (tx, ty, stop) => { const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy); if (d > stop) { const st = Math.min(d - stop, 7.5 * dt); u.x += dx / d * st; u.y += dy / d * st; return false; } return true; };
+    if (!threats.length && u.role === 'tank' && r.tankPull && r.tankPull.st === 'alive') {
+      const m = r.tankPull; if (mv(m.x, m.y, MELEE_RANGE - 0.5)) { engage(m, c); gThreat(m, u, 50 + c.level * 6); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); for (const x of threatsOf(c)) gThreat(x, u, 30 + c.level * 4); r.tankPull = null; }
+      return;
+    }
+    if (!threats.length) {
+      const a = i * 2.4 + 0.6, rad = 3 + (i % 3) * 1.5; mv(c.pos.x + Math.cos(a) * rad, c.pos.y + Math.sin(a) * rad, 0.8);
+      u.hp = Math.min(u.maxhp, u.hp + u.maxhp * 0.06 * dt); return;
+    }
+    if (u.role === 'healer') {
+      // keep about 18 yards behind the character and heal the one that needs it most
+      mv(c.pos.x, c.pos.y, 14);
+      u.cast -= dt; if (u.cast > 0) return;
+      let tgt = null, low = 0.9;
+      const s = charStats(c); if (!r.ghost && c.hp / s.maxHp < low) { tgt = 'c'; low = c.hp / s.maxHp; }
+      for (const o of p) if (!o.dead && o.hp / o.maxhp < low) { tgt = o; low = o.hp / o.maxhp; }
+      if (petAlive(c) && c.pet.hp / c.pet.maxhp < low) { tgt = 'pet'; }
+      if (!tgt) return;
+      u.cast = 2.5;
+      const v = Math.round(Math.max(12 + c.level * 4.5, inc * 2.5 * 1.25 / healers) * rnd(0.9, 1.1));
+      if (tgt === 'c') healSelf(c, v); else if (tgt === 'pet') c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); else { tgt.hp = Math.min(tgt.maxhp, tgt.hp + v); fx(tgt.x, tgt.y, '+' + v, '#5ee07a'); }
+      for (const m of threats) gThreat(m, u, v * 0.5 / threats.length);
+      return;
+    }
+    // tank: take the creatures that are not on a tank; damage dealers: the character's target
+    let m = null;
+    if (u.role === 'tank') {
+      const loose = threats.filter((x) => { const k = mobVictimKey(x, c); const v = partyUnit(c, k); return !(v && v.role === 'tank'); });
+      m = loose.sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y))[0] || threats.find((x) => mobVictimKey(x, c) === u.id) || r.tgt;
+      if (m && mobVictimKey(m, c) !== u.id && u.taunt <= now && Math.hypot(m.x - u.x, m.y - u.y) < 30) {
+        const top = Math.max(m.charThreat || 0, m.petThreat || 0, ...Object.values(m.gThr || {}));
+        m.gThr = m.gThr || {}; m.gThr[u.id] = top * 1.3 + 60 + c.level * 4; u.taunt = now + 6; fx(u.x, u.y, 'Taunt', '#9fc7ff');
+      }
+    } else m = r.tgt && r.tgt.st !== 'dead' ? r.tgt : threats[0];
+    if (u.role === 'tank') for (const x of threats) if (x !== m && Math.hypot(x.x - u.x, x.y - u.y) < 10) gThreat(x, u, (c.level + 10) * dt * 2);      // shouts and area attacks keep the pack on the tank
+    if (!m || m.st === 'dead') return;
+    if (!mv(m.x, m.y, MELEE_RANGE - 0.5)) return;
+    u.swing -= dt; if (u.swing > 0) return; u.swing += 2.0;
+    const diff = m.lvl - c.level; if (Math.random() < 0.05 + Math.max(0, diff) * 0.02) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
+    const arm = Math.max(0, m.armor + mobMods(m).armor); const red = 1 - clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
+    let v = u.dps * 2.0 * rnd(0.85, 1.15) * red; if (Math.random() < 0.08) v *= 2;
+    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m); gThreat(m, u, v); fx(m.x, m.y, '' + v, '#e8d8b8');
+    if (m.st === 'alive') engage(m, c);
+    if (m.hp <= 0) killMob(c, m);
+  });
+}
+function drawParty(ctx, m) {
+  const c = active(); const p = partyOf(c); if (!p || c.pos.map !== m.map) return;
+  ctx.save(); ctx.font = '10px Segoe UI'; ctx.textAlign = 'center';
+  for (const u of p) {
+    if (m.dmap && dungeonFloorAt(m.dungeon, u.x, u.y, c.pos.z) !== m.floor) continue;
+    const [x, y] = w2s(u.x, u.y); ctx.globalAlpha = u.dead ? 0.35 : 1;
+    ctx.fillStyle = DG_ROLE_COLOR[u.role]; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 11, 18, 3); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 9, y - 11, 18 * u.hp / u.maxhp, 3);
+    if (G.scale > 1.2 && p.length <= 6) { ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#e8dcc0'; ctx.strokeText(u.name, x, y + 15); ctx.fillText(u.name, x, y + 15); }
+  }
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------------ the run */
+function orderDungeon(c, d, group) {
+  const min = d.lmin - (d.kind === 'raid' ? 0 : 3);
+  if (c.level < min) { log(d.name + ' needs level ' + min + '.'); return; }
+  const o = { type: 'dungeon', map: d.map, label: d.name, group: !!group, phase: c.pos.map === d.map ? 'inside' : 'travel', started: G.gameTime, kills: 0, bossKills: 0, resume: c.order && c.order.type === 'leveling' ? c.order : null };
+  if (o.phase === 'travel') {
+    o.trip = d.entrance ? planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }) : null;
+    if (!o.trip) { log('No way to ' + d.name + ' found.'); return; }
+  } else if (group && !partyOf(c)) makeParty(c, d);
+  c.order = o; rt(c).mv = null; rt(c).tgt = null;
+  log('Order: ' + (group ? 'run ' + d.name + ' with a group of ' + d.players : 'run ' + d.name + ' alone') + '.'); save(); renderOrder();
+}
+function enterDungeon(c, d, o) {
+  const r = rt(c); const e = d.enter[o.wing || 0] || d.enter[0]; if (!e) { log('No way into ' + d.name + '.'); c.order = null; return; }
+  // a fresh instance: every creature back in place
+  const W = ensureWorld(d.map); for (const m of W.list) { initMob(m); m.gThr = null; } W.dead = []; W.active.clear();
+  c.pos = { map: d.map, x: e.x, y: e.y, z: e.z, o: c.pos.o };
+  r.mv = null; r.tgt = null; r.threats = []; r.danger = []; r.resting = false; r.interact = null;
+  if (o.group) makeParty(c, d); else r.party = null;
+  if (c.pet && rt(c).pet) { rt(c).pet.x = c.pos.x + 2; rt(c).pet.y = c.pos.y + 1; }
+  o.phase = 'inside'; o.entered = G.gameTime; o.lastProgress = G.gameTime;
+  log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' companions' : '') + '.');
+  if ($('follow').checked) setMap(dungeonMapAt(c.pos), false, true);
+  save();
+}
+function leaveDungeon(c, msg) {
+  const d = dungeonByMap(c.pos.map) || (c.order && dungeonByMap(c.order.map)); const r = rt(c);
+  const o = c.order;
+  if (d && c.pos.map === d.map && d.entrance) { c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o }; }
+  r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = [];
+  if (msg) log(msg);
+  c.order = o && o.type === 'dungeon' && o.resume ? o.resume : null;
+  if (c.order && c.order.type === 'leveling') { c.order.mode = 'pick'; c.order.trip = null; }
+  if ($('follow').checked) goToCharacter();
+  save(); renderOrder();
+}
+function dungeonText(c, o) {
+  const d = dungeonByMap(o.map);
+  if (o.phase === 'travel') return { t: (o.onlyTravel ? 'Travel to ' : 'Dungeon: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'to the entrance' };
+  const left = d ? dungeonBossesLeft(c, d).length : 0;
+  return { t: 'Dungeon: ' + o.label, d: (o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
+}
+function dungeonBossesLeft(c, d) {
+  const W = ensureWorld(d.map); const ids = new Set(d.bosses.map((b) => b.e));
+  return W.list.filter((m) => ids.has(m.e) && m.st !== 'dead' && !m.unreach);
+}
+/* what to go for next: the nearest boss (by the way through the dungeon), or with "kill every creature" the nearest creature */
+function dungeonNext(c, d, o) {
+  const W = ensureWorld(d.map); const full = G.state.settings.dgFullClear;
+  const cand = full ? W.list.filter((m) => m.st === 'alive' && !m.unreach && attackable(m, c) && !(m.info && (m.info[5] === 8 || m.info[5] === 11))) : dungeonBossesLeft(c, d).filter((m) => m.st === 'alive');
+  if (!cand.length) return null;
+  cand.sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
+  let best = null, bd = Infinity;
+  for (const m of cand.slice(0, 8)) { const dd = dungeonReach(c, m); if (dd < bd) { bd = dd; best = m; } }
+  if (best) return best;
+  // nothing reachable from here: another wing with its own way in (Scarlet Monastery, Stratholme, Dire Maul)
+  o.wingsDone = o.wingsDone || [o.wing || 0];
+  for (let i = 0; i < d.enter.length; i++) {
+    if (o.wingsDone.includes(i)) continue; const e = d.enter[i];
+    const save_ = c.pos; c.pos = { map: d.map, x: e.x, y: e.y, z: e.z, o: 0 };
+    const ok = cand.slice(0, 20).some((m) => dungeonReach(c, m) < Infinity); c.pos = save_;
+    if (!ok) continue;
+    o.wingsDone.push(i); o.wing = i; c.pos = { map: d.map, x: e.x, y: e.y, z: e.z, o: c.pos.o }; const r = rt(c); r.mv = null; r.tgt = null;
+    if (r.party) for (const u of r.party) { u.x = e.x; u.y = e.y; }
+    log('On to ' + (e.name || 'another part of ' + d.name) + '.');
+    return dungeonNext(c, d, o);
+  }
+  // still nothing: walk straight to the nearest one (the paths inside do not know every stair)
+  return cand[0];
+}
+function updateDungeon(c, o, dt) {
+  const d = dungeonByMap(o.map); const r = rt(c); if (!d) { c.order = null; return; }
+  if (o.phase === 'travel') {
+    if (c.pos.map === d.map) { o.phase = 'inside'; return; }
+    const near = Math.hypot(d.entrance.x - c.pos.x, d.entrance.y - c.pos.y) < 150 && c.pos.map === d.entrance.map;     // the portal is often inside walls the map grid cannot pass
+    if (near && !o.onlyTravel) o.trip = null;
+    if (o.trip) {
+      const st = tripStep(c, o.trip); if (st === 'busy') return;
+      if (st === 'fail' && !near) {
+        o.tripFails = (o.tripFails || 0) + 1;
+        if (o.tripFails <= 3) { o.trip = planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }, { noFly: o.tripFails > 1 }); if (o.trip) return; }
+        log('Could not get to ' + d.name + '.'); c.order = o.resume || null; renderOrder(); return;
+      }
+      o.trip = null;
+    }
+    if (!near && !goTo(c, d.entrance.x, d.entrance.y, 4)) { if (r.blocked) { r.blocked = false; log('The way to the entrance of ' + d.name + ' is blocked.'); c.order = o.resume || null; renderOrder(); } return; }
+
+    r.blocked = false;
+    if (o.onlyTravel) { log('Arrived at ' + d.name + '.'); c.order = null; renderOrder(); return; }
+    enterDungeon(c, d, o); return;
+  }
+  if (c.pos.map !== d.map) { c.order = o.resume || null; renderOrder(); return; }
+  if (G.gameTime - (o.lastCall || 0) > 2) o.since = G.gameTime;          // busy with fighting, resting or looting in between
+  o.lastCall = G.gameTime;
+  if (r.bagFull || bagFree(c) <= 0) { const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n); if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 3)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('Bags are full - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); } }
+  if (G.gameTime - o.entered > DG_TIME_LIMIT * (d.kind === 'raid' ? 1.5 : 1)) { leaveDungeon(c, 'Spent too long in ' + d.name + ' - leaving.'); return; }
+  // before each pull: everyone back on their feet
+  const p = partyOf(c); if (p && p.some((u) => u.dead || u.hp < u.maxhp * 0.8)) { r.mv = null; o.since = G.gameTime; return; }
+  if (!o.target || o.target.st === 'dead' || o.target.unreach) {
+    if (o.target && o.target.st === 'dead') o.lastProgress = G.gameTime;
+    o.target = dungeonNext(c, d, o);
+    if (!o.target) { leaveDungeon(c, d.name + ' cleared: ' + o.bossKills + ' bosses, ' + o.kills + ' creatures.'); return; }
+    o.since = G.gameTime; o.bestD = Infinity;
+  }
+  // stuck = no fight and no step closer for 4 minutes
+  // stuck = no fight and no walking for 3 minutes (or 15 minutes on one target)
+  if (!o.lastPos || Math.hypot(c.pos.x - o.lastPos.x, c.pos.y - o.lastPos.y) > 8 || (r.threats && r.threats.length) || r.resting) { o.since = G.gameTime; o.lastPos = { x: c.pos.x, y: c.pos.y }; }
+  if (!o.targetSince || o.targetFor !== o.target || o.killsAt !== o.kills) { o.targetFor = o.target; o.targetSince = G.gameTime; o.killsAt = o.kills; }
+  if (G.gameTime - (o.since || 0) > 180 || (G.gameTime - o.targetSince > 900 && !(r.threats && r.threats.length))) { o.target.unreach = true; log('Cannot get to ' + (o.target.info ? o.target.info[1] : 'a creature') + ' - skipping it.'); o.target = null; return; }
+  const st = approach(c, o.target); if (st === 'gone') { if (o.target.st === 'alive') o.target.banUntil = 0; o.target = null; }
+}
+/* creatures in a dungeon: no respawn while the instance lasts; companions share the experience */
+function dungeonKill(c, m) {
+  const o = c.order; if (!o || o.type !== 'dungeon') return;
+  o.kills++; const d = dungeonByMap(o.map); if (d && d.bosses.some((b) => b.e === m.e)) { o.bossKills++; log('*** ' + (m.info ? m.info[1] : 'Boss') + ' defeated! ***'); fx(m.x, m.y, 'BOSS DEFEATED', '#ffd23a'); }
+}
+/* the character died inside: everyone runs back from the graveyard at the entrance and goes in again */
+function dungeonDeath(c) {
+  const d = dungeonByMap(c.pos.map); if (!d || !d.entrance) return false;
+  const r = rt(c); const e = d.enter[(c.order && c.order.wing) || 0] || d.enter[0];
+  if (r.party) for (const u of r.party) { u.dead = false; u.hp = u.maxhp; }
+  const W = G.world[d.map]; if (W) for (const m of W.active) evade(W, m);
+  c.pos = { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y, z: 0, o: c.pos.o };
+  r.dgReturn = { map: d.map, x: e.x, y: e.y, z: e.z };
+  return true;
+}

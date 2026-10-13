@@ -61,7 +61,10 @@ function mobsNear(W, x, y, r, fn) {
 const AGGRO_SCALE = 0.77;        // aggro ranges: 30% smaller than on the server, then 10% larger again (0.7 x 1.1)
 function aggroRadius(m, c) { return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_SCALE, 4, 32); }
 function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
-function dangerous(m, c) { return effLevel(m) - c.level >= 4; }
+function dangerous(m, c) {
+  if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) return m.lvl - c.level >= (rt(c).party ? 8 : 5);      // dungeons are full of elites: only run from the far too strong
+  return effLevel(m) - c.level >= 4;
+}
 /* a creature some race is friendly with: a town guard or citizen of the other faction (not for grinding) */
 function factionNpc(m) { const h = G.d.hostility.creatures[m.e]; return !!(h && h[1].indexOf('F') >= 0); }
 function attackable(m, c) { const b = behOf(m, c); return (b === 'A' || b === 'N') && !m.civ && m.st === 'alive'; }
@@ -174,7 +177,9 @@ function mobTick(W, m, dt, now) {
     const mods = mobMods(m);
     const dh = Math.hypot(m.x - m.hx, m.y - m.hy);
     if (dh > m.leash + 20 && !m.fleeing) return evade(W, m);
-    const onPet = mobVictimIsPet(m, c); const vx = onPet ? rt(c).pet.x : c.pos.x, vy = onPet ? rt(c).pet.y : c.pos.y;
+    const vk = rt(c).party ? mobVictimKey(m, c) : mobVictimIsPet(m, c) ? 'p' : 'c';
+    const onPet = vk === 'p'; const vu = vk !== 'c' && vk !== 'p' ? partyUnit(c, vk) : null;
+    const vx = onPet ? rt(c).pet.x : vu ? vu.x : c.pos.x, vy = onPet ? rt(c).pet.y : vu ? vu.y : c.pos.y;
     const d = Math.hypot(vx - m.x, vy - m.y);
     // low-health humanoids try to run away (and bring friends)
     if (!m.fled && m.rank === 0 && m.info && m.info[5] === 7 && m.hp < m.maxhp * 0.15) { m.fled = true; if (Math.random() < 0.6 && !mods.stun) { m.fleeing = now + 8; fx(m.x, m.y, 'flees!', '#ffb36b'); } }
@@ -192,7 +197,8 @@ function mobTick(W, m, dt, now) {
       const step = Math.min(d, 7 * mods.snare * dt); m.x += (vx - m.x) / d * step; m.y += (vy - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
     } else {
       m.swing -= dt;
-      if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
+      if (m.swing <= 0 && vu) { m.swing += m.atk / mods.haste; compTakeHit(c, vu, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
+      else if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
       else if (m.swing <= 0) {
         m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods);
         const r = rt(c);
@@ -200,7 +206,7 @@ function mobTick(W, m, dt, now) {
         if (h.t === 'dodge' || h.t === 'parry' || h.t === 'block' || h.blocked) r.revWindow = now + 5;
         if (h.t === 'hit') {
           hitTakenTalents(c, h);
-          c.hp -= h.d; fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
+          c.hp -= h.d; if (r.party) (r.dmgLog = r.dmgLog || []).push([now, h.d]); fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
           if (c.cls === 1 || (c.cls === 11 && c.form === 'bear')) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
           if (r.cast && !r.cast.ch && c.cls !== 1) r.cast.t = Math.max(0, r.cast.t - 0.5);      // spell pushback
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
@@ -234,9 +240,11 @@ function worldTick(dt) {
 /* ---------------------------------------------------------- kills / death */
 function killMob(c, m) {
   const W = ensureWorld(c.pos.map);
-  m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime; W.active.delete(m); W.dead.push(m);
+  const dg = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map);
+  m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = dg ? Infinity : G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime; W.active.delete(m); W.dead.push(m);
   const name = m.info ? m.info[1] : 'creature';
-  const xp = killXp(c, m); gainXp(c, xp);
+  const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
+  if (dg) dungeonKill(c, m);
   log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
   lootMob(c, m);
   onKill(c, m);
@@ -252,7 +260,9 @@ function nearestGraveyard(c) {
   return best;
 }
 function charDie(c, killer) {
-  const r = rt(c); const corpse = { map: c.pos.map, x: c.pos.x, y: c.pos.y };
+  const r = rt(c);
+  const dgDeath = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && dungeonDeath(c);     // inside: the body is back at the entrance
+  const corpse = { map: c.pos.map, x: c.pos.x, y: c.pos.y };
   log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + '.');
   fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30');
   const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) evade(W, m);
@@ -270,6 +280,10 @@ function charDie(c, killer) {
     if (o.mode === 'grind') { o.gdeaths = (o.gdeaths || 0) + 1; if (o.gdeaths >= 2) { log('Died twice at this grinding spot - looking for another place.'); o.badSpots = (o.badSpots || []).concat([{ map: c.pos.map, x: o.grind.cx, y: o.grind.cy }]).slice(-30); o.mode = 'pick'; o.grind = null; o.gdeaths = 0; } }
     else if (o.fq) { o.qdeaths = o.qdeaths || {}; o.qdeaths[o.fq] = (o.qdeaths[o.fq] || 0) + 1; if (o.qdeaths[o.fq] >= 2) { const q = G.q.byId[o.fq]; log('Died twice on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; } }
     else if (o.mode === 'travel' && o.deaths % 3 === 0 && o.zones[0]) { log('Keeps dying on the way to ' + o.zones[0] + ' - choosing again.'); o.avoid = o.avoid || {}; o.avoid[o.zones[0]] = c.level + 1; o.mode = 'pick'; o.trip = null; }
+  } else if (c.order && c.order.type === 'dungeon') {
+    const o = c.order; if (dgDeath) o.deaths = (o.deaths || 0) + 1;
+    if (o.deaths >= 4) { log('The group wiped ' + o.deaths + ' times - giving up on ' + o.label + '.'); r.dgReturn = null; r.party = null; c.order = o.resume || null; }
+    else if (dgDeath) log('Wipe! Running back to ' + o.label + ' from the graveyard.');
   } else if (c.order && c.order.type === 'questing' && c.order.fq) {
     const o = c.order; o.qdeaths = o.qdeaths || {}; o.qdeaths[o.fq] = (o.qdeaths[o.fq] || 0) + 1;
     if (o.qdeaths[o.fq] >= 3) { const q = G.q.byId[o.fq]; log('Died 3 times on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; }
@@ -298,6 +312,7 @@ function safeSpot(c, x, y) {
 }
 function revive(c, how) {
   const r = rt(c); r.ghost = null; delete c.resume; const s = charStats(c); c.hp = Math.round(s.maxHp * 0.5);
+  if (r.dgReturn) { c.pos = { map: r.dgReturn.map, x: r.dgReturn.x, y: r.dgReturn.y, z: r.dgReturn.z, o: c.pos.o }; r.dgReturn = null; log('Back inside.'); if ($('follow').checked) goToCharacter(); }
   if (how === 'spirit') { durabilityLoss(c, 0.25); log(c.name + ' was resurrected by the spirit healer (extra 25% durability loss).'); }
   else log(c.name + ' is back among the living.');
   r.resting = true;   // catch the breath before going on
@@ -373,9 +388,11 @@ function restStep(c) {
 }
 function scanThreats(c) {
   const r = rt(c); const W = ensureWorld(c.pos.map); const safe = c.cfg && c.cfg.style === 'safe';
+  const dg = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && c.pos.z != null;
   r.danger = [];
   mobsNear(W, c.pos.x, c.pos.y, 70, (m) => {
     if (m.st !== 'alive') return;
+    if (dg && m.z != null && Math.abs(m.z - c.pos.z) > 14) return;          // another level of the dungeon
     const b = behOf(m, c); if (b !== 'A' || m.civ) return;
     const R = aggroRadius(m, c); const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
     if (dangerous(m, c)) r.danger.push({ m, R: R + 8 });
@@ -389,7 +406,7 @@ function scanThreats(c) {
 /* social aggro: only creatures that attack on sight (red) help each other; neutral (yellow) ones never join in */
 function callHelp(W, m, c) {
   if (behOf(m, c) !== 'A') return;
-  mobsNear(W, m.x, m.y, 8, (o) => { if (o !== m && o.st === 'alive' && o.tmpl === m.tmpl && Math.hypot(o.x - m.x, o.y - m.y) <= 8 && behOf(o, c) === 'A' && !o.civ) engage(o, c); });
+  mobsNear(W, m.x, m.y, 8, (o) => { if (o !== m && o.st === 'alive' && (o.z == null || m.z == null || Math.abs(o.z - m.z) < 12) && o.tmpl === m.tmpl && Math.hypot(o.x - m.x, o.y - m.y) <= 8 && behOf(o, c) === 'A' && !o.civ) engage(o, c); });
 }
 function threatsOf(c) {
   const W = G.world[c.pos.map]; const out = []; if (!W) return out;
@@ -546,16 +563,16 @@ function advance(c, mv, dt) {
     let ux = dx / d, uy = dy / d;
     if (rt(c).danger.length) { const [sx, sy] = steer(c, ux, uy, step); if (passable(c.pos.map, c.pos.x + sx * step * 3, c.pos.y + sy * step * 3)) { ux = sx; uy = sy; } }
     c.pos.x += ux * step; c.pos.y += uy * step; mv.done = (mv.done || 0) + step; left -= step; c.pos.o = Math.atan2(ux, uy);
-    if (Math.hypot(nx.x - c.pos.x, nx.y - c.pos.y) < 0.6) mv.idx++;
+    if (Math.hypot(nx.x - c.pos.x, nx.y - c.pos.y) < 0.6) { if (nx.z != null) c.pos.z = nx.z; mv.idx++; }
     if (ux * dx + uy * dy < d * 0.2 && step < d) break;   // steering away: stop for this tick
   }
   return mv.idx >= mv.path.length;
 }
-function goTo(c, x, y, stop) {
+function goTo(c, x, y, stop, z) {
   const r = rt(c); const d0 = Math.hypot(x - c.pos.x, y - c.pos.y);
   if (d0 <= (stop || 1)) return true;
   if (!r.mv || Math.hypot(r.mv.tx - x, r.mv.ty - y) > 8 || r.mv.map !== c.pos.map) {
-    const p = planPath(c, { x, y }); r.mv = { path: p.pts, idx: 1, done: 0, total: p.total, tx: x, ty: y, map: c.pos.map };
+    const p = planPath(c, { x, y, z }); r.mv = { path: p.pts, idx: 1, done: 0, total: p.total, tx: x, ty: y, map: c.pos.map };
   }
   const arrived = advance(c, r.mv, STEP);
   if (r.mv && r.mv.blocked) {
@@ -617,7 +634,7 @@ function approach(c, m) {
   if (!m || m.st !== 'alive') return 'gone';
   const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
   const r0 = rt(c);
-  if (!r0.threats.length && d > MELEE_RANGE + 1 && d < 60) {
+  if (!r0.threats.length && d > MELEE_RANGE + 1 && d < 60 && !r0.party) {
     const need = fightCost(c, m) * 1.2 + charStats(c).maxHp * 0.08;
     if (c.hp < need) {
       if (c.hp >= charStats(c).maxHp * 0.98) { m.banUntil = G.gameTime + 90; return 'gone'; }     // too strong even when full
@@ -625,6 +642,12 @@ function approach(c, m) {
     }
   }
   const reach = c.cls === 1 ? MELEE_RANGE + 1 : Math.max(MELEE_RANGE + 1, combatRange(c, m) - 1);
+  // with a group: the tank goes in first, the others wait a moment at range (at most 8 seconds)
+  const tank = r0.party && r0.party.find((u) => u.role === 'tank' && !u.dead);
+  if (tank && !r0.threats.length && d <= Math.max(reach, 30)) {
+    if (r0.tankPullM !== m) { r0.tankPullM = m; r0.tankPullT = G.gameTime; }
+    if (G.gameTime - r0.tankPullT < 8 && m.st === 'alive') { r0.tankPull = m; r0.mv = null; return 'moving'; }
+  }
   if (d <= reach) {
     if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank && d > MELEE_RANGE + 1) {
       // send the pet in first and wait until it is there (up to 6 seconds)
@@ -636,7 +659,7 @@ function approach(c, m) {
     engage(m, c); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); return 'engaged';
   }
   if (d <= 25 && c.cls === 1 && tryOpener(c, m)) return 'moving';
-  goTo(c, m.x, m.y, reach - 0.5);
+  goTo(c, m.x, m.y, reach - 0.5, m.z);
   if (rt(c).blocked) { rt(c).blocked = false; m.banUntil = G.gameTime + 120; return 'gone'; }
   return 'moving';
 }
@@ -679,6 +702,7 @@ function updateChar(c, dt) {
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
   if (c.pet) petStep(c, dt);
+  if (r.party) partyStep(c, dt);
   if (r.cast && castStep(c, dt)) { if (threats.length && (!r.tgt || r.tgt.st === 'dead')) r.tgt = threats[0]; return; }
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
   if (threats.length) {
@@ -705,6 +729,7 @@ function updateChar(c, dt) {
   else if (o.type === 'vendor' || o.type === 'sell') updateVendor(c, o, dt);
   else if (o.type === 'trainer') updateTrainer(c, o, dt);
   else if (o.type === 'patrol') updatePatrol(c, o, dt);
+  else if (o.type === 'dungeon') updateDungeon(c, o, dt);
 }
 function replanTravel(c, o) {
   const p = planPath(c, o.target); o.path = p.pts; o.idx = 1; o.total = o.done + p.total; o.replan = false;

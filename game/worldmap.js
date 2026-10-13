@@ -64,6 +64,7 @@ function zoneShape(mapId, i) {
 function mapLevel(m) { return m.world ? 0 : m.cont ? 1 : 2; }
 function goUp() {
   const m = G.map; if (m.world) return;
+  if (m.dmap) { const e = m.dungeon.entrance; const z = e && zoneAt(e.map, e.x, e.y); const zd = z && zoneMapDef(z.id); setMap(zd || (e && continentDef(e.map)) || WORLD_MAP); return; }
   if (m.cont) { setMap(WORLD_MAP); return; }
   const cont = continentDef(m.map); setMap(cont || WORLD_MAP);
 }
@@ -78,16 +79,21 @@ function centerOn(x, y, zoom) {
 }
 function renderNav() {
   const m = G.map; const parts = [WORLD_MAP];
-  if (!m.world) { const cont = m.cont ? m : continentDef(m.map); if (cont) parts.push(cont); if (!m.cont) parts.push(m); }
+  if (m.dmap) {
+    const e = m.dungeon.entrance; const cont = e && continentDef(e.map); if (cont) parts.push(cont);
+    const z = e && zoneAt(e.map, e.x, e.y); const zd = z && zoneMapDef(z.id); if (zd) parts.push(zd); parts.push(m);
+  } else if (!m.world) { const cont = m.cont ? m : continentDef(m.map); if (cont) parts.push(cont); if (!m.cont) parts.push(m); }
   const c = active ? active() : null; const cz = c && zoneAt(c.pos.map, c.pos.x, c.pos.y);
   $('maptabs').innerHTML =
     '<button class="navup" data-nav="up" title="Up one level (right-click on the map)"' + (m.world ? ' disabled' : '') + '>&#9650;</button>' +
-    parts.map((p, i) => (i ? '<span class="crumbsep">&rsaquo;</span>' : '') + '<button data-crumb="' + i + '"' + (i === parts.length - 1 ? ' class="on"' : '') + '>' + esc(p.world ? 'World' : p.name) + '</button>').join('') +
+    parts.map((p, i) => (i ? '<span class="crumbsep">&rsaquo;</span>' : '') + '<button data-crumb="' + i + '"' + (i === parts.length - 1 ? ' class="on"' : '') + '>' + esc(p.world ? 'World' : p.dmap ? p.dungeon.name : p.name) + '</button>').join('') +
+    (m.dmap && m.dungeon.floors.length > 1 ? '<span class="crumbsep">&rsaquo;</span>' + m.dungeon.floors.map((f, i) => '<button data-floor="' + i + '"' + (f === m.floor ? ' class="on"' : '') + ' title="' + esc(f.name || 'Level ' + (i + 1)) + '">' + esc(f.name || String(i + 1)) + '</button>').join('') : '') +
     (c ? '<button class="navme" data-nav="me" title="Show my character">&#9673; ' + esc(c.name) + (cz ? ' &middot; ' + esc(cz.name) : '') + '</button>' : '');
   $('maptabs').onclick = (e) => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.nav === 'up') goUp();
     else if (b.dataset.nav === 'me') goToCharacter();
+    else if (b.dataset.floor != null) setMap(dungeonMapDef(m.dungeon, m.dungeon.floors[+b.dataset.floor]));
     else if (b.dataset.crumb != null) { const p = parts[+b.dataset.crumb]; if (p !== G.map) setMap(p); }
   };
 }
@@ -129,6 +135,8 @@ function navTip(h) {
 /* keep the zone of the character on screen when "Follow" is on */
 function followZone(c) {
   if (!$('follow').checked || G.map.world) return;
+  if (isDungeonMap(c.pos.map)) { const dm = dungeonMapAt(c.pos); if (dm && dm !== G.map) setMap(dm, false, true); return; }
+  if (G.map.dmap) { goToCharacter(); return; }
   if (G.map.cont) return;
   if (c.pos.map === G.map.map && inMap(G.map, c.pos.x, c.pos.y)) {
     const z = zoneAt(c.pos.map, c.pos.x, c.pos.y); if (!z || z.id === G.map.area) return;
