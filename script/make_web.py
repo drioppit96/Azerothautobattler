@@ -236,6 +236,9 @@ def main():
         f.write("const DATA=" + json.dumps(data, separators=(",", ":"), ensure_ascii=False) + ";")
     done = {"spawns.json", "hostility.json", "loot.json", "quests.json", "items.json", "spells.json", "navgraph.json",
             "vendors.json", "vendor_items.json", "creature_stats.json", "mobmap_data.js", "objects.json", "go_data.json"}
+    for f in os.listdir(gd):   # zone shapes for the continent maps
+        if f.startswith("zonemap_") and f.endswith(".png"):
+            shutil.copy(os.path.join(gd, f), os.path.join(out, f))
     for mid in map_ids:   # collision grids of the included continents
         gname = {0: "Azeroth", 1: "Kalimdor"}.get(mid)
         gp = os.path.join(gd, "navgrid_%s.bin.gz" % gname) if gname else ""

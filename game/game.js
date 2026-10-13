@@ -77,11 +77,19 @@ function bestMapFor(pos) {
   }
   return best || G.maps[0];
 }
-function setMap(m, keepView) {
-  G.map = m;
-  document.querySelectorAll('#maptabs button').forEach((b) => b.classList.toggle('on', b.dataset.n === m.name));
-  buildMobsForMap();
-  if (!keepView) fitMap();
+function setMap(m, keepView, onChar) {
+  G.map = m; G.navHover = null; $('tip').hidden = true;
+  if (m.world) G.mobs = []; else buildMobsForMap();
+  const done = () => {
+    if (G.map !== m) return;
+    if (onChar) { const c = active(); centerOn(c.pos.x, c.pos.y, m.cont ? 1 : 1.8); }
+    else if (!keepView) fitMap();
+  };
+  if (!G.img[m.name]) {
+    G.img[m.name] = null; fitMap();
+    loadImage('../' + m.file).then((img) => { if (img) { G.img[m.name] = img; done(); } else delete G.img[m.name]; });
+  } else done();
+  renderNav();
 }
 
 /* ------------------------------------------------------------------ mobs */
@@ -375,7 +383,10 @@ function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, G.cw, G.ch);
   const img = G.img[G.map.name]; const m = G.map;
   if (img) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); }
+  if (!img) { ctx.fillStyle = '#9a8f77'; ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText('Loading map ...', G.cw / 2, G.ch / 2); ctx.textAlign = 'start'; }
+  if (m.world) { drawNavOverlay(ctx); return; }
   if ($('showterrain') && $('showterrain').checked) drawTerrain(ctx, m);
+  drawNavOverlay(ctx);
   const c = active();
   // routes (debug)
   if ($('showroutes').checked && G.d.navgraph) {
@@ -414,14 +425,14 @@ function draw() {
   // graveyards / flight masters
   ctx.font = '11px Segoe UI';
   for (const gy of G.d.graveyards) {
-    if (gy[2] !== m.map || !inMap(m, gy[3], gy[4])) continue;
+    if (m.cont || gy[2] !== m.map || !inMap(m, gy[3], gy[4])) continue;
     const [x, y] = w2s(gy[3], gy[4]);
     ctx.fillStyle = '#cfd6e6'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x, y - 7); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 5, y); ctx.closePath(); ctx.stroke(); ctx.fill();
   }
   for (const id in G.d.taxi.nodes) {
     const n = G.d.taxi.nodes[id];
-    if (n.map !== m.map || !inMap(m, n.x, n.y) || !n.npcs.length) continue;
+    if (m.cont || n.map !== m.map || !inMap(m, n.x, n.y) || !n.npcs.length) continue;
     const [x, y] = w2s(n.x, n.y);
     ctx.fillStyle = '#4aa8ff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.stroke(); ctx.fill();
@@ -442,7 +453,7 @@ function draw() {
     const [x, y] = w2s(sel.mob.x, sel.mob.y); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 8, 0, 6.3); ctx.stroke();
   }
   // quest marks
-  if (G.qMarks) {
+  if (G.qMarks && !m.cont) {
     ctx.font = 'bold 16px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000';
     for (const q of G.qMarks) { if (q.map !== m.map) continue; const [x, y] = w2s(q.x, q.y); if (x < -9 || y < -9 || x > G.cw + 9 || y > G.ch + 9) continue; ctx.fillStyle = q.t === '?' ? '#ffd23a' : '#ffe14d'; ctx.strokeText(q.t, x, y - 6); ctx.fillText(q.t, x, y - 6); }
     ctx.textAlign = 'start';
@@ -527,12 +538,16 @@ function bindInput() {
     ptrs.delete(e.pointerId);
     if (pinch) { if (ptrs.size < 2) pinch = null; G.drag = null; return; }
     const d = G.drag; G.drag = null; if (!d || d.moved) return;
-    const [sx, sy] = pos(e); const hit = pickAt(sx, sy, d.touch ? 18 : 8);
+    const [sx, sy] = pos(e);
+    if (e.button === 2) return;
+    if (G.map.world || G.map.cont) { const h = navHit(sx, sy); if (h && h.def) { const w = s2w(sx, sy); setMap(h.def); } return; }
+    const hit = pickAt(sx, sy, d.touch ? 18 : 8);
     const w = s2w(sx, sy);
     const sel = hit || { kind: 'ground', x: w.x, y: w.y };
     if (!hit && !inMap(G.map, w.x, w.y)) return;
     G.selected = sel; renderInfo(sel); showMenu(sx, sy, sel);
   });
+  cv.addEventListener('contextmenu', (e) => { e.preventDefault(); hideMenu(); goUp(); });
   cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; G.drag = null; });
   cv.addEventListener('pointermove', (e) => {
     const [sx, sy] = pos(e);
@@ -549,6 +564,12 @@ function bindInput() {
       if (G.drag.moved) { G.ox = G.drag.ox + sx - G.drag.x; G.oy = G.drag.oy + sy - G.drag.y; $('follow').checked = false; }
     }
     if (e.pointerType === 'touch') return;
+    if (G.map.world || G.map.cont) {
+      G.navHover = G.drag && G.drag.moved ? null : navHit(sx, sy); const tip = $('tip');
+      if (G.navHover) { tip.innerHTML = navTip(G.navHover); tip.hidden = false; tip.style.left = (sx + 14) + 'px'; tip.style.top = (sy + 14) + 'px'; cv.style.cursor = G.navHover.def ? 'pointer' : 'default'; }
+      else { tip.hidden = true; cv.style.cursor = 'default'; }
+      return;
+    }
     const w = s2w(sx, sy);
     if (inMap(G.map, w.x, w.y)) { const [a, b] = mapCoords(G.map, w.x, w.y); $('coords').textContent = a + ', ' + b; } else $('coords').textContent = '';
     const hit = G.drag && G.drag.moved ? null : pickAt(sx, sy); const tip = $('tip');
@@ -609,7 +630,8 @@ function frame(ts) {
     for (const f of G.fx) f.t += dt * sp; G.fx = G.fx.filter((f) => f.t < 1.2);
   }
   const c = active();
-  if ($('follow').checked && c.pos.map === G.map.map) { const [px, py] = w2m(G.map, c.pos.x, c.pos.y); G.ox = G.cw / 2 - px * G.scale; G.oy = G.ch / 2 - py * G.scale; }
+  if (ts - (G.followT || 0) > 500) { G.followT = ts; followZone(c); if (!$('maptabs').matches(':hover')) renderNav(); }
+  if ($('follow').checked && c.pos.map === G.map.map && !G.map.world) { const [px, py] = w2m(G.map, c.pos.x, c.pos.y); G.ox = G.cw / 2 - px * G.scale; G.oy = G.ch / 2 - py * G.scale; }
   draw();
   if (ts - (G.saveT || 0) > 30000) { G.saveT = ts; save(); }
   if (ts - G.uiT > 250) {
@@ -641,14 +663,13 @@ async function boot() {
     loadMsg('maps ...');
     let manifest = null; try { manifest = await J('../files.json'); } catch (e) { manifest = null; }
     const files = manifest ? manifest.maps : await listDir('../maps/', '.png');
-    const wanted = DATA.maps.filter((m) => files.includes(m.file.split('/').pop()) || (!files.length && m.name === 'Kalimdor'));
-    for (const m of wanted) { G.img[m.name] = await loadImage('../' + m.file); }
-    G.maps = wanted.filter((m) => G.img[m.name]);
+    const has = (f) => !files.length || files.includes(f.split('/').pop());
+    G.maps = DATA.maps.filter((m) => has(m.file) && (m.map === 0 || m.map === 1));
+    if (has(WORLD_MAP.file) && files.length) G.maps.push(WORLD_MAP);
     if (!G.maps.length) throw new Error('no map images found in the maps folder');
-    const order = ['Durotar', 'Orgrimmar', 'The Barrens', 'Kalimdor'];
-    G.maps.sort((a, b) => (order.indexOf(a.name) + 99) % 99 - (order.indexOf(b.name) + 99) % 99);
-    $('maptabs').innerHTML = G.maps.map((m) => '<button data-n="' + esc(m.name) + '">' + esc(m.name) + '</button>').join('');
-    $('maptabs').onclick = (e) => { const n = e.target.dataset && e.target.dataset.n; if (n) { setMap(G.maps.find((m) => m.name === n)); } };
+    loadMsg('zones ...');
+    try { G.d.zoneLevels = await J('../gamedata/zone_levels.json'); } catch (e) { G.d.zoneLevels = null; }
+    await loadZoneMaps();
 
     loadMsg('portraits ...');
     for (const f of (manifest ? manifest.portraits : await listDir('../portraits/by_name/', '.png'))) { const m = /^(\d+)_/.exec(f); if (m) G.portraits[+m[1]] = f; }
@@ -663,10 +684,8 @@ async function boot() {
     for (const [k, v] of [['autoBuyBags', true], ['sellWhiteGear', true], ['chainQuests', true], ['autoEat', true], ['autoPotion', true], ['autoRepair', true]]) if (G.state.settings[k] === undefined) G.state.settings[k] = v;
     bindInput(); resize(); try { new ResizeObserver(() => resize()).observe($('mapwrap')); } catch (e) { /* old browser */ }
     const c = active();
-    setMap(bestMapFor(c.pos));
+    goToCharacter();
     loadGrid(c.pos.map);
-    // zoom in a little on the character at the start
-    if (!G.map.cont) { G.scale *= 1.8; const [px, py] = w2m(G.map, c.pos.x, c.pos.y); G.ox = G.cw / 2 - px * G.scale; G.oy = G.ch / 2 - py * G.scale; }
     setSpeed(G.state.settings.speed === undefined ? 1 : G.state.settings.speed);
     renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); bindSheet();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');

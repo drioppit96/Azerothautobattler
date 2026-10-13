@@ -18,7 +18,7 @@ import traceback
 PARTS = [("loot", "wow_loot_all"), ("hostility", "wow_hostility"), ("races", "wow_races"),
          ("items", "wow_items_json"), ("taxi", "wow_taxi"), ("navgraph", "wow_navgraph"),
          ("spells", "wow_spells_json"), ("cstats", "wow_creature_stats"), ("goquest", "wow_quest_objects"),
-         ("grid", "wow_navgrid")]
+         ("grid", "wow_navgrid"), ("zonemap", "make_zonemap")]
 
 
 def main():

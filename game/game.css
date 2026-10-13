@@ -164,3 +164,9 @@ code{background:#000;padding:0 4px;border-radius:3px}
   .arow input,.arow .pfill{grid-column:2}.arow .updn{grid-column:3}
   #abar{bottom:46px}
 }
+
+/* ---------------------------------------------------------------- map navigation (world > continent > zone) */
+#maptabs{align-items:center;min-width:0;overflow-x:auto}
+#maptabs button:disabled{opacity:.35;cursor:default}
+.crumbsep{color:var(--gold2);font-size:18px;margin:0 2px}
+#maptabs .navme{margin-left:10px;color:#ffe9a8}
