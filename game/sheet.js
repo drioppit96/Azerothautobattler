@@ -97,7 +97,7 @@ function renderSheet() {
     if (f) { const i = $('profSearch'); if (i) { i.focus(); try { i.setSelectionRange(f[0], f[1]); } catch (e) { /* */ } } }
     return;
   }
-  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' :
+  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
@@ -180,6 +180,7 @@ function bindSheet() {
     const c = active();
     if (SH.tab === 'ah' && ahClick(e)) return;
     if (SH.tab === 'bank' && bankClick(e)) return;
+    if (SH.tab === 'trade' && tradeClick(e)) return;
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
     if (typeof rotationClick === 'function' && rotationClick(e)) return;
@@ -193,7 +194,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); });
   sh.addEventListener('dblclick', (e) => {

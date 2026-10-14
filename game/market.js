@@ -139,7 +139,7 @@ function ahSellable(inst) {
 /* what the materials of the cheapest recipe for it cost (crafted goods) */
 function craftCost(id, depth) {
   const X = marketIndex(); const rs = X.made[id]; if (!rs || depth > 3) return 0; let best = 0;
-  for (const r of rs) { let s = 0; for (const [it, k] of r.re || []) { const v = X.vend.has(it) ? itemBuy(it) : fairPrice(it, depth + 1); if (!v) { s = 0; break; } s += v * k; } s /= Math.max(1, (r.cr[1] + (r.cr[2] || r.cr[1])) / 2); if (s && (!best || s < best)) best = s; }
+  for (const r of rs) { let s = 0; for (const [it, k] of r.re || []) { const v = X.vend.has(it) ? unitBuy(it) : fairPrice(it, depth + 1); if (!v) { s = 0; break; } s += v * k; } s /= Math.max(1, (r.cr[1] + (r.cr[2] || r.cr[1])) / 2); if (s && (!best || s < best)) best = s; }
   return best;
 }
 function fairPrice(id, depth) {
@@ -163,7 +163,7 @@ function fairPrice(id, depth) {
     else if (it.c === 1) p = sp * 1.6;
     else if (it.c === 6) p = sp * 1.2;
     else p = sp * 1.4;
-    if (X.vend.has(id)) p = Math.min(p, itemBuy(id) * 0.95);                // anyone can buy it from a vendor
+    if (X.vend.has(id)) p = Math.min(p, unitBuy(id) * 0.95);                // anyone can buy it from a vendor
     p = Math.max(Math.round(p), sp + 1);
   }
   return (G.mkFair[id] = p);

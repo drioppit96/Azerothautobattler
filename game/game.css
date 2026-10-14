@@ -388,3 +388,13 @@ label.chk.dim{opacity:.55}
 #walltest #wtClose{margin-left:4px}
 #walltest canvas{display:block;margin:0 auto;border:1px solid #3a2f1c;border-radius:4px;cursor:crosshair}
 #walltest #wtInfo{margin-top:5px;color:#d8ccb0;min-height:32px}
+
+/* trade window */
+.trade .tr-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0}
+.trade .tr-col{background:#15120d;border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+.trade .tr-col h5{margin:0 0 5px;font:600 11px "Segoe UI";letter-spacing:1px;text-transform:uppercase;color:var(--gold2)}
+.trade .tr-slots{display:grid;grid-template-columns:repeat(6,46px);gap:4px;margin-bottom:6px}
+.trade .tr-their{display:grid;grid-template-columns:repeat(auto-fill,40px);gap:3px;margin-top:4px}
+.trade .tr-their .slot{width:40px;height:40px}
+.trade .slot.locked{opacity:.45}
+.trade input[type=number]{background:#0f0c08;color:#f0e6cc;border:1px solid var(--line);border-radius:3px;padding:2px 4px}

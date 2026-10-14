@@ -35,10 +35,21 @@ function lootRow(id) { return G.d.loot.items[id] || null; }
 function propOf(inst) { return inst && inst.rp ? G.d.items.random_props[inst.rp] || null : null; }
 function itemName(id, inst) { const r = itemRow(id); const l = lootRow(id); const base = r ? r.n : l ? l[0] : 'Item ' + id; const p = propOf(inst); return p ? base + ' ' + p.n : base; }
 function itemQuality(id) { const r = itemRow(id); if (r) return r.q || 0; const l = lootRow(id); return l ? l[1] : 1; }
-function itemSell(id) { const r = itemRow(id); if (r && r.sp != null) return r.sp; const l = lootRow(id); return l ? l[2] || 0 : 0; }
+function itemSell(id) {
+  const r = itemRow(id); if (r && r.sp != null) { const k = buyCount(id); return k > 1 && vendorSold(id) ? Math.min(r.sp, Math.floor(itemBuy(id) / k / 4)) : r.sp; }
+  const l = lootRow(id); return l ? l[2] || 0 : 0;
+}
+/* items some vendor sells (bought in tens they would sell back for more than they cost: the vendor pays a quarter of a piece) */
+function vendorSold(id) {
+  if (!G.vendSold) { G.vendSold = new Set(); const V = G.d.vendorItems || {}; for (const e in V) for (const x of V[e] || []) G.vendSold.add(typeof x === 'number' ? x : x.id != null ? x.id : x[0]); }
+  return G.vendSold.has(id);
+}
 function itemBuy(id) { const r = itemRow(id); return r && r.bp ? r.bp : Math.max(1, itemSell(id) * 4); }
 /* consumables (food, drink, potions ...) come in a stack of 10 for the vendor price */
-function buyCount(id) { const r = itemRow(id); return r && r.c === 0 ? Math.min(10, itemStack(id) || 1) : r && r.c === 6 ? itemStack(id) : 1; }
+/* crafting supplies (vials, spices, thread, salt, flux, dyes, reagents) too: 10 for the vendor price */
+function buyCount(id) { const r = itemRow(id); return r && (r.c === 0 || ((r.c === 7 || r.c === 5) && (r.q || 0) <= 1)) ? Math.min(10, itemStack(id) || 1) : r && r.c === 6 ? itemStack(id) : 1; }
+/* what one piece costs at a vendor */
+function unitBuy(id) { return itemBuy(id) / Math.max(1, buyCount(id)); }
 function itemStack(id) { const r = itemRow(id); if (r && r.sk) return r.sk; const l = lootRow(id); return (l && l[5]) || 1; }
 function itemIcon(id) { const r = itemRow(id); return r && r.ic ? '../icons/' + r.ic.toLowerCase() + '.jpg' : ''; }
 function maxDur(id) { const r = itemRow(id); return r && r.du ? r.du : 0; }

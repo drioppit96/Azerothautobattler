@@ -354,7 +354,7 @@ function workObjective(c, q, i, o) {
   if (G.gameTime - o.progT > 720) { o.progT = G.gameTime; o.wt = null; return 'blocked'; }
   let t = o.wt && o.wt.q === q.id && o.wt.i === i ? o.wt : null;
   const valid = (x) => x && (x.kind === 'mob' ? x.m.st === 'alive' && (x.m.banUntil || 0) < G.gameTime :
-    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? c.gold >= itemBuy(ob.id) * Math.max(1, ob.count - bagCount(c, ob.id)) : goFree(x.e, x.i));
+    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? c.gold >= itemBuy(ob.id) * Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / buyCount(ob.id)) : goFree(x.e, x.i));
   if (!valid(t)) {
     t = null;
     const opts = objectiveOptions(c, q, i); let bs = 1e18; let home = null, hd = 1e18;
@@ -390,7 +390,7 @@ function workObjective(c, q, i, o) {
   }
   if (t.kind === 'vendor') {
     if (!goTo(c, t.x, t.y, 3)) { if (r.blocked) { r.blocked = false; o.wt = null; } return 'busy'; }
-    const n = Math.max(1, ob.count - bagCount(c, ob.id)); const price = itemBuy(ob.id) * n;
+    const per = buyCount(ob.id); const n = Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / per) * per; const price = itemBuy(ob.id) * n / per;
     if (c.gold >= price && addItem(c, ob.id, n)) { c.gold -= price; log('Bought ' + n + ' x ' + itemName(ob.id) + ' for ' + money(price) + ' (' + q.title + ').'); onItemGained(c, ob.id); }
     o.wt = null; return 'busy';
   }
