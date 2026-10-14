@@ -368,7 +368,13 @@ function orderDungeon(c, d, group, resume) {
     if (!o.trip) { log('No way to ' + d.name + ' found.'); return; }
   } else if (group && !partyOf(c)) makeParty(c, d);
   c.order = o; rt(c).mv = null; rt(c).tgt = null;
+  if (o.phase === 'inside') { o.entered = G.gameTime; dungeonRunTier(c, d, o); }
   log('Order: ' + (group ? 'run ' + d.name + ' with a group of ' + d.players : 'run ' + d.name + ' alone') + '.'); save(); renderOrder();
+}
+/* hand-drawn dungeons: the tank's knowledge of the place decides the way (pullplan.js) */
+function dungeonRunTier(c, d, o) {
+  o.tier = dungeonHasTiers(d) ? tierOfKnowledge((dungeonTank(c, d) || { k: awareLevel(c, d.map) }).k) : null; o.gi = null; o.routeBegun = false;
+  if (o.tier) { const tk = dungeonTank(c, d) || { name: c.name, k: awareLevel(c, d.map) }; log((tk.name === c.name ? 'You lead' : tk.name + ' tanks') + ' (knows ' + d.name + ' ' + stars(tk.k) + '/10): ' + ROUTE_TIERS[o.tier] + '.'); }
 }
 function enterDungeon(c, d, o) {
   const r = rt(c); const e = d.enter[o.wing || 0] || d.enter[0]; if (!e) { log('No way into ' + d.name + '.'); c.order = null; return; }
@@ -378,8 +384,7 @@ function enterDungeon(c, d, o) {
   r.mv = null; r.tgt = null; r.threats = []; r.danger = []; r.resting = false; r.interact = null;
   if (o.group) makeParty(c, d); else r.party = null;
   // hand-drawn dungeons: the tank's knowledge of the place decides the way
-  o.tier = dungeonHasTiers(d) ? tierOfKnowledge((dungeonTank(c, d) || { k: awareLevel(c, d.map) }).k) : null; o.gi = null; o.routeBegun = false;
-  if (o.tier) { const tk = dungeonTank(c, d) || { name: c.name, k: awareLevel(c, d.map) }; log((tk.name === c.name ? 'You lead' : tk.name + ' tanks') + ' (knows ' + d.name + ' ' + stars(tk.k) + '/10): ' + ROUTE_TIERS[o.tier] + '.'); }
+  dungeonRunTier(c, d, o);
   if (c.pet && rt(c).pet) { rt(c).pet.x = c.pos.x + 2; rt(c).pet.y = c.pos.y + 1; }
   o.phase = 'inside'; o.entered = G.gameTime; o.lastProgress = G.gameTime;
   log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' mercenaries' : '') + '.');
@@ -556,7 +561,11 @@ function routeNext(c, d, o) {
 function dungeonNext(c, d, o) {
   const W = ensureWorld(d.map); const full = G.state.settings.dgFullClear;
   // quests first (bosses are often quest targets anyway)
-  const qc = dungeonQuestTargets(c, d).filter((x) => !(o.qSkip && o.qSkip.includes(dgTargetKey(x))));
+  const qAll = dungeonQuestTargets(c, d).filter((x) => !(o.qSkip && o.qSkip.includes(dgTargetKey(x))));
+  // with a route: a quest target is only gone for once the route has come to it (no straight line across the dungeon)
+  const rPlan = !full && dungeonRoutes(d, o.tier || null) ? dungeonPullPlan(d, o.tier || null) : null;
+  let qc = rPlan && rPlan.cum && o.gi != null && o.gi < rPlan.route.length ? qAll.filter((x) => routeIndexOf(rPlan, x) <= o.gi + 1) : rPlan && rPlan.cum && o.gi == null ? [] : qAll;
+  if (qAll.length && !qc.length && rPlan && rPlan.cum) { const rn = routeNext(c, d, o); if (rn) return rn; qc = qAll; }      // on along the route; at its end, what is left
   if (qc.length) {
     qc.sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
     let best = null, bd = Infinity; for (const m of qc.slice(0, 8)) { const dd = dungeonReach(c, m); if (dd < bd) { bd = dd; best = m; } }

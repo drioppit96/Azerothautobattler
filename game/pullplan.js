@@ -125,6 +125,18 @@ function pullPlanFrom(d, packs, routes, tier) {
   return { packs, route, cum, guide: routes.map((r) => r.name), bosses: order.length, pulls: packs.filter((p) => p.kind === 'pull').length, careful: packs.filter((p) => p.kind === 'careful').length, skip: packs.filter((p) => p.kind === 'skip').length,
     ccPacks: packs.filter((p) => p.kind !== 'skip' && p.kind !== 'boss' && p.n >= 3 && p.cc.length).length, length: Math.round(cum[cum.length - 1] || 0) };
 }
+/* where along the route something stands: the index of the end of the nearest segment (cached on the thing) */
+function routeIndexOf(plan, t) {
+  if (t._ri && t._ri.plan === plan) return t._ri.i;
+  const R = plan.route; let best = Infinity, bi = R.length - 1;
+  for (let i = 1; i < R.length; i++) {
+    if (R[i].cut) continue; const a = R[i - 1], b = R[i]; const dx = b.x - a.x, dy = b.y - a.y; const L2 = dx * dx + dy * dy || 1;
+    const k = clamp(((t.x - a.x) * dx + (t.y - a.y) * dy) / L2, 0, 1); const qz = (a.z || 0) + ((b.z || 0) - (a.z || 0)) * k;
+    const dd = Math.hypot(t.x - a.x - dx * k, t.y - a.y - dy * k) + Math.max(0, Math.abs((t.z || 0) - qz) - 8) * 3;
+    if (dd < best) { best = dd; bi = i; }
+  }
+  t._ri = { plan, i: bi }; return bi;
+}
 /* which members of a pack this group can take out, and with what (the classes in the group) */
 function packCcFor(p, classes) {
   const out = []; const used = new Set();
