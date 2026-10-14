@@ -114,7 +114,7 @@ function isJunk(c, id) {
   const cls = r ? r.c : l ? l[3] : -1, sub = r ? r.s : l ? l[4] : -1;
   if (cls === 15 && sub === 0 && itemQuality(id) <= 1 && !(r && r.sl && r.sl.length)) return true;
   // white (or grey) gear that is no upgrade, when the player allows it
-  if (G.state.settings.sellWhiteGear && r && r.sl && r.sl.length && (r.q || 0) <= 1 && !(r.c === 1) && !upgradeFor(c, { id, n: 1 })) return true;
+  if (cset(c, 'sellWhiteGear') && r && r.sl && r.sl.length && (r.q || 0) <= 1 && !(r.c === 1) && !upgradeFor(c, { id, n: 1 })) return true;
   // while leveling automatically: everything a player would vendor (no upgrade, not for quests, not food or potions)
   if (G.state.settings.sellAll !== false && c.order && (c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling')) && r) {
     if (useInfo(id) && (useInfo(id).kind === 'food' || useInfo(id).kind === 'potion' || useInfo(id).kind === 'drink')) return false;
@@ -131,7 +131,7 @@ function junkCount(c) { let n = 0; for (const s of c.bags) if (isJunk(c, s.id)) 
 function bagsFull(c, o) {
   const r = rt(c);
   if (c.prof && !junkCount(c) && (o.type === 'leveling' || o.type === 'patrol' || o.type === 'grind' || o.type === 'questing')) { r.sellMats = true; if (junkCount(c)) log('Bags are full - selling gathered materials too.'); }
-  if (G.state.settings.autoSellJunk && junkCount(c) && !o.noSell) {
+  if (cset(c, 'autoSellJunk') && junkCount(c) && !o.noSell) {
     const v = nearestVendor(c);
     if (v) {
       log('Bags are full - going to ' + v.name + ' to sell junk.');
@@ -277,7 +277,7 @@ function itemScore(c, inst) {
 }
 /* optional: put on upgrades by itself (off by default - equipping is the player's job) */
 function autoEquip(c) {
-  if (!G.state.settings.autoEquip) return;
+  if (!cset(c, 'autoEquip')) return;
   if (rt(c).threats && rt(c).threats.length) { rt(c).equipLater = true; return; }   // after the fight
   rt(c).equipLater = false;
   // bigger bags: into an empty bag slot, or instead of the smallest one
@@ -507,12 +507,12 @@ function sellJunk(c) {
   rt(c).bagFull = false; save(); refreshGear(); return n;
 }
 function autoSellNearVendor(c) {
-  if (!G.state.settings.autoSellJunk) return;
+  if (!cset(c, 'autoSellJunk')) return;
   const r = rt(c); if (G.gameTime - (r.lastSell || -99) < 20) return;
   const v = vendorNear(c, 15); if (!v) return;
   r.lastSell = G.gameTime;
   if (junkCount(c)) sellJunk(c);
-  if (G.state.settings.autoRepair && v.repair && repairCost(c)) repairAll(c);
+  if (cset(c, 'autoRepair') && v.repair && repairCost(c)) repairAll(c);
   autoBuyBags(c, v); autoBuyGear(c, v); autoBuyFood(c, v);
 }
 /* buy the biggest bag this vendor sells into an empty bag slot, keeping some money (player-like) */
@@ -546,7 +546,7 @@ function autoBuyFood(c, v, kind) {
 }
 /* buy equipment upgrades a vendor sells, spending at most a third of the money (while leveling automatically) */
 function autoBuyGear(c, v) {
-  if (!v || !G.state.settings.autoEquip || !c.order || !(c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling'))) return;
+  if (!v || !cset(c, 'autoEquip') || !c.order || !(c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling'))) return;
   for (const x of vendorItems(v.e)) {
     const it = itemRow(x.id); if (!it || !it.sl || !it.sl.length || it.c === 1) continue;
     const price = itemBuy(x.id); if (price > c.gold / 3 || bagFree(c) <= 0) continue;
@@ -556,7 +556,7 @@ function autoBuyGear(c, v) {
   }
 }
 function autoBuyBags(c, v) {
-  if (!G.state.settings.autoBuyBags || !v) return;
+  if (!cset(c, 'autoBuyBags') || !v) return;
   for (let k = 0; k < 4; k++) {
     const free = c.bagSlots.findIndex((x) => !x); if (free < 0) return;
     let best = null;
@@ -586,9 +586,9 @@ function updateVendor(c, o, dt) {
     renderOrder(); return;
   }
   if (!ok) return;
-  if (o.auto || G.state.settings.autoSellJunk) sellJunk(c);
+  if (o.auto || cset(c, 'autoSellJunk')) sellJunk(c);
   const vv = vendorList().find((x) => x.e === o.e);
-  if ((o.repair || G.state.settings.autoRepair) && repairCost(c)) { if (vv && vv.repair) repairAll(c); }
+  if ((o.repair || cset(c, 'autoRepair')) && repairCost(c)) { if (vv && vv.repair) repairAll(c); }
   autoBuyBags(c, vv); autoBuyGear(c, vv); autoBuyFood(c, vv);
   log('At ' + o.label + '.');
   c.order = o.resume || null; if (o.resume) { o.resume.wait = 0; o.resume.noSell = junkCount(c) === 0 && bagFree(c) <= 0; }

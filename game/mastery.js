@@ -132,7 +132,7 @@ function masteryDungeonHtml(c, d) {
   const i = masteryOf(c).inst[d.map]; const k = instLevel(c, d.map);
   let h = '<div class="sgroup mst"><h5>Experience</h5><div class="small">You: skill <b>' + stars(skillLevel(c)) + '</b>/10 &middot; knowledge of ' + esc(d.short || d.name) + ' <b>' + stars(k) + '</b>/10' +
     (i ? ' <span class="muted">(' + i.runs + ' run' + (i.runs === 1 ? '' : 's') + ', ' + i.clears + ' cleared, ' + i.wipes + ' wipe' + (i.wipes === 1 ? '' : 's') + (i.best ? ', best ' + i.best + ' min' : '') + ')</span>' : ' <span class="muted">(first time)</span>') + '</div>';
-  if (!G.state.settings.dungeonSolo) {
+  if (!cset(c, 'dungeonSolo')) {
     const plan = G.dgPlan && G.dgPlan.map === d.map && G.dgPlan.t > G.gameTime - 300 && G.dgPlan.cid === c.id ? G.dgPlan.p : null;
     if (plan) {
       h += '<div class="small" style="margin-top:4px">Group to hire: <b>' + money(plan.fee) + '</b></div>' + plan.members.slice(0, 12).map((x) => '<div class="small mst-m"><span style="color:' + CLASS_COLOR[x.m.cls] + '">' + esc(x.m.name) + '</span> <span class="muted">' + CLASS_NAMES[x.m.cls] + ' ' + x.role + '</span> &middot; skill ' + stars(skillLevel(x.m)) + ' &middot; knows it ' + stars(instLevel(x.m, d.map)) + (x.volunteer ? ' <span class="muted">(volunteer, free)</span>' : ' &middot; ' + money(x.fee)) + '</div>').join('') + (plan.members.length > 12 ? '<div class="small muted">and ' + (plan.members.length - 12) + ' more</div>' : '');

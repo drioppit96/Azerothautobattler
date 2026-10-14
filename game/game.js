@@ -367,23 +367,25 @@ function bindCards() {
     if (id === 'quests' || id === 'qact' || id === 'qnear') renderQuests(); else if (id === 'auto') renderSettingsCard(); else renderGearCard();
   });
 }
-/* the automatic behaviour, in groups (what the character does by itself) */
+/* the automatic behaviour, in groups (what the character does by itself) - each character has its own (c.auto);
+   characters that never changed one use the old shared setting */
+function cset(c, k) { return c && c.auto && k in c.auto ? c.auto[k] : G.state.settings[k]; }
 const AUTO_GROUPS = [
   ['Selling and junk', [['autoSellJunk', 'Sell junk (grey and vendor trash) when near a vendor, and when the bags are full'], ['sellWhiteGear', 'Count white gear that is no upgrade as junk']]],
   ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)']]],
   ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself']]],
 ];
 function renderSettingsCard() {
-  const el = $('setCard'); if (!el) return; const st = G.state.settings; const on = cardOpen('auto', false);
-  let h = cardHead('auto', 'Automation', false);
+  const el = $('setCard'); if (!el) return; const c = active(); const on = cardOpen('auto', false);
+  let h = cardHead('auto', 'Automation <span class="small muted">(' + esc(c.name) + ')</span>', false);
   if (on) {
     for (const [title, list] of AUTO_GROUPS) {
-      h += '<div class="aset"><h5>' + title + '</h5>' + list.map(([k, t, defTrue]) => '<label class="chk"><input type="checkbox" data-aset="' + k + '"' + ((defTrue ? st[k] !== false : st[k]) ? ' checked' : '') + '> ' + t + '</label>').join('') + '</div>';
+      h += '<div class="aset"><h5>' + title + '</h5>' + list.map(([k, t, defTrue]) => '<label class="chk"><input type="checkbox" data-aset="' + k + '"' + ((defTrue ? cset(c, k) !== false : cset(c, k)) ? ' checked' : '') + '> ' + t + '</label>').join('') + '</div>';
     }
     h += '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" data-abeh="1">Behaviour</a></div>';
   }
   el.innerHTML = h; el.dataset.def = '0';
-  el.onchange = (e) => { const k = e.target.dataset && e.target.dataset.aset; if (!k) return; st[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
+  el.onchange = (e) => { const k = e.target.dataset && e.target.dataset.aset; if (!k) return; const a = active(); a.auto = a.auto || {}; a.auto[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
   el.onclick = (e) => { if (e.target.dataset && e.target.dataset.abeh) { e.preventDefault(); openSheet('beh'); } };
 }
 function orderText(c) {

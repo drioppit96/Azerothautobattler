@@ -159,7 +159,7 @@ function questDungeon(q) { const m = questMeta(q); const id = m.dungeon || m.tur
 /* level and settings allow the dungeon of a quest; auto = leveling / auto-questing (no raids, settings) */
 function dungeonQuestOk(c, q, auto) {
   const d = questDungeon(q); if (!d) return true;
-  if (auto && (G.state.settings.dungeonQuests === false || d.kind === 'raid')) return false;
+  if (auto && (cset(c, 'dungeonQuests') === false || d.kind === 'raid')) return false;
   return c.level >= d.lmin - (auto ? 0 : 3);
 }
 function dungeonQuestDist(c, d) { return d.entrance && d.entrance.map === c.pos.map ? Math.hypot(d.entrance.x - c.pos.x, d.entrance.y - c.pos.y) + 300 : 6000; }
@@ -169,7 +169,7 @@ function questDungeonRun(c, d, o, q) {
   if ((o.dgTries[q.id] || 0) >= 3) { log('"' + q.title + '": tried ' + d.name + ' three times - giving up on it.'); return false; }
   if (c.level < d.lmin - 3) { log('"' + q.title + '" is done in ' + d.name + ' - it needs level ' + (d.lmin - 3) + '.'); return false; }
   o.dgTries[q.id] = (o.dgTries[q.id] || 0) + 1;
-  const group = G.state.settings.dungeonSolo !== true;
+  const group = cset(c, 'dungeonSolo') !== true;
   log('"' + q.title + '" is done in ' + d.name + ' - going in' + (group ? ' with a group' : ' alone') + '.');
   orderDungeon(c, d, group, o); if (!c.order || c.order.type !== 'dungeon') return false;
   c.order.questRun = true; return true;
@@ -490,7 +490,7 @@ function questStep(c, q, o) {
   return 'busy';
 }
 function nextAfterQuest(c, q) {
-  if (!G.state.settings.chainQuests) { c.order = null; renderOrder(); return; }
+  if (!cset(c, 'chainQuests')) { c.order = null; renderOrder(); return; }
   let next = null;
   for (const n of G.q.byPrev[q.id] || []) if (questAvailable(c, n) && !questSupport(n)) { next = n; break; }
   if (!next) for (const a of availableQuests(c, 20)) { if (a.d < 700 && a.q.level <= c.level + 2 && !questSupport(a.q)) { next = a.q; break; } }

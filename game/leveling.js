@@ -337,7 +337,7 @@ function abandonStale(c) {
 }
 /* dungeon quests for this level: pick them up in town, run the dungeon (with a group), turn them in */
 function dungeonTourPick(c, o) {
-  if (G.state.settings.dungeonQuests === false || typeof dungeonList !== 'function') return false;
+  if (cset(c, 'dungeonQuests') === false || typeof dungeonList !== 'function') return false;
   o.dgDone = o.dgDone || {}; if (G.gameTime - (o.dgLook || -1e9) < 120) return false; o.dgLook = G.gameTime;
   let best = null;
   for (const d of dungeonList()) {
@@ -355,7 +355,7 @@ function dungeonTourPick(c, o) {
   }
   if (!best) return false;
   o.tour = { map: best.d.map, qs: best.qs, phase: 'pickup', runs: 0 }; o.mode = 'dgtour'; o.fq = null; o.wt = null; o.trip = null;
-  log('Dungeon quests in ' + best.d.name + ': ' + best.qs.map((id) => '"' + G.q.byId[id].title + '"').join(', ') + ' - picking them up, then going in' + (G.state.settings.dungeonSolo ? '' : ' with a group') + '.');
+  log('Dungeon quests in ' + best.d.name + ': ' + best.qs.map((id) => '"' + G.q.byId[id].title + '"').join(', ') + ' - picking them up, then going in' + (cset(c, 'dungeonSolo') ? '' : ' with a group') + '.');
   return true;
 }
 function updateDungeonTour(c, o) {
@@ -376,7 +376,7 @@ function updateDungeonTour(c, o) {
     const need = T.qs.filter((id) => c.quests[id] && (!questDone(c, G.q.byId[id]) || questMeta(G.q.byId[id]).turnDungeon === T.map));
     if (need.length && T.runs < 2) {
       T.runs++; log('Into ' + d.name + (T.runs > 1 ? ' again' : '') + ' for ' + need.length + ' quest' + (need.length > 1 ? 's' : '') + '.');
-      orderDungeon(c, d, G.state.settings.dungeonSolo !== true, o);
+      orderDungeon(c, d, cset(c, 'dungeonSolo') !== true, o);
       if (c.order && c.order.type === 'dungeon') c.order.questRun = true; else end('Could not go into ' + d.name + '.');
       return;
     }
