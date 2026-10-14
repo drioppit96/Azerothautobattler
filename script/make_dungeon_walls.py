@@ -302,6 +302,130 @@ def assign_floors(d, pts, inside):
     return res, zc
 
 
+# the way groups take through the big dungeons (boss order from the guides: icy-veins, warcrafttavern, almarsguides);
+# each route starts at a way in (by name, or the first) and visits the bosses in this order
+ROUTES = {
+    109: [{"name": "Sunken Temple", "bosses": ["Jammal'an the Prophet", "Morphaz", "Hazzas", "Shade of Eranikus"]}],
+    230: [{"name": "Blackrock Depths", "bosses": ["High Interrogator Gerstahn", "Lord Roccor", "Houndmaster Grebmar", "Pyromancer Loregrain",
+                                                 "Fineous Darkvire", "Lord Incendius", "Warder Stilgiss", "Bael'Gar", "General Angerforge",
+                                                 "Golem Lord Argelmach", "Ribbly Screwspigot", "Plugger Spazzring", "Phalanx", "Ambassador Flamelash",
+                                                 "Anger'rel", "Magmus", "Emperor Dagran Thaurissan"]}],
+    229: [{"name": "Lower Blackrock Spire", "bosses": ["Highlord Omokk", "Shadow Hunter Vosh'gajin", "War Master Voone", "Mother Smolderweb",
+                                                      "Quartermaster Zigris", "Halycon", "Overlord Wyrmthalak"]},
+          {"name": "Upper Blackrock Spire", "bosses": ["Pyroguard Emberseer", "The Beast", "General Drakkisath"]}],
+    429: [{"name": "Dire Maul East", "enter": "Dire Maul East", "bosses": ["Zevrim Thornhoof", "Hydrospawn", "Lethtendris", "Alzzin the Wildshaper"]},
+          {"name": "Dire Maul West", "enter": "Dire Maul West", "bosses": ["Tendris Warpwood", "Illyanna Ravenoak", "Magister Kalendris", "Immol'thar", "Prince Tortheldrin"]},
+          {"name": "Dire Maul North", "enter": "Dire Maul North", "bosses": ["Guard Mol'dar", "Stomper Kreeg", "Guard Fengus", "Guard Slip'kik", "Captain Kromcrush", "Cho'Rush the Observer", "King Gordok"]}],
+    289: [{"name": "Scholomance", "bosses": ["Jandice Barov", "Rattlegore", "Vectus", "Marduk Blackpool", "Ras Frostwhisper", "The Ravenian", "Lord Alexei Barov",
+                                            "Lady Illucia Barov", "Instructor Malicia", "Doctor Theolen Krastinov", "Lorekeeper Polkelt"]}],
+    329: [{"name": "Stratholme - Live", "enter": "Stratholme - Entering Left Front", "bosses": ["Hearthsinger Forresten", "The Unforgiven", "Malor the Zealous", "Cannon Master Willey", "Archivist Galford"]},
+          {"name": "Stratholme - Undead", "enter": "Stratholme - Entering Back Door", "bosses": ["Baroness Anastari", "Maleki the Pallid", "Nerub'enkan", "Magistrate Barthilas", "Baron Rivendare"]}],
+    469: [{"name": "Blackwing Lair", "bosses": ["Razorgore the Untamed", "Vaelastrasz the Corrupt", "Broodlord Lashlayer", "Firemaw", "Ebonroc", "Flamegor", "Chromaggus"]}],
+    531: [{"name": "Temple of Ahn'Qiraj", "bosses": ["The Prophet Skeram", "Vem", "Battleguard Sartura", "Fankriss the Unyielding", "Viscidus", "Princess Huhuran", "Emperor Vek'nilash", "C'Thun"]}],
+    533: [{"name": "Naxxramas", "enter": "Naxxramas (Exit)", "bosses": ["Anub'Rekhan", "Grand Widow Faerlina", "Maexxna", "Noth the Plaguebringer", "Heigan the Unclean", "Loatheb",
+                                                                     "Instructor Razuvious", "Gothik the Harvester", "Patchwerk", "Grobbulus", "Gluth", "Thaddius", "Kel'Thuzad"]}],
+}
+ROUTE_WIDTH = 14          # yards on each side of the route that stay walkable
+
+
+def spot_graph(pts):
+    """creature / object spots as a walking graph: close neighbours (height included), pieces joined at their closest pair"""
+    from scipy.spatial import cKDTree
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    P = np.array(pts, float)
+    t = cKDTree(P[:, :2])
+    rows, cols, ws = [], [], []
+    for i, nb in enumerate(t.query_ball_point(P[:, :2], 22)):
+        cand = []
+        for j in nb:
+            if j == i:
+                continue
+            dd = math.hypot(P[j, 0] - P[i, 0], P[j, 1] - P[i, 1]); dz = abs(P[j, 2] - P[i, 2])
+            if dz <= max(4, dd * 0.7):
+                cand.append((dd + dz * 1.5, j))
+        for w, j in sorted(cand)[:8]:
+            rows.append(i); cols.append(j); ws.append(w)
+    n = len(P)
+    for _ in range(80):
+        g = coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+        nc, lab = connected_components(g, directed=False)
+        if nc <= 1:
+            break
+        main_ = np.bincount(lab).argmax()
+        joined = False
+        for k in range(nc):
+            if k == main_:
+                continue
+            a = np.nonzero(lab == k)[0]; b = np.nonzero(lab != k)[0]
+            tb = cKDTree(P[b, :2]); d_, j_ = tb.query(P[a, :2])
+            dz = np.abs(P[a, 2] - P[b[j_], 2]); cost = d_ + dz * 0.8
+            i = int(np.argmin(cost))
+            if cost[i] < 160:
+                rows.append(int(a[i])); cols.append(int(b[j_[i]])); ws.append(float(cost[i]) * 1.5); joined = True
+        if not joined:
+            break
+    from scipy.sparse import csr_matrix
+    return csr_matrix((ws + ws, (rows + cols, cols + rows)), shape=(n, n))
+
+
+def make_routes(d, pts, owner):
+    """the guide routes as chains of spots: [{name, path: [(x, y, z, floor)], stops: [(boss, index in path)]}]"""
+    from scipy.sparse.csgraph import dijkstra
+    plan = ROUTES.get(d["map"])
+    if not plan:
+        return []
+    good = [i for i, p in enumerate(pts) if p[2] is not None and owner[i] is not None]
+    P = [pts[i] for i in good]
+    G = spot_graph(P)
+    def nearest(x, y, z):
+        best, bd = 0, 1e18
+        for k, (a, b, c) in enumerate(P):
+            dd = math.hypot(a - x, b - y) + abs(c - (z if z is not None else c)) * 2
+            if dd < bd:
+                bd, best = dd, k
+        return best
+    out = []
+    for r in plan:
+        ent = next((e for e in d["enter"] if r.get("enter") and e["name"] == r["enter"]), d["enter"][0])
+        cur = nearest(ent["x"], ent["y"], ent.get("z"))
+        path, stops = [cur], []
+        for bn in r["bosses"]:
+            b = next((x for x in d["bosses"] if x["n"] == bn), None)
+            if not b:
+                continue
+            tgt = nearest(b["x"], b["y"], b.get("z"))
+            dist, pred = dijkstra(G, indices=cur, return_predecessors=True)
+            if not np.isfinite(dist[tgt]):
+                continue
+            chain = []
+            v = tgt
+            while v != cur and v >= 0:
+                chain.append(int(v)); v = pred[v]
+            path += chain[::-1]
+            stops.append((bn, len(path) - 1))
+            cur = tgt
+        out.append({"name": r["name"], "path": [(P[k][0], P[k][1], P[k][2], owner[good[k]]["n"]) for k in path], "stops": stops})
+    return out
+
+
+def route_mask(f, segs, base, W=1002, H=668):
+    """only the way of the route on this floor: a band along it (cut to the drawn floor where that is wide enough)"""
+    ypp = (f["xt"] - f["xb"]) / H
+    r = max(3, int(round(ROUTE_WIDTH / ypp)))
+    band = np.zeros((H, W), np.uint8)
+    core = np.zeros((H, W), np.uint8)
+    for seg in segs:
+        pp = np.array([to_px(f, x, y, W, H) for x, y in seg], np.int32)
+        if len(pp) == 1:
+            cv2.circle(band, tuple(int(t) for t in pp[0]), r, 1, -1); cv2.circle(core, tuple(int(t) for t in pp[0]), max(2, r // 3), 1, -1)
+        else:
+            cv2.polylines(band, [pp], False, 1, 2 * r); cv2.polylines(core, [pp], False, 1, max(3, 2 * r // 3))
+    band = cv2.dilate(band, np.ones((3, 3), np.uint8)) > 0
+    m = (band & base) | (core > 0)
+    return cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8)) > 0
+
+
 EDITS = os.path.join(ROOT, "gamedata", "wall_edits")
 
 
@@ -494,16 +618,36 @@ def main():
             floors_pts[n_] = [p for p in fp if mask[int(p[4]), int(p[3])]] or fp
         if len(floors_pts) > 1:
             res["links"] = links_of(d, floors_pts)
+        routes = make_routes(d, pts, owner)
+        res["routes"] = [{"name": r["name"], "stops": [[bn, i] for bn, i in r["stops"]],
+                          "path": [[round(x, 1), round(y, 1), round(z, 1), fl] for x, y, z, fl in r["path"]]} for r in routes]
         for f in d["floors"]:
             if f["n"] not in masks:
                 continue
             mask, mode, ents, seeds, fp = masks[f["n"]]
+            # the routed dungeons: only the way of the route can be walked (the floors nobody corrected by hand)
+            segs = []
+            for r in routes:
+                cur = []
+                for x, y, z, fl in r["path"]:
+                    if fl == f["n"]:
+                        cur.append((x, y))
+                    elif cur:
+                        segs.append(cur); cur = []
+                if cur:
+                    segs.append(cur)
+            if segs and mode == "auto":
+                mask = route_mask(f, segs, mask)
+                mode = "route"
             keep_pts = [(int(u), int(v)) for u, v in ents]
             for L in res["links"]:
                 for side in ("a", "b"):
                     if L[side]["f"] == f["n"]:
                         keep_pts.append((int(L[side]["x"]), int(L[side]["y"])))
             bosses = [tuple(int(t) for t in to_px(f, b["x"], b["y"])) for b in d.get("bosses", []) if floor_at(d, b["x"], b["y"], b.get("z")) is f]
+            if mode == "route":       # the start of every route stays, and everything along it is one piece
+                keep_pts += [(int(to_px(f, x, y)[0]), int(to_px(f, x, y)[1])) for r in routes for x, y, z, fl in r["path"][:1] if fl == f["n"]]
+                keep_pts += [tuple(int(t) for t in to_px(f, x, y)) for x, y in sum(segs, [])]
             mask = prune(mask, keep_pts, seeds, bosses)
             H, W = mask.shape
             h2, w2 = H // CELL, W // CELL
@@ -515,7 +659,7 @@ def main():
                                           "zc": round(zc[f["n"]], 1) if zc.get(f["n"]) is not None else None}
         out[str(d["map"])] = res
         print("%-28s floors %d  links %d  %s" % (d["name"], len(res["floors"]), len(res["links"]),
-                                                ", ".join("%s:%s%%%s" % (k, v["pct"], {"auto": "", "drawn": "*", "edited": "+"}[v["mode"]]) for k, v in res["floors"].items())))
+                                                ", ".join("%s:%s%%%s" % (k, v["pct"], {"auto": "", "drawn": "*", "edited": "+", "route": "~"}[v["mode"]]) for k, v in res["floors"].items())))
     with open(os.path.join(ROOT, "gamedata", "dungeon_walls.json"), "w", encoding="utf-8") as fh:
         json.dump(out, fh, separators=(",", ":"))
     print("gamedata/dungeon_walls.json written")

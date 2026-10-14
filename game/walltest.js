@@ -4,14 +4,14 @@
    floors (click one to go to the floor it leads to). Click the floor to light up everything reachable from there
    without crossing a wall. Only for checking - the game does not use these walls yet. */
 
-const WT = { open: false, data: null, map: null, floor: null, show: { walls: true, walk: true, spots: false, links: true, reach: true }, img: {}, reach: null, flash: null, hover: null };
+const WT = { open: false, data: null, map: null, floor: null, show: { walls: true, walk: true, spots: false, links: true, reach: true, route: true, plan: false }, img: {}, reach: null, flash: null, hover: null };
 
 async function openWallTest() {
   let el = $('walltest');
   if (!el) {
     el = document.createElement('div'); el.id = 'walltest'; document.body.appendChild(el);
     el.innerHTML = '<div class="wt-box"><div class="wt-head"><b>Dungeon walls - test</b><select id="wtDungeon"></select><span id="wtFloors"></span>' +
-      '<span class="wt-opts">' + [['walls', 'Walls'], ['walk', 'Walkable floor'], ['links', 'Ways between floors'], ['spots', 'Creature spots'], ['reach', 'Reach on click']].map(([k, t]) => '<label class="chk"><input type="checkbox" data-wt="' + k + '"' + (WT.show[k] ? ' checked' : '') + '> ' + t + '</label>').join('') + '</span>' +
+      '<span class="wt-opts">' + [['walls', 'Walls'], ['walk', 'Walkable floor'], ['links', 'Ways between floors'], ['route', 'Guide route'], ['plan', 'Pull plan'], ['spots', 'Creature spots'], ['reach', 'Reach on click']].map(([k, t]) => '<label class="chk"><input type="checkbox" data-wt="' + k + '"' + (WT.show[k] ? ' checked' : '') + '> ' + t + '</label>').join('') + '</span>' +
       '<button class="mini" id="wtClose">&#10005;</button></div><div class="wt-main"><canvas id="wtCanvas"></canvas><div id="wtInfo" class="small"></div></div></div>';
     $('wtClose').onclick = closeWallTest;
     el.onclick = (e) => { if (e.target === el) closeWallTest(); };
@@ -24,7 +24,7 @@ async function openWallTest() {
   el.hidden = false; WT.open = true;
   if (!WT.data) {
     $('wtInfo').textContent = 'Loading the walls ...';
-    try { WT.data = await J('../gamedata/dungeon_walls.json'); } catch (e) { $('wtInfo').textContent = 'gamedata/dungeon_walls.json is missing (run script\\make_dungeon_walls.py).'; return; }
+    try { WT.data = await J('../gamedata/dungeon_walls.json'); G.dgWalls = WT.data; G.pullPlans = {}; } catch (e) { $('wtInfo').textContent = 'gamedata/dungeon_walls.json is missing (run script\\make_dungeon_walls.py).'; return; }
     const list = (G.d.dungeons && G.d.dungeons.dungeons || []).slice().sort((a, b) => (a.kind !== 'dungeon') - (b.kind !== 'dungeon') || a.lmin - b.lmin);
     $('wtDungeon').innerHTML = list.map((d) => '<option value="' + d.map + '">' + esc(d.name) + (d.kind === 'raid' ? ' (raid)' : '') + '</option>').join('');
     const c = active(); const here = list.find((d) => d.map === c.pos.map);
@@ -76,6 +76,8 @@ function wtDraw() {
     ctx.fillStyle = '#00dcff';
     for (const [x, y, z] of wtSpots(d, f)) { const [u, v] = wtPx(f, x, y); ctx.beginPath(); ctx.arc(u * k, v * k, 2.2, 0, 6.3); ctx.fill(); }
   }
+  if (WT.show.route) wtDrawRoute(ctx, d, f, k);
+  if (WT.show.plan) wtDrawPlan(ctx, d, f, k);
   if (WT.show.links) {
     ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left';
     for (const L of wtLinks()) {
@@ -124,6 +126,7 @@ function wtClick(e) {
 function wtMove(e) {
   const r = e.target.getBoundingClientRect(); const px = e.clientX - r.left, py = e.clientY - r.top;
   const L = WT.show.links && wtHitLink(px, py); const d = wtDungeon();
+  const pk = !L && wtPackAt(px, py); if (pk) { WT.hover = wtPackText(pk.p); e.target.style.cursor = 'help'; wtInfo(); return; }
   WT.hover = L ? (L.up ? 'Up' : 'Down') + ' to ' + wtFloorName(d, L.to.f) + ' (' + Math.abs(Math.round(L.to.wz - L.me.wz)) + ' yards ' + (L.up ? 'higher' : 'lower') + ', ' + Math.round(L.raw.d) + ' yards across' + (L.raw.close ? '' : ' - no creature stands on the way, a guess') + ') - click to go there' : null;
   e.target.style.cursor = L ? 'pointer' : 'crosshair'; wtInfo();
 }
@@ -131,6 +134,42 @@ function wtInfo() {
   const F = wtFloorData(); const d = wtDungeon(); if (!F || !d) return;
   const links = wtLinks();
   $('wtInfo').innerHTML = (WT.hover ? '<b>' + esc(WT.hover) + '</b><br>' : '') +
-    esc(d.name) + ' - ' + esc(wtFloorName(d, WT.floor)) + ': ' + F.walls.length + ' wall lines, walkable ' + F.pct + '% of the picture, ' + F.spots + ' creature / object spots' + (F.drawn ? ' (walls drawn by hand)' : '') +
+    esc(d.name) + ' - ' + esc(wtFloorName(d, WT.floor)) + ': ' + F.walls.length + ' wall lines, walkable ' + F.pct + '% of the picture, ' + F.spots + ' creature / object spots' + ({ drawn: ' (walls drawn by hand)', edited: ' (walls corrected by hand)', route: ' (only the guide route can be walked)' }[F.mode] || '') +
     (links.length ? ', ' + links.length + ' way' + (links.length > 1 ? 's' : '') + ' to other floors' : '') + '. ' + (WT.reachInfo ? esc(WT.reachInfo) : 'Click the floor to see what can be reached from there; click a pink circle to take that way.');
+}
+
+/* the guide route on this floor: the way (cyan), the bosses in order (numbered) */
+const WT_ROUTE_COL = ['#3fe0ff', '#ffb03a', '#c77dff'];
+function wtDrawRoute(ctx, d, f, k) {
+  const W = WT.data[String(WT.map)]; if (!W || !W.routes) return; let no = 0;
+  W.routes.forEach((r, ri) => {
+    ctx.strokeStyle = WT_ROUTE_COL[ri % 3]; ctx.lineWidth = 3; ctx.setLineDash([]); ctx.beginPath(); let on = false;
+    for (const [x, y, z, fl] of r.path) { if (String(fl) !== WT.floor) { on = false; continue; } const [u, v] = wtPx(f, x, y); if (on) ctx.lineTo(u * k, v * k); else ctx.moveTo(u * k, v * k); on = true; }
+    ctx.stroke();
+    if (r.path.length && String(r.path[0][3]) === WT.floor) { const [u, v] = wtPx(f, r.path[0][0], r.path[0][1]); ctx.fillStyle = WT_ROUTE_COL[ri % 3]; ctx.font = 'bold 12px Segoe UI'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText('Start: ' + r.name, u * k + 8, v * k - 8); ctx.fillText('Start: ' + r.name, u * k + 8, v * k - 8); }
+    for (const [bn, i] of r.stops) {
+      no++; const p = r.path[i]; if (String(p[3]) !== WT.floor) continue; const [u, v] = wtPx(f, p[0], p[1]);
+      ctx.fillStyle = '#ffd23a'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(u * k, v * k, 9, 0, 6.3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#000'; ctx.font = 'bold 11px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText(String(no), u * k, v * k + 4); ctx.textAlign = 'left';
+      ctx.fillStyle = '#ffe9a8'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText(bn, u * k + 11, v * k + 4); ctx.fillText(bn, u * k + 11, v * k + 4);
+    }
+  });
+}
+/* the pull plan on this floor: packs on the way (red), close to it (orange), off it (grey); CC that can take part of a pack out */
+function wtDrawPlan(ctx, d, f, k) {
+  const plan = dungeonPullPlan(d); WT.packs = [];
+  for (const p of plan.packs) {
+    if (dungeonFloorAt(d, p.x, p.y, p.z) !== f) continue; const [u, v] = wtPx(f, p.x, p.y);
+    const R = Math.max(5, Math.min(26, p.aggro / ((f.xt - f.xb) / 668) * k));
+    ctx.globalAlpha = p.kind === 'skip' ? 0.4 : 0.9; ctx.strokeStyle = PACK_COLOR[p.kind]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(u * k, v * k, R, 0, 6.3); ctx.stroke(); ctx.globalAlpha = 1;
+    if (p.no) { ctx.font = 'bold 10px Segoe UI'; ctx.fillStyle = PACK_COLOR[p.kind]; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; const t = p.no + (p.n > 1 ? ' (' + p.n + ')' : '') + (p.cc.length && p.n >= 3 ? ' CC' : ''); ctx.strokeText(t, u * k - 8, v * k - R - 2); ctx.fillText(t, u * k - 8, v * k - R - 2); }
+    WT.packs.push({ p, x: u * k, y: v * k, R });
+  }
+}
+function wtPackAt(px, py) { return (WT.show.plan && WT.packs || []).find((q) => Math.hypot(q.x - px, q.y - py) <= Math.max(8, q.R)) || null; }
+function wtPackText(p) {
+  const names = {}; for (const m of p.members) { const n = m.info ? m.info[1] : '?'; names[n] = (names[n] || 0) + 1; }
+  const kind = { boss: 'boss', pull: 'on the way - must be fought', careful: 'close to the way - a careless group pulls it', skip: 'off the way - walked past' }[p.kind];
+  return (p.no ? '#' + p.no + ' ' : '') + Object.entries(names).map(([n, c]) => (c > 1 ? c + ' x ' : '') + n).join(', ') + ' (level ' + p.lvl[0] + (p.lvl[1] > p.lvl[0] ? '-' + p.lvl[1] : '') + (p.elites ? ', ' + p.elites + ' elite' : '') + ') - ' + kind +
+    (p.cc.length ? '. Crowd control: ' + p.cc.map((c) => c.n + ' (' + CLASS_NAMES[c.cls] + ', ' + c.k + ')').join(', ') : '');
 }

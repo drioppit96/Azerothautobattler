@@ -35,7 +35,11 @@ function dungeonPullPlan(d) {
     p.cc = CC_SPELLS.filter((s) => ms.some((m) => s.types.includes(m.info[5])) && !ms.every((m) => bossE.has(m.e))).map((s) => ({ cls: s.cls, n: s.n, ooc: !!s.ooc, k: ms.filter((m) => s.types.includes(m.info[5]) && !bossE.has(m.e)).length }));
     packs.push(p);
   }
-  // the route: from the way in to the nearest boss left, and on (by the walking paths)
+  // the route: the guide route of the dungeon (dungeon_walls.json) when there is one, else from the way in to the nearest
+  // boss left, and on (by the walking paths)
+  const gw = G.dgWalls && G.dgWalls[String(d.map)];
+  if (gw && gw.routes && gw.routes.length) return (G.pullPlans[d.map] = pullPlanFrom(d, packs, gw.routes));
+  if (!G.dgWalls) loadDungeonWalls();
   const e0 = d.enter[0]; const walker = { pos: { map: d.map, x: e0.x, y: e0.y, z: e0.z }, rt: {} };
   const route = [{ x: e0.x, y: e0.y, z: e0.z }]; const left = packs.filter((p) => p.boss); const order = [];
   while (left.length) {
@@ -63,6 +67,35 @@ function dungeonPullPlan(d) {
     ccPacks: packs.filter((p) => p.kind !== 'skip' && p.kind !== 'boss' && p.n >= 3 && p.cc.length).length, length: Math.round(cum[cum.length - 1] || 0) };
   return (G.pullPlans[d.map] = plan);
 }
+/* the walls, floors and guide routes of the dungeons (made by make_dungeon_walls.py), loaded once */
+function loadDungeonWalls() {
+  if (G.dgWallsLoading) return; G.dgWallsLoading = true;
+  J('../gamedata/dungeon_walls.json').then((w) => { G.dgWalls = w; G.pullPlans = {}; }).catch(() => { G.dgWalls = {}; });
+}
+/* the plan along the guide routes: every pack is placed along the way (how far along, how close to it) */
+function pullPlanFrom(d, packs, routes) {
+  const route = []; const order = [];
+  for (const r of routes) {
+    r.path.forEach((p, i) => route.push({ x: p[0], y: p[1], z: p[2], cut: i === 0 && route.length > 0 }));
+    for (const [bn] of r.stops) { const p = packs.find((k) => k.boss && k.members.some((m) => m.info && m.info[1] === bn)); if (p) order.push(p); }
+  }
+  const cum = [0]; for (let i = 1; i < route.length; i++) cum.push(cum[i - 1] + (route[i].cut ? 0 : Math.hypot(route[i].x - route[i - 1].x, route[i].y - route[i - 1].y)));
+  for (const p of packs) {
+    let best = Infinity, along = 0;
+    for (let i = 1; i < route.length; i++) {
+      if (route[i].cut) continue;
+      const a = route[i - 1], b = route[i]; const dx = b.x - a.x, dy = b.y - a.y; const L2 = dx * dx + dy * dy || 1;
+      const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / L2, 0, 1); const qx = a.x + dx * t, qy = a.y + dy * t; const qz = (a.z || 0) + ((b.z || 0) - (a.z || 0)) * t;
+      const dd = Math.hypot(p.x - qx, p.y - qy) + Math.max(0, Math.abs(p.z - qz) - 8) * 3;
+      if (dd < best) { best = dd; along = cum[i - 1] + Math.sqrt(L2) * t; }
+    }
+    p.dist = best; p.along = along;
+    p.kind = p.boss ? (order.includes(p) ? 'boss' : 'skip') : best < p.aggro + 4 ? 'pull' : best < p.aggro + 14 ? 'careful' : 'skip';
+  }
+  packs.sort((a, b) => a.along - b.along); let k = 0; for (const p of packs) if (p.kind !== 'skip') p.no = ++k;
+  return { packs, route, guide: routes.map((r) => r.name), bosses: order.length, pulls: packs.filter((p) => p.kind === 'pull').length, careful: packs.filter((p) => p.kind === 'careful').length, skip: packs.filter((p) => p.kind === 'skip').length,
+    ccPacks: packs.filter((p) => p.kind !== 'skip' && p.kind !== 'boss' && p.n >= 3 && p.cc.length).length, length: Math.round(cum[cum.length - 1] || 0) };
+}
 /* which members of a pack this group can take out, and with what (the classes in the group) */
 function packCcFor(p, classes) {
   const out = []; const used = new Set();
@@ -74,7 +107,7 @@ function drawPullPlan(ctx, map) {
   ctx.save();
   // the route
   ctx.strokeStyle = 'rgba(255,210,90,.75)'; ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]); ctx.beginPath(); let on = false;
-  for (const q of plan.route) { const inF = dungeonFloorAt(map.dungeon, q.x, q.y, q.z) === f; const [x, y] = w2s(q.x, q.y); if (inF) { if (on) ctx.lineTo(x, y); else ctx.moveTo(x, y); on = true; } else on = false; }
+  for (const q of plan.route) { const inF = dungeonFloorAt(map.dungeon, q.x, q.y, q.z) === f; const [x, y] = w2s(q.x, q.y); if (inF && !q.cut) { if (on) ctx.lineTo(x, y); else ctx.moveTo(x, y); on = true; } else if (inF) { ctx.moveTo(x, y); on = true; } else on = false; }
   ctx.stroke(); ctx.setLineDash([]);
   ctx.textAlign = 'center'; ctx.font = 'bold 11px Segoe UI';
   for (const p of plan.packs) {
@@ -87,6 +120,6 @@ function drawPullPlan(ctx, map) {
 }
 function pullPlanHtml(d) {
   const p = dungeonPullPlan(d);
-  return '<div class="sgroup"><h5>Pull plan</h5><div class="small">' + (p.pulls + p.bosses) + ' fights on the way (' + p.bosses + ' bosses), ' + p.careful + ' packs close to the way (a careless group pulls them), ' + p.skip + ' off the way. ' + p.ccPacks + ' big packs where crowd control helps.</div>' +
+  return '<div class="sgroup"><h5>Pull plan</h5><div class="small">' + (p.guide ? 'Route from the guides: ' + esc(p.guide.join(', ')) + '. ' : '') + (p.pulls + p.bosses) + ' fights on the way (' + p.bosses + ' bosses), ' + p.careful + ' packs close to the way (a careless group pulls them), ' + p.skip + ' off the way. ' + p.ccPacks + ' big packs where crowd control helps.</div>' +
     '<label class="chk"><input type="checkbox" data-dgset="showPullPlan"' + (G.state.settings.showPullPlan ? ' checked' : '') + '> Show it on the dungeon map <span class="small" style="color:' + PACK_COLOR.pull + '">on the way</span> <span class="small" style="color:' + PACK_COLOR.careful + '">careful</span> <span class="small" style="color:' + PACK_COLOR.skip + '">off the way</span></label></div>';
 }
