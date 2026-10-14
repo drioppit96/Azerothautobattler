@@ -618,6 +618,7 @@ function updateQuesting(c, o, dt) {
 }
 
 /* ------------------------------------------------------------------------- UI */
+const QUI = { open: {} };
 function renderQuests() {
   const el = $('questCard'); if (!el) return; const c = active();
   let h = cardHead('quests', 'Quests' + (Object.keys(c.quests).length ? ' <span class="small muted">(' + Object.keys(c.quests).length + ' active)</span>' : ''), true);
@@ -629,30 +630,43 @@ function renderQuests() {
   h += '<div class="qlevel"><button class="act' + (lv ? ' red' : '') + '" id="qlevel">' + (lv ? 'Stop leveling' : 'Level up to 60 (auto)') + '</button><div class="muted small">Quests zone by zone across the world, travels by flight path, zeppelin and boat, grinds when needed.</div></div>';
   h += '<div class="qauto"><select id="qzone">' + zl.map((z) => '<option value="' + esc(z.name) + '"' + (z.name === cur ? ' selected' : '') + '>' + esc(z.name) + ' (lvl ' + z.lo + '-' + z.hi + ', done ' + z.done + '/' + z.n + ')</option>').join('') + '</select>' +
     '<button class="act" id="qgo">Auto-quest</button></div>';
+  /* the quests as fold-out lists: a line per quest (title, level, progress); click it for the objectives and buttons */
   const act = Object.keys(c.quests).map((id) => G.q.byId[id]).filter(Boolean);
-  h += '<div class="qhead">Active (' + act.length + ')</div>';
-  if (!act.length) h += '<div class="muted small">None.</div>';
-  for (const q of act) {
-    const done = questDone(c, q); const why = questSupport(q);
-    h += '<div class="q' + (done ? ' ok' : '') + '"><div class="qt" style="color:' + levelColor(q.level, c.level) + '">[' + q.level + '] ' + esc(q.title) + (done ? ' <span class="muted">(ready)</span>' : '') + '</div>';
-    q.objectives.forEach((o, i) => { h += '<div class="muted small">' + (o.type === 'Kill' ? (o.id < 0 ? 'Use ' : 'Kill ') : o.type === 'Collect' ? 'Collect ' : o.type + ' ') + esc(o.name) + ': ' + progText(c, q, i) + '</div>'; });
-    if (!q.objectives.length) h += '<div class="muted small">Deliver to ' + esc(spotName(nearestOf(c, giverSpawns(q.turnin)))) + '</div>';
-    if (why) h += '<div class="small" style="color:#e6b93c">' + esc(why) + '</div>';
-    else if (questDungeon(q)) h += '<div class="small" style="color:#b28cff">Dungeon: ' + esc(questDungeon(q).name) + ' (level ' + questDungeon(q).lmin + '+)</div>';
-    h += '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>' + (done ? 'Turn in' : 'Do it') + '</button> <button class="mini" data-ab="' + q.id + '">Abandon</button></div>';
+  const qOpen = (k) => !!(QUI.open[k]);
+  const secOn = (k, def) => cardOpen('q' + k, def);
+  h += '<div class="qhead qsec" data-card="qact"><span class="carr">' + (secOn('act', true) ? '&#9662;' : '&#9656;') + '</span> Active (' + act.length + ')</div>';
+  if (secOn('act', true)) {
+    if (!act.length) h += '<div class="muted small">None.</div>';
+    for (const q of act) {
+      const done = questDone(c, q); const why = questSupport(q); const k = 'a' + q.id; const on = qOpen(k);
+      const prog = q.objectives.length ? q.objectives.map((o, i) => progText(c, q, i)).join(', ') : 'deliver';
+      h += '<div class="q qfold' + (done ? ' ok' : '') + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + ' <span class="muted small">' + (done ? '(ready)' : esc(prog)) + '</span></div>';
+      if (on) {
+        q.objectives.forEach((o, i) => { h += '<div class="muted small">' + (o.type === 'Kill' ? (o.id < 0 ? 'Use ' : 'Kill ') : o.type === 'Collect' ? 'Collect ' : o.type + ' ') + esc(o.name) + ': ' + progText(c, q, i) + '</div>'; });
+        if (!q.objectives.length) h += '<div class="muted small">Deliver to ' + esc(spotName(nearestOf(c, giverSpawns(q.turnin)))) + '</div>';
+        if (why) h += '<div class="small" style="color:#e6b93c">' + esc(why) + '</div>';
+        else if (questDungeon(q)) h += '<div class="small" style="color:#b28cff">Dungeon: ' + esc(questDungeon(q).name) + ' (level ' + questDungeon(q).lmin + '+)</div>';
+        h += '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>' + (done ? 'Turn in' : 'Do it') + '</button> <button class="mini" data-ab="' + q.id + '">Abandon</button>';
+      }
+      h += '</div>';
+    }
   }
-  h += '<div class="qhead">Available nearby</div>';
   const av = availableQuests(c, 24).filter((a) => !/holiday|battleground|profession|event|Darkmoon|war effort|reputation|raid|legendary|dungeon/.test(questSupport(a.q) || '')).slice(0, 10);
-  if (!av.length) h += '<div class="muted small">No quests nearby for your level.</div>';
-  for (const { q, d, s } of av) {
-    const why = questSupport(q);
-    const dq = !why && questDungeon(q);
-    h += '<div class="q"><div class="qt" style="color:' + levelColor(q.level, c.level) + '">[' + q.level + '] ' + esc(q.title) + '</div><div class="muted small">' + esc(spotName(s)) + ' - ' + Math.round(d) + ' yd' + (why ? ' - <i>' + esc(why) + '</i>' : '') + (dq ? ' - <span style="color:#b28cff">dungeon: ' + esc(dq.short || dq.name) + '</span>' : '') + '</div>' +
-      '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>Do it</button></div>';
+  h += '<div class="qhead qsec" data-card="qnear"><span class="carr">' + (secOn('near', true) ? '&#9662;' : '&#9656;') + '</span> Available nearby (' + av.length + ')</div>';
+  if (secOn('near', true)) {
+    if (!av.length) h += '<div class="muted small">No quests nearby for your level.</div>';
+    for (const { q, d, s } of av) {
+      const why = questSupport(q); const dq = !why && questDungeon(q); const k = 'n' + q.id; const on = qOpen(k);
+      h += '<div class="q qfold' + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + ' <span class="muted small">' + Math.round(d) + ' yd' + (dq ? ' - dungeon' : '') + '</span></div>';
+      if (on) h += '<div class="muted small">' + esc(spotName(s)) + ' - ' + Math.round(d) + ' yd' + (why ? ' - <i>' + esc(why) + '</i>' : '') + (dq ? ' - <span style="color:#b28cff">dungeon: ' + esc(dq.short || dq.name) + '</span>' : '') + '</div>' +
+        '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>Do it</button>';
+      h += '</div>';
+    }
   }
   el.innerHTML = h;
   el.onclick = (ev) => {
     const t = ev.target; if (!t.dataset) return;
+    const f = t.closest('[data-qf]'); if (f) { QUI.open[f.dataset.qf] = !QUI.open[f.dataset.qf]; renderQuests(); return; }
     if (t.id === 'qlevel') { if (c.order && c.order.type === 'leveling') stopOrder(c); else orderLeveling(c); renderQuests(); return; }
     if (t.id === 'qgo') { const z = $('qzone').value; G.state.settings.questZone = z; orderQuesting(c, z); return; }
     if (t.dataset.do) orderQuest(c, +t.dataset.do);

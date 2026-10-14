@@ -363,8 +363,8 @@ function bindCards() {
   $('right').addEventListener('click', (e) => {
     const h = e.target.closest('[data-card]'); if (!h) return;
     const id = h.dataset.card; const o = G.state.settings.cardOpen = G.state.settings.cardOpen || {};
-    o[id] = !cardOpen(id, h.closest('.card').dataset.def !== '0'); save();
-    if (id === 'quests') renderQuests(); else if (id === 'auto') renderSettingsCard(); else renderGearCard();
+    o[id] = !cardOpen(id, (h.closest('.card') || {}).dataset ? h.closest('.card').dataset.def !== '0' : true); save();
+    if (id === 'quests' || id === 'qact' || id === 'qnear') renderQuests(); else if (id === 'auto') renderSettingsCard(); else renderGearCard();
   });
 }
 /* the automatic behaviour, in groups (what the character does by itself) */

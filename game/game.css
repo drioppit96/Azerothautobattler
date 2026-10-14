@@ -402,3 +402,6 @@ label.chk.dim{opacity:.55}
 .card .aset{margin:4px 0 8px}
 .card .aset h5{margin:0 0 2px;font:600 11px "Segoe UI";letter-spacing:1px;text-transform:uppercase;color:var(--gold2)}
 .card a[data-abeh]{color:#ffd76a}
+.qsec{cursor:pointer;user-select:none}.qsec:hover{color:#ffe9a8}
+.q.qfold{padding:2px 0}.q.qfold .qt{cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q.qfold .qt .carr{width:11px;font-size:10px}.q.qfold.open{padding-bottom:5px}
