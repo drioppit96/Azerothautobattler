@@ -118,16 +118,23 @@ function questNeeds(c, id) {
   }
   return false;
 }
-function lootMob(c, m, questOnly) {
+/* roll: group loot - {chars: the characters near (money is shared), comps: dungeon companions}; green and better items
+   are rolled for (Need / Greed), the rest goes to the looter (c) */
+function lootMob(c, m, questOnly, roll) {
   const info = G.d.loot.creatures[m.e]; if (!info) return;
-  const got = [];
+  const got = []; const rolls = [];
   const gmin = info[9], gmax = info[10];
-  if (gmax && !questOnly) { const g = irnd(gmin, gmax); c.gold += g; if (g) got.push(money(g)); }
+  if (gmax && !questOnly) {
+    const g = irnd(gmin, gmax); const share = roll && roll.chars.length > 1 ? Math.floor(g / roll.chars.length) : g;
+    c.gold += g - share * ((roll && roll.chars.length > 1 ? roll.chars.length : 1) - 1); if (g) got.push(money(g) + (share !== g ? ' (shared)' : ''));
+    if (share !== g) for (const o of roll.chars) if (o !== c && share) { o.gold += share; withLog(o, () => log('Your share of the loot: ' + money(share) + '.')); }
+  }
   const rows = G.d.loot.tables.creature[info[6]] || [];
   for (const [item, pct, mn, mx, quest] of rows) {
     if (quest && !questNeeds(c, item)) continue;
     if (questOnly && !questNeeds(c, item)) continue;              // a group member: only its own quest drops
     if (Math.random() * 100 >= pct) continue;
+    if (roll && !quest && !questNeeds(c, item) && itemQuality(item) >= LOOT_ROLL_Q && roll.chars.length + roll.comps.length > 1) { rolls.push([item, irnd(mn, mx)]); continue; }
     if (G.q.startBy[item] && (bagCount(c, item) || G.q.startBy[item].every((q) => c.done[q.id] || c.quests[q.id]))) continue;   // one quest starter is enough
     const n = irnd(mn, mx); const before = c.bags.length;
     if (addItem(c, item, n)) {
@@ -139,6 +146,7 @@ function lootMob(c, m, questOnly) {
     } else { log('Bags are full - left ' + itemName(item) + ' behind.'); }
   }
   if (got.length) log('Looted: ' + got.join(', '));
+  for (const [item, n] of rolls) lootRoll(roll, item, n, m);
   if (bagFree(c) <= 0) rt(c).bagFull = true;
   if (c.prof) checkRecipeItems(c);
   autoEquip(c);
@@ -254,7 +262,8 @@ function killMob(c, m) {
   else {
     const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
     log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
-    lootMob(c, m);
+    const comps = party ? party.filter((u) => u.comp && !u.dead) : [];
+    lootMob(c, m, false, comps.length ? { chars: [c], comps } : null);
     onKill(c, m);
     if (c.prof) onKillProf(c, m);
   }

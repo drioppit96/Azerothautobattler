@@ -359,6 +359,7 @@ function finishSpell(c, name, sp, tgt) {
   if (pt === -2) c.hp -= cost; else addPower(c, pt, -cost);
   startCooldown(c, name, sp);
   if (pt === 0 && cost > 0) r.lastCast = G.gameTime;
+  if (tgt && tgt !== c && tgt.equip && tgt.pos) { buffOther(c, tgt, sp); return; }      // a buff on another character
   const mob = tgt && tgt !== c ? tgt : (sp.ef || []).some((e) => e.k === 'enemy' || e.k === 'area_enemy') ? r.tgt : null;
   applySpell(c, sp, mob, { name });
   fx(c.pos.x, c.pos.y, name, '#ffe9a8');
@@ -722,10 +723,13 @@ function oocStep(c) {
       if (go && (sp.ef || []).some((e) => e.au === 8) && hasBuff(c, rule.n)) go = false;
     } else if (rule.mode === 'petheal') go = petAlive(c) && c.pet.hp < c.pet.maxhp * 0.6 && mp > 30;
     else if (rule.mode === 'lowmana' && rule.n === 'Life Tap') go = mp < 60 && hpPct > 75;
+    // a long buff that can go on others (Arcane Intellect, Fortitude, Mark of the Wild, Divine Spirit ...): the group too
+    let who = c;
+    if (!go && rule.mode === 'buff' && mp > 25) { who = groupBuffTarget(c, rule.n, sp); go = !!who; }
     if (!go) continue;
     if (c.cls === 11 && c.form && !formOk(c, rule.n)) { leaveForm(c); }
     if (!formOk(c, rule.n)) continue;
-    startCast(c, rule.n, sp, c);
+    startCast(c, rule.n, sp, who);
     return true;
   }
   // druid: back into the fighting form when everything else is done
@@ -736,6 +740,28 @@ function oocStep(c) {
     if (sp) { const [pt, cost] = spellCost(c, sp, fn); if (powerOf(c, pt) >= cost) { startCast(c, fn, sp, c); return true; } }
   }
   return false;
+}
+/* buffs worth putting on the other members of the group: 9 minutes or longer and castable on a friend */
+const GROUP_BUFF_SKIP = /Amplify Magic|Dampen Magic|Unending Breath|Detect|Water Walking|Levitate/;
+function groupBuffable(name, sp) {
+  if (GROUP_BUFF_SKIP.test(name) || !(sp.dur >= 540000)) return false;
+  const au = (sp.ef || []).filter((e) => e.t === 6 || e.t === 35); return au.length > 0 && au.every((e) => e.k === 'friend');
+}
+function groupBuffTarget(c, name, sp) {
+  if (typeof groupOf !== 'function' || !groupOf(c) || !groupBuffable(name, sp)) return null;
+  const g = groupOf(c);
+  for (const o of groupChars(g)) {
+    if (o === c || o.pos.map !== c.pos.map || o.hp <= 0 || rt(o).ghost || hasBuff(o, name)) continue;
+    if (name === 'Thorns' && (g.members.find((m) => m.id === o.id) || {}).role !== 'tank') continue;     // Thorns: on the tank
+    if (Math.hypot(o.pos.x - c.pos.x, o.pos.y - c.pos.y) <= 30) return o;
+  }
+  return null;
+}
+/* the aura of a friendly buff goes on another character */
+function buffOther(c, to, sp) {
+  for (const e of sp.ef || []) if ((e.t === 6 || e.t === 35) && (e.k === 'friend' || e.k === 'self')) addBuff(to, sp, e);
+  fx(to.pos.x, to.pos.y, sp.n, '#9fe0ff');
+  withLog(to, () => log(c.name + ' casts ' + sp.n + ' on you.'));
 }
 function hasBuff(c, name) { const r = rt(c); return (r.buffs || []).some((b) => b.name === name && b.until > G.gameTime + 3); }
 

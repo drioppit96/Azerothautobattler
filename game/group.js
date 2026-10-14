@@ -198,13 +198,51 @@ function groupKill(c, m, W) {
   if (!near.includes(c)) near.push(c);
   const sum = near.reduce((s, o) => s + o.level, 0); const bonus = GROUP_XP_BONUS[Math.min(5, near.length)];
   g.rr = ((g.rr || 0) + 1) % near.length; const looter = near[g.rr];
+  const lp = partyOf(groupLeader(g) || c) || partyOf(c) || []; const roll = { chars: near, comps: lp.filter((u) => u.comp && !u.dead) };
   for (const o of near) withLog(o, () => {
     const xp = Math.round(killXp(o, m) * o.level / sum * bonus); gainXp(o, xp);
     log((m.info ? m.info[1] : 'creature') + ' (lvl ' + m.lvl + ') slain' + (o !== c ? ' by ' + c.name : '') + (xp ? ', +' + xp + ' xp' : '') + '.');
-    lootMob(o, m, o !== looter);            // one gets the loot (in turns), the others only their own quest drops
+    lootMob(o, m, o !== looter, o === looter ? roll : null);     // the looter (in turns) opens the corpse: money shared, green+ rolled; the others get their own quest drops
     onKill(o, m); if (o.prof && o === looter) onKillProf(o, m);
     if (o !== c) { if (!isDungeonMap(o.pos.map)) masteryKill(o, m); const ro = rt(o); if (ro.tgt === m) ro.tgt = null; }
   });
+}
+
+/* ------------------------------------------------------------------ group loot: Need / Greed */
+/* like "group loot" in the game: items of green quality and better are rolled for by everyone near; Need when the item is
+   an upgrade for the character, Greed otherwise (Pass with full bags). The highest Need roll wins, else the highest Greed. */
+const LOOT_ROLL_Q = 2;
+const QUALITY_COLOR = ['#9d9d9d', '#ffffff', '#1eff00', '#0070dd', '#a335ee', '#ff8000'];
+function lootWants(o, inst) {
+  if (o.comp) {      // a companion: Need when its class can wear or wield it (and it suits it), Greed or Pass otherwise
+    const it = itemRow(inst.id); if (!it || !it.sl || !it.sl.length) return Math.random() < 0.7 ? 'greed' : 'pass';
+    const fake = { cls: o.cls, race: 0, level: 60, equip: {}, talents: {}, known: {} };
+    let ok = false; try { ok = !canEquip(fake, inst.id) && itemScore(fake, inst) > 0; } catch (e) { ok = false; }
+    return ok && Math.random() < 0.75 ? 'need' : Math.random() < 0.8 ? 'greed' : 'pass';
+  }
+  if (bagFree(o) <= 0) return 'pass';
+  // casters do not Need a weapon without intellect or spirit on it (a sword for the stats of a warrior)
+  const it = itemRow(inst.id);
+  if (it && it.c === 2 && it.s !== 19 && [5, 8, 9].includes(o.cls) && !(it.st || []).some(([t]) => t === 5 || t === 6)) return 'greed';
+  return upgradeFor(o, inst) ? 'need' : 'greed';
+}
+function lootRoll(roll, item, n, m) {
+  const inst = makeInst(item, n, true); const nm = itemName(item, inst);
+  const who = roll.chars.map((o) => ({ o, name: o.name })).concat(roll.comps.map((u) => ({ o: u, name: u.name })));
+  for (const w of who) { w.k = lootWants(w.o, inst); w.v = w.k === 'pass' ? 0 : irnd(1, 100); }
+  const pick = (k) => who.filter((w) => w.k === k).sort((a, b) => b.v - a.v)[0];
+  const win = pick('need') || pick('greed');
+  const line = who.map((w) => w.name + ' ' + (w.k === 'pass' ? 'passed' : w.k + ' ' + w.v)).join(', ');
+  let taken = false;
+  if (win && !win.o.comp) taken = addItem(win.o, item, n, inst);
+  const res = !win ? 'everyone passed' : win.o.comp ? win.name + ' wins it' : taken ? win.name + ' wins it' : win.name + ' wins it, but the bags are full';
+  for (const o of roll.chars) withLog(o, () => log('Roll for ' + (n > 1 ? n + ' x ' : '') + nm + ': ' + line + ' - ' + res + '.'));
+  if (win && !win.o.comp && taken) {
+    const o = win.o; fx(o.pos.x, o.pos.y, nm, QUALITY_COLOR[itemQuality(item)] || '#1eff00');
+    withLog(o, () => { if (upgradeFor(o, inst)) log('Possible upgrade: ' + nm + '.'); autoEquip(o); });
+    if (o.prof) checkRecipeItems(o);
+  }
+  G.lootRolls = (G.lootRolls || []).concat([{ t: G.gameTime, item, n, inst, who: who.map((w) => ({ name: w.name, k: w.k, v: w.v })), win: win ? win.name : null }]).slice(-20);
 }
 
 /* ------------------------------------------------------------------ the group card */
