@@ -408,7 +408,14 @@ function classEffect(c, sp, e, tgt, ctx) {
       if (name === 'Life Tap') { const v = Math.round(effValue(c, sp, e) + s.sd * 0.8); c.hp = Math.max(1, c.hp - v); addPower(c, 0, v); fx(c.pos.x, c.pos.y, '+' + v + ' mana', '#6fa8ff'); return true; }
       return false;
     case 24: {   // conjure food / water / healthstone
-      if (!e.it) return true; const n = Math.max(1, Math.round(effValue(c, sp, e)));
+      if (!e.it) return true;
+      const u = useInfo(e.it);
+      if (u && (u.kind === 'food' || u.kind === 'drink')) {      // mage food and water: a stack of 20 for everyone in the group who needs it
+        const to = conjureFor(c, e.it); if (!to.length) to.push(c);
+        for (const o of to) { const k = Math.max(0, CONJURE_STACK - bagCount(o, e.it)); if (k && addItem(o, e.it, k)) { if (o === c) log('Conjured ' + k + ' x ' + itemName(e.it) + '.'); else withLog(o, () => log(c.name + ' gives you ' + k + ' x ' + itemName(e.it) + '.')); } }
+        return true;
+      }
+      const n = Math.max(1, Math.round(effValue(c, sp, e)));
       if (addItem(c, e.it, n)) log('Conjured ' + n + ' x ' + itemName(e.it) + '.');
       return true;
     }
@@ -677,7 +684,7 @@ function drinkStep(c, dt) {
 function autoDrink(c) {
   const r = rt(c); if (r.drinking || !usesMana(c)) return false;
   let best = -1, bv = 0;
-  c.bags.forEach((x, i) => { const it = itemRow(x.id); const u = useInfo(x.id); if (!u || u.kind !== 'drink' || (it.rl || 0) > c.level) return; const v = drinkValue(x.id); if (v > bv) { bv = v; best = i; } });
+  c.bags.forEach((x, i) => { const it = itemRow(x.id); const u = useInfo(x.id); if (!u || u.kind !== 'drink' || (it.rl || 0) > c.level) return; const v = drinkValue(x.id) + (isConjured(x.id) ? 1e7 : 0); if (v > bv) { bv = v; best = i; } });
   if (best < 0) return false;
   const inst = c.bags[best]; const v = drinkValue(inst.id);
   r.drinking = { tick: v / 9, left: 18 }; r.resting = true;
@@ -717,7 +724,7 @@ function oocStep(c) {
       if (c.cls === 11 && formOk(c, rule.n) === false) go = false;
     } else if (rule.mode === 'conjure') {
       const it = (sp.ef || []).find((e) => e.t === 24); if (!it) continue;
-      go = bagCount(c, it.it) < 4 && bagFree(c) > 1 && mp > 40;
+      go = mp > 40 && conjureFor(c, it.it).length > 0;
     } else if (rule.mode === 'heal' || (rule.mode === 'emergency' && /Heal|Light|Wave|Touch|Regrowth|Renew|Rejuv/.test(rule.n))) {
       go = hpPct < 70 && mp > 30 && (sp.ef || []).some((e) => e.t === 10 || e.t === 77 || (e.au === 8));
       if (go && (sp.ef || []).some((e) => e.au === 8) && hasBuff(c, rule.n)) go = false;
@@ -740,6 +747,20 @@ function oocStep(c) {
     if (sp) { const [pt, cost] = spellCost(c, sp, fn); if (powerOf(c, pt) >= cost) { startCast(c, fn, sp, c); return true; } }
   }
   return false;
+}
+/* who needs conjured food / water: the mage and the group members near it (water only for those who use mana) that
+   are low on it, can use it (level) and have room in the bags */
+const CONJURE_STACK = 20;
+function conjureFor(c, item) {
+  const u = useInfo(item); const it = itemRow(item); const out = [];
+  const who = typeof groupOf === 'function' && groupOf(c) ? groupChars(groupOf(c)).filter((o) => o === c || (o.pos.map === c.pos.map && Math.hypot(o.pos.x - c.pos.x, o.pos.y - c.pos.y) <= 40 && !rt(o).ghost)) : [c];
+  for (const o of who) {
+    if (it && (it.rl || 0) > o.level) continue;
+    if (u && u.kind === 'drink' && !usesMana(o)) continue;
+    if (bagCount(o, item) >= 5 || bagFree(o) < 1) continue;
+    out.push(o);
+  }
+  return out;
 }
 /* buffs worth putting on the other members of the group: 9 minutes or longer and castable on a friend */
 const GROUP_BUFF_SKIP = /Amplify Magic|Dampen Magic|Unending Breath|Detect|Water Walking|Levitate/;

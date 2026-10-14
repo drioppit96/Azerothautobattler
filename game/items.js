@@ -410,10 +410,12 @@ function eatStep(c, dt) {
   while (e.t >= e.every) { e.t -= e.every; const s = charStats(c); const v = e.tick || Math.round(s.maxHp * e.pct / 100); c.hp = Math.min(s.maxHp, c.hp + v); }
   if (e.left <= 0 || c.hp >= charStats(c).maxHp) r.eating = null;
 }
+/* food and water a mage conjured: eaten and drunk before anything else (they are free and vanish anyway) */
+function isConjured(id) { const it = itemRow(id); return !!(it && it.n && /^Conjured /.test(it.n)); }
 function autoEat(c) {
   if (rt(c).eating) return;
   let best = -1, bv = 0;
-  c.bags.forEach((s, i) => { const u = useInfo(s.id); const it = itemRow(s.id); if (u && u.kind === 'food' && (!it.rl || it.rl <= c.level)) { const v = (u.tick || 0) * u.dur / u.every; if (v > bv) { bv = v; best = i; } } });
+  c.bags.forEach((s, i) => { const u = useInfo(s.id); const it = itemRow(s.id); if (u && u.kind === 'food' && (!it.rl || it.rl <= c.level)) { const v = (u.tick || 0) * u.dur / u.every + (isConjured(s.id) ? 1e7 : 0); if (v > bv) { bv = v; best = i; } } });
   if (best >= 0) useItem(c, best, true);
 }
 function autoPotion(c) {
