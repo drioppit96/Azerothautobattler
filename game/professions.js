@@ -225,7 +225,7 @@ function gatherNode(c, n) {
   const sk = n.kind === 'herb' ? 182 : 186;
   startInteract(c, n.kind === 'herb' ? 'Herb Gathering' : 'Mining', () => {
     if (!nodeFree(n)) return;
-    lootGo(c, n.e);
+    lootGo(c, n.e, true);
     G.nodeUsed = G.nodeUsed || {}; G.nodeUsed[n.key] = G.gameTime + rnd(NODE_RESPAWN[0], NODE_RESPAWN[1]);
     const P = profState(c); if (!P.found[n.key]) P.found[n.key] = [c.pos.map, Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10, n.kind, n.e];
     skillUp(c, sk, gatherColor(profSkill(c, sk), n.req));
@@ -258,6 +258,7 @@ function skinStep(c) {
     const got = [];
     for (const l of skinLoot(s.m.e) || []) { if (Math.random() * 100 >= l.chance) continue; const n = irnd(l.min || 1, l.max || 1); if (addItem(c, l.item, n)) got.push((n > 1 ? n + ' x ' : '') + itemName(l.item)); }
     s.m.skinned = true; if (got.length) log('Skinned: ' + got.join(', ') + '.');
+    const o = c.order; if (o && o.type === 'patrol' && o.kind === 'skin') o.skinned = (o.skinned || 0) + 1;
     skillUp(c, SKINNING, gatherColor(profSkill(c, SKINNING), skinReq(s.m.lvl)));
     if (bagFree(c) <= 0) r.bagFull = true;
   }, 2);
@@ -321,19 +322,23 @@ function updateTrainer(c, o, dt) {
   startInteract(c, 'Training', () => { trainAt(c, o.e, o.skill); renderOrder(); }, 1.5);
   renderOrder();
 }
-/* two routes: 'gather' (herbs, ore) and 'grind' (creatures along the way, no gathering) */
+/* three routes: 'gather' (herbs, ore), 'grind' (creatures along the way, no gathering) and 'skin' (the beasts along the
+   way that can be skinned: killed, then skinned - the others are walked past) */
 const ROUTE_KIND = { gather: { key: 'route', name: 'Gathering route', color: 'rgba(120,230,120,.9)', dot: '#1c3a1c', ring: '#9cf09c', text: '#d8ffd8' },
-  grind: { key: 'routeGrind', name: 'Grinding route', color: 'rgba(255,120,100,.9)', dot: '#3a1c1c', ring: '#ff9c8c', text: '#ffe0d8' } };
+  grind: { key: 'routeGrind', name: 'Grinding route', color: 'rgba(255,120,100,.9)', dot: '#3a1c1c', ring: '#ff9c8c', text: '#ffe0d8' },
+  skin: { key: 'routeSkin', name: 'Skinning route', color: 'rgba(225,170,100,.9)', dot: '#3a2a14', ring: '#f0c48c', text: '#ffeed8' } };
+function routeFights(kind) { return kind === 'grind' || kind === 'skin'; }
 function routeOf(c, kind) { return profState(c)[ROUTE_KIND[kind || 'gather'].key] || null; }
 function setRoute(c, kind, R) { profState(c)[ROUTE_KIND[kind || 'gather'].key] = R; }
 function orderPatrol(c, kind) {
   kind = kind || 'gather'; const K = ROUTE_KIND[kind];
   const R = routeOf(c, kind); if (!R || R.pts.length < 2) { log('Set at least two checkpoints for the ' + K.name.toLowerCase() + ' first.'); return; }
   if (kind === 'gather' && !c.prof.skills[182] && !c.prof.skills[186] && !c.prof.skills[SKINNING]) log('No gathering profession yet - the route is walked anyway (learn Herbalism, Mining or Skinning at a trainer).');
+  if (kind === 'skin' && !hasProf(c, SKINNING)) log('No Skinning yet - the beasts along the route are killed anyway (learn Skinning at a trainer to skin them).');
   let best = 0, bd = 1e9; R.pts.forEach((p, i) => { const d = Math.hypot(p.x - c.pos.x, p.y - c.pos.y); if (d < bd) { bd = d; best = i; } });
   const trip = R.map !== c.pos.map || bd > 400 ? planTrip(c, { map: R.map, x: R.pts[best].x, y: R.pts[best].y }) : null;
   if (R.map !== c.pos.map && !trip) { log('Cannot find a way to the ' + K.name.toLowerCase() + '.'); return; }
-  c.order = { type: 'patrol', kind, i: best, laps: 0, gathered: 0, kills: 0, trip, started: G.gameTime, label: K.name.toLowerCase() };
+  c.order = { type: 'patrol', kind, i: best, laps: 0, gathered: 0, kills: 0, skinned: 0, trip, started: G.gameTime, label: K.name.toLowerCase() };
   rt(c).mv = null; rt(c).tgt = null;
   log('Order: walk the ' + K.name.toLowerCase() + ' (' + R.pts.length + ' checkpoints).'); save(); renderOrder();
 }
@@ -343,11 +348,12 @@ function updatePatrol(c, o, dt) {
   if (r.bagFull || bagFree(c) <= 0) { bagsFull(c, o); return; }
   if (o.trip) { const st = tripStep(c, o.trip); if (st === 'busy') return; if (st === 'fail') { log('Could not reach the ' + ROUTE_KIND[kind].name.toLowerCase() + '.'); c.order = null; renderOrder(); return; } o.trip = null; }
   if (kind === 'gather' && gatherStep(c, o, NODE_SEE)) return;
-  if (kind === 'grind') {
-    // every creature within the fight range of the route is attacked (the nearest first); then back to the route
+  if (routeFights(kind)) {
+    // every creature within the fight range of the route is attacked (the nearest first; on the skinning route only the
+    // beasts that can be skinned); then back to the route
     if (r.tgt && (r.tgt.st !== 'alive' || (r.tgt.banUntil || 0) > G.gameTime)) r.tgt = null;
     if (r.tgt && r.tgt.st === 'alive' && routeDist(R, r.tgt.x, r.tgt.y) > (R.range || ROUTE_FIGHT_RANGE) + 25) r.tgt = null;     // walked away from the route before the fight began
-    if (!r.tgt && G.gameTime - (o.lookT || -9) > 0.5) { o.lookT = G.gameTime; r.tgt = routeTarget(c, R, o); }
+    if (!r.tgt && G.gameTime - (o.lookT || -9) > 0.5) { o.lookT = G.gameTime; r.tgt = routeTarget(c, R, o, kind); }
     if (r.tgt) { o.off = true; const st = approach(c, r.tgt); if (st === 'gone') r.tgt = null; return; }
     if (o.off) {      // back onto the route where it left it (the nearest point of the leg it was walking)
       const a = R.pts[(o.i - 1 + R.pts.length) % R.pts.length], b = R.pts[o.i % R.pts.length]; const q = nearestOnSeg(c.pos, a, b);
@@ -371,7 +377,8 @@ function routeDist(R, x, y) {
 }
 /* the grinding route: every creature near the way that can be fought (not critters, totems, town guards, elites,
    ones far above the character's level or too dangerous) - the nearest to the character first */
-function routeTarget(c, R, o) {
+function routeTarget(c, R, o, kind) {
+  const skin = kind === 'skin'; const canSkin = skin && hasProf(c, SKINNING);
   const W = ensureWorld(c.pos.map); const rng = R.range || ROUTE_FIGHT_RANGE; let best = null, bd = Infinity;
   // only along the leg being walked (what the character passes), so it keeps moving on instead of waiting for respawns
   const n = R.pts.length; const a = R.pts[(o.i - 1 + n) % n], b = R.pts[o.i % n];
@@ -379,6 +386,8 @@ function routeTarget(c, R, o) {
     if (m.st !== 'alive' || !attackable(m, c) || (m.banUntil || 0) > G.gameTime || m.civ) return;
     if (m.info && (m.info[5] === 8 || m.info[5] === 11)) return;
     if (factionNpc(m) || m.rank >= 1 || dangerous(m, c) || m.lvl > c.level + 3) return;
+    // the skinning route: only what can be skinned (with Skinning: what the skill is high enough for)
+    if (skin && (!(skinLoot(m.e) || []).length || (canSkin && profSkill(c, SKINNING) < skinReq(m.lvl)))) return;
     const q = nearestOnSeg({ x: m.x, y: m.y }, a, b); if (Math.hypot(q.x - m.x, q.y - m.y) > rng) return;      // where it is now (some walk far from home)
     const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d < bd) { bd = d; best = m; }
   });
@@ -388,6 +397,7 @@ function patrolText(c, o) {
   const kind = o.kind || 'gather'; const R = routeOf(c, kind);
   const where = o.trip ? tripText(o.trip) : 'checkpoint ' + ((o.i % (R ? R.pts.length : 1)) + 1) + '/' + (R ? R.pts.length : 0);
   if (kind === 'grind') { const t = rt(c).tgt; return { t: 'Grinding route', d: where + ', lap ' + (o.laps + 1) + ', ' + (o.kills || 0) + ' kills' + (t && t.info ? ' - fighting ' + t.info[1] : '') }; }
+  if (kind === 'skin') { const t = rt(c).tgt; return { t: 'Skinning route', d: where + ', lap ' + (o.laps + 1) + ', ' + (o.kills || 0) + ' kills, ' + (o.skinned || 0) + ' skinned' + (t && t.info ? ' - fighting ' + t.info[1] : '') }; }
   return { t: 'Gathering route', d: where + ', lap ' + (o.laps + 1) + ', ' + (o.gathered || 0) + ' nodes gathered' + (o.node ? ' - going to ' + objName(o.node.e) : '') };
 }
 /* the buttons next to Stop: start the route, or set it up when there is none */
@@ -416,14 +426,14 @@ function renderRouteBar() {
   if (!G.routeEdit) { if (el) el.hidden = true; return; }
   if (!el) {
     el = document.createElement('div'); el.id = 'routebar'; $('mapwrap').appendChild(el); el.onclick = routeBarClick;
-    el.onchange = (e) => { if (e.target.dataset && e.target.dataset.rrange != null) { const R = routeOf(active(), 'grind'); if (R) { R.range = clamp(+e.target.value || ROUTE_FIGHT_RANGE, 10, 150); save(); } } };
+    el.onchange = (e) => { if (e.target.dataset && e.target.dataset.rrange != null) { const R = routeOf(active(), typeof G.routeEdit === 'string' ? G.routeEdit : 'grind'); if (R) { R.range = clamp(+e.target.value || ROUTE_FIGHT_RANGE, 10, 150); save(); } } };
   }
   const kind = typeof G.routeEdit === 'string' ? G.routeEdit : 'gather';
   const R = routeOf(active(), kind); const n = R ? R.pts.length : 0;
   el.hidden = false;
   el.innerHTML = '<b>' + ROUTE_KIND[kind].name + '</b> - click the map to add checkpoints (' + n + ')' +
     '<label class="chk"><input type="checkbox" data-ropen' + (R && R.open ? ' checked' : '') + '> walk back and forth</label>' +
-    (kind === 'grind' ? '<label class="chk">fight everything within <input type="number" data-rrange min="10" max="150" step="5" value="' + ((R && R.range) || ROUTE_FIGHT_RANGE) + '" style="width:52px"> yd of the route</label>' : '') +
+    (routeFights(kind) ? '<label class="chk">' + (kind === 'skin' ? 'hunt skinnable beasts' : 'fight everything') + ' within <input type="number" data-rrange min="10" max="150" step="5" value="' + ((R && R.range) || ROUTE_FIGHT_RANGE) + '" style="width:52px"> yd of the route</label>' : '') +
     '<button class="mini" data-r="undo"' + (n ? '' : ' disabled') + '>Undo</button><button class="mini" data-r="clear"' + (n ? '' : ' disabled') + '>Clear</button>' +
     '<button class="mini" data-r="done">Done</button><button class="act" data-r="start"' + (n >= 2 ? '' : ' disabled') + '>Start route</button>';
 }

@@ -418,11 +418,12 @@ function renderOrder() {
   }
   {
     // Stop, and the two routes: start them (or set them up first) - the pencil edits the route on the map
-    const gr = typeof routeOf === 'function' ? routeOf(c, 'gather') : null, ki = typeof routeOf === 'function' ? routeOf(c, 'grind') : null;
+    const gr = typeof routeOf === 'function' ? routeOf(c, 'gather') : null, ki = typeof routeOf === 'function' ? routeOf(c, 'grind') : null, sk = typeof routeOf === 'function' ? routeOf(c, 'skin') : null;
     const on = (k) => o && o.type === 'patrol' && (o.kind || 'gather') === k;
     h += '<div class="obtns">' + (o ? '<button class="act red" id="btnStop">Stop</button>' : '') +
       '<span class="obtn' + (on('gather') ? ' on' : '') + '"><button class="mini" data-oroute="gather" title="' + (gr && gr.pts.length >= 2 ? 'Walk the gathering route: herbs, ore, skinning' : 'Set up a gathering route on the map') + '">&#127807; Gather</button><button class="mini" data-oedit="gather" title="Edit the gathering route on the map">&#9998;</button></span>' +
-      '<span class="obtn' + (on('grind') ? ' on' : '') + '"><button class="mini" data-oroute="grind" title="' + (ki && ki.pts.length >= 2 ? 'Walk the grinding route and fight the creatures along it' : 'Set up a grinding route on the map') + '">&#9876; Grind</button><button class="mini" data-oedit="grind" title="Edit the grinding route on the map">&#9998;</button></span></div>';
+      '<span class="obtn' + (on('grind') ? ' on' : '') + '"><button class="mini" data-oroute="grind" title="' + (ki && ki.pts.length >= 2 ? 'Walk the grinding route and fight the creatures along it' : 'Set up a grinding route on the map') + '">&#9876; Grind</button><button class="mini" data-oedit="grind" title="Edit the grinding route on the map">&#9998;</button></span>' +
+      '<span class="obtn' + (on('skin') ? ' on' : '') + '"><button class="mini" data-oroute="skin" title="' + (sk && sk.pts.length >= 2 ? 'Walk the skinning route: kill the beasts that can be skinned along it and skin them' : 'Set up a skinning route on the map') + '">&#128298; Skin</button><button class="mini" data-oedit="skin" title="Edit the skinning route on the map">&#9998;</button></span></div>';
   }
   $('orderCard').innerHTML = h;
   const b = $('btnStop'); if (b) b.onclick = () => stopOrder(c);
@@ -504,6 +505,7 @@ function showMenu(sx, sy, sel) {
     (typeof hasProf === 'function' && hasProf(c, 356) && !away ? '<button data-a="fish">Fish at the water here</button>' : '') +
     '<button data-a="route">Add a gathering route checkpoint here</button>' +
     '<button data-a="kroute">Add a grinding route checkpoint here</button>' +
+    '<button data-a="sroute">Add a skinning route checkpoint here</button>' +
     '<button data-a="close" style="color:#9a8f77">Cancel</button>';
   m.hidden = false; G.menuOpen = true;
   const w = $('mapwrap').clientWidth, h = $('mapwrap').clientHeight;
@@ -513,7 +515,7 @@ function showMenu(sx, sy, sel) {
     if (a === 'travel') orderTravel(c, target, label);
     else if (a === 'fish') orderFishing(c, false, target);
     else if (a === 'flyfrom') openFlightWindow(sel.id);
-    else if (a === 'route' || a === 'kroute') { const k = a === 'route' ? 'gather' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
+    else if (a === 'route' || a === 'kroute' || a === 'sroute') { const k = a === 'route' ? 'gather' : a === 'sroute' ? 'skin' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));
     else if (a === 'vendor') { const v = vendorList().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || vendorList().find((x) => x.e === sel.mob.e); if (v) orderVendor(c, v); }

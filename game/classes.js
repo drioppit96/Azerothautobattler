@@ -460,6 +460,36 @@ function classEffect(c, sp, e, tgt, ctx) {
     default: return false;
   }
 }
+/* mage: when creatures reach melee range, Frost Nova freezes them where they stand (rooted 8 s, Frostbolt slows them
+   too), then the mage steps back out of their reach and casts again from a safe distance */
+const NOVA_SAFE = 12;
+function mobRooted(m) { return (m.auras || []).some((a) => a.au === 26 && a.until > G.gameTime); }
+function frostNovaStep(c, m, dt) {
+  const r = rt(c); if (r.cast) return false; const now = G.gameTime;
+  const th = threatsOf(c).filter((x) => x.st !== 'dead' && x.hp > 0);
+  const near = (x, rad) => Math.hypot(x.x - c.pos.x, x.y - c.pos.y) <= rad;
+  const close = th.filter((x) => near(x, MELEE_RANGE + 2));
+  if (close.some((x) => !mobRooted(x))) {
+    const u = abilityUsable(c, 'Frost Nova');
+    if (u.ok && !((r.cd && r.cd['Frost Nova']) > now) && !((r.gcdUntil || 0) > now)) {
+      const [pt, cost] = spellCost(c, u.sp, 'Frost Nova');
+      if (powerOf(c, pt) >= cost) { startCast(c, 'Frost Nova', u.sp, null); r.kiteUntil = now + 4; return true; }
+    }
+  }
+  if ((r.kiteUntil || 0) <= now) return false;
+  // a few steps back: away from the frozen ones until they are out of reach (not while something free stands next to us)
+  const frozen = th.filter((x) => mobRooted(x) && near(x, NOVA_SAFE));
+  if (!frozen.length || close.some((x) => !mobRooted(x))) { if (!frozen.length) r.kiteUntil = 0; return false; }
+  let ax = 0, ay = 0; for (const x of frozen) { const dx = c.pos.x - x.x, dy = c.pos.y - x.y, d = Math.hypot(dx, dy) || 1; ax += dx / d; ay += dy / d; }
+  const L = Math.hypot(ax, ay) || 1; ax /= L; ay /= L;
+  if (!passable(c.pos.map, c.pos.x + ax * 4, c.pos.y + ay * 4)) {
+    const base = Math.atan2(ay, ax); let ok = false;
+    for (const off of [0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) { const a = base + off; if (passable(c.pos.map, c.pos.x + Math.cos(a) * 4, c.pos.y + Math.sin(a) * 4)) { ax = Math.cos(a); ay = Math.sin(a); ok = true; break; } }
+    if (!ok) { r.kiteUntil = 0; return false; }
+  }
+  c.pos.x += ax * c.speed * dt; c.pos.y += ay * c.speed * dt; c.pos.o = Math.atan2(-ax, -ay); r.mv = null;
+  return true;
+}
 /* paladin: the seal's damage, then the seal is gone */
 function judgement(c, m) {
   const r = rt(c); const seal = (r.buffs || []).find((b) => /^Seal of/.test(b.name) && b.until > G.gameTime);

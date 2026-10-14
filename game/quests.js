@@ -305,12 +305,13 @@ function interactStep(c, dt) {
 function goUsedKey(e, i) { return e + ':' + i; }
 function goFree(e, i) { return !(G.goUsed && G.goUsed[goUsedKey(e, i)] > G.gameTime); }
 function useGo(e, i) { G.goUsed = G.goUsed || {}; G.goUsed[goUsedKey(e, i)] = G.gameTime + GO_RESPAWN; }
-function lootGo(c, e) {
+/* gather: a herb or ore node - its own herb / ore (the sure drop) comes 1 to 3 at a time */
+function lootGo(c, e, gather) {
   const o = G.d.go && G.d.go.objects[e]; const rows = o && o[2] ? G.d.go.loot[o[2]] || [] : []; const got = [];
   for (const [item, pct, mn, mx, quest] of rows) {
     if (quest && !questNeeds(c, item)) continue;
     if (Math.random() * 100 >= pct) continue;
-    const n = irnd(mn, mx);
+    const n = gather && pct >= 100 ? irnd(Math.max(1, mn), Math.max(3, mx)) : irnd(mn, mx);
     if (addItem(c, item, n)) { got.push((n > 1 ? n + ' x ' : '') + itemName(item)); if (quest || questNeeds(c, item)) onItemGained(c, item); if (G.q.startBy[item]) itemStartsQuest(c, item); }
   }
   if (got.length) log('Took from ' + objName(e) + ': ' + got.join(', ')); else log(objName(e) + ' was empty.');

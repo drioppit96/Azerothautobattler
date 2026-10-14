@@ -234,7 +234,7 @@ function applySpell(c, sp, tgt, ctx) {
   for (const e of sp.ef || []) {
     if (c.cls !== 1 && classEffect(c, sp, e, tgt, ctx)) { did = true; continue; }
     const area = e.k === 'area_enemy';
-    const targets = area ? areaTargets(c, AOE_RADIUS, true) : tgt ? [tgt] : [];   // area attacks only hit what already fights you
+    const targets = area ? areaTargets(c, Math.min(e.ra || AOE_RADIUS, 12), true) : tgt ? [tgt] : [];   // area attacks only hit what already fights you
     switch (e.t) {
       case 17: case 58: case 121: case 31: {
         if (weaponDone || !tgt) break; weaponDone = true;

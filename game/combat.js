@@ -542,6 +542,7 @@ function fightStep(c, m, dt) {
   const r = rt(c); const s = charStats(c);
   r.outT = 0; r.resting = false; r.eating = null; r.drinking = null;
   if (typeof consumablesFight === 'function') { consumablesFight(c, m); if (r.bandage) return; }
+  if (c.cls === 8 && frostNovaStep(c, m, dt)) return;           // mage: Frost Nova when they reach it, then a few steps back
   const dx = m.x - c.pos.x, dy = m.y - c.pos.y, d = Math.hypot(dx, dy);
   c.pos.o = Math.atan2(dx, dy);
   const want = c.cls === 1 ? MELEE_RANGE : combatRange(c, m);
