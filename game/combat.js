@@ -118,14 +118,15 @@ function questNeeds(c, id) {
   }
   return false;
 }
-function lootMob(c, m) {
+function lootMob(c, m, questOnly) {
   const info = G.d.loot.creatures[m.e]; if (!info) return;
   const got = [];
   const gmin = info[9], gmax = info[10];
-  if (gmax) { const g = irnd(gmin, gmax); c.gold += g; if (g) got.push(money(g)); }
+  if (gmax && !questOnly) { const g = irnd(gmin, gmax); c.gold += g; if (g) got.push(money(g)); }
   const rows = G.d.loot.tables.creature[info[6]] || [];
   for (const [item, pct, mn, mx, quest] of rows) {
     if (quest && !questNeeds(c, item)) continue;
+    if (questOnly && !questNeeds(c, item)) continue;              // a group member: only its own quest drops
     if (Math.random() * 100 >= pct) continue;
     if (G.q.startBy[item] && (bagCount(c, item) || G.q.startBy[item].every((q) => c.done[q.id] || c.quests[q.id]))) continue;   // one quest starter is enough
     const n = irnd(mn, mx); const before = c.bags.length;
@@ -148,6 +149,7 @@ function lootMob(c, m) {
 function engage(m, c) {
   if (m.st !== 'alive') return;
   m.st = 'chase'; m.tgt = c; ensureWorld(c.pos.map).active.add(m);
+  if (c.id && typeof groupOf === 'function' && groupOf(c)) { m.cThr = m.cThr || {}; m.cThr[c.id] = Math.max(m.cThr[c.id] || 0, 1); }
 }
 function mobDamage(m, c, s, mods) {
   /* one roll on the attack table: miss, dodge, parry, block, crit, hit (defense vs the mob's weapon skill) */
@@ -170,7 +172,8 @@ function mobDamage(m, c, s, mods) {
   return { t: 'hit', d, crit, blocked };
 }
 function mobTick(W, m, dt, now) {
-  const c = m.tgt;
+  let c = m.tgt;
+  if (m.st === 'chase' && m.cThr && c && (c.hp <= 0 || rt(c).ghost || c.pos.map !== W.id)) { const n = mobRetarget(m, W); if (n) { m.tgt = n; c = n; } }
   if (m.st === 'chase') {
     if (!c || c.hp <= 0 || rt(c).ghost || rt(c).flying || rt(c).riding || c.pos.map !== W.id) return evade(W, m);
     mobAuraTick(W, m, dt); if (m.st !== 'chase') return;
@@ -245,13 +248,16 @@ function killMob(c, m) {
   const dg = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map);
   m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = dg ? Infinity : G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime; W.active.delete(m); W.dead.push(m);
   const name = m.info ? m.info[1] : 'creature';
-  const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
   if (dg) dungeonKill(c, m);
   masteryKill(c, m);
-  log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
-  lootMob(c, m);
-  onKill(c, m);
-  if (c.prof) onKillProf(c, m);
+  if (typeof groupOf === 'function' && groupOf(c)) groupKill(c, m, W);           // your characters together: shared kill, experience in parts
+  else {
+    const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
+    log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
+    lootMob(c, m);
+    onKill(c, m);
+    if (c.prof) onKillProf(c, m);
+  }
   if (c.order && (c.order.type === 'grind' || c.order.type === 'patrol')) c.order.kills = (c.order.kills || 0) + 1;
   if (c.order && c.order.type === 'leveling' && c.order.grind) c.order.grind.kills = (c.order.grind.kills || 0) + 1;
   const r = rt(c); if (r.tgt === m) r.tgt = null;
@@ -269,7 +275,7 @@ function charDie(c, killer) {
   if (!dgDeath) masteryDeath(c);
   log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + '.');
   fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30');
-  const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) evade(W, m);
+  const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) { const n = m.cThr && typeof mobRetarget === 'function' ? mobRetarget(m, W) : null; if (n) m.tgt = n; else evade(W, m); }
   if (c.order && c.order.type === 'vendor' && c.order.resume) c.order = c.order.resume;     // the walk to a vendor belongs to the order behind it
   if (c.order && c.order.type === 'leveling') {
     const o = c.order; o.deaths = (o.deaths || 0) + 1;
@@ -704,7 +710,7 @@ function updateChar(c, dt) {
   if (r.charging) { chargeStep(c, dt); return; }
   r.scanT -= dt;
   if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); taxiDiscover(c); if (r.equipLater && !threatsOf(c).length) autoEquip(c); }
-  const threats = threatsOf(c); r.threats = threats;
+  const threats = typeof groupOf === 'function' && groupOf(c) ? groupThreats(c) : threatsOf(c); r.threats = threats;
   if (typeof meterTick === 'function' && isActive(c)) meterTick(c);
   if (threats.length && !r.inFight) { r.fightStart = G.gameTime; masteryFightRoll(c); } r.inFight = threats.length > 0;
   const dg = threats.filter((m) => dangerous(m, c));
@@ -713,6 +719,11 @@ function updateChar(c, dt) {
   if (r.party) partyStep(c, dt);
   if (r.cast && castStep(c, dt)) { if (threats.length && (!r.tgt || r.tgt.st === 'dead')) r.tgt = threats[0]; return; }
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
+  if (threats.length && groupOf(c)) {
+    r.tgt = groupPickTarget(c, threats, r.tgt); r.mv = null;
+    if (groupHealStep(c)) return;
+    if (r.tgt) { fightStep(c, r.tgt, dt); return; }
+  }
   if (threats.length) {
     if (!r.tgt || r.tgt.st !== 'chase' || r.tgt.tgt !== c) {
       let b = null, bd = 1e18; for (const m of threats) { const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d < bd) { bd = d; b = m; } }
@@ -722,11 +733,13 @@ function updateChar(c, dt) {
   }
   if (r.interact) { if (interactStep(c, dt)) return; }
   if (typeof consumablesOoc === 'function' && consumablesOoc(c)) return;
+  if (groupOf(c) && groupHealStep(c)) return;               // a group healer tops everyone up
   if (restStep(c)) return;
   if (c.cls !== 1 && oocStep(c)) return;
   if (c.prof && profStep(c)) return;
   const o = c.order;
   if (!o) return;
+  if (typeof groupHold === 'function' && groupHold(c, o)) return;      // the leader waits for the group
   if (o.type === 'travel') {
     if (o.cross && typeof travelCross === 'function') { const st = travelCross(c, o); if (st !== 'done') return; }
     const done = advance(c, o, dt);
@@ -739,6 +752,7 @@ function updateChar(c, dt) {
   else if (o.type === 'vendor' || o.type === 'sell') updateVendor(c, o, dt);
   else if (o.type === 'trainer') updateTrainer(c, o, dt);
   else if (o.type === 'npc') updateNpcOrder(c, o);
+  else if (o.type === 'follow') updateFollow(c, o, dt);
   else if (o.type === 'patrol') updatePatrol(c, o, dt);
   else if (o.type === 'dungeon') updateDungeon(c, o, dt);
 }

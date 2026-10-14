@@ -72,7 +72,11 @@ function masteryLevelUp(c) { gainSkill(c, 0.6); }
 function masteryDeath(c) { gainSkill(c, 0.3); }
 function masteryQuest(c) { gainSkill(c, 0.02); }
 /* who learns from a dungeon run: the character and the companions (their roster entries) */
-function groupLearners(c) { const out = [c]; for (const u of rt(c).party || []) { const m = rosterById(u.rid); if (m) out.push(m); } return out; }
+function groupLearners(c) {
+  const out = [c]; for (const u of rt(c).party || []) { const m = rosterById(u.rid); if (m) out.push(m); }
+  if (typeof groupOf === 'function' && groupOf(c)) for (const o of groupChars(groupOf(c))) if (o !== c && o.pos.map === c.pos.map && !out.includes(o)) out.push(o);
+  return out;
+}
 
 /* ------------------------------------------------------------------ the roster: companions to hire */
 function roster() { G.state.roster = G.state.roster || []; return G.state.roster; }
@@ -97,7 +101,14 @@ function hireFee(c, m, d) {
 function partyPlan(c, d) {
   const n = Math.max(0, (d.players || 5) - 1); const raid = n >= 9;
   const tanks = n >= 19 ? (n >= 39 ? 4 : 2) : 1, heals = n >= 19 ? Math.ceil((n + 1) / 5) : 1;
-  const want = []; for (let i = 0; i < n; i++) want.push(i < tanks ? 'tank' : i < tanks + heals ? 'healer' : 'dps');
+  let want = []; for (let i = 0; i < n; i++) want.push(i < tanks ? 'tank' : i < tanks + heals ? 'healer' : 'dps');
+  // your own characters in the group fill their roles first; the rest is hired
+  const grp = typeof groupOf === 'function' ? groupOf(c) : null;
+  if (grp) {
+    const full = []; const N = d.players || 5; for (let i = 0; i < N; i++) full.push(i < tanks ? 'tank' : i < tanks + heals ? 'healer' : 'dps');
+    for (const m of grp.members) { const k = full.indexOf(m.role); if (k >= 0) full.splice(k, 1); else full.splice(full.lastIndexOf('dps') >= 0 ? full.lastIndexOf('dps') : full.length - 1, 1); }
+    want = full;
+  }
   const policy = G.state.settings.dgHire || 'best'; const R = roster(); const taken = new Set(); const out = [];
   let budget = Math.max(0, c.gold - 500);
   for (const role of want) {

@@ -129,7 +129,7 @@ function renderCharSwitch(force) {
   for (const c of G.state.characters) {
     const on = c === me; const t = c.order ? orderText(c) : null; const r = rt(c);
     const where = (typeof dungeonByMap === 'function' && dungeonByMap(c.pos.map) ? dungeonByMap(c.pos.map).name : zoneNameAt(c.pos)) || 'somewhere';
-    const st = on ? (c.bg ? 'Playing - keeps going when you switch' : 'Playing') : c.bg ? (r.ghost ? 'Running (dead - on the way back)' : 'Running on its own') : 'Paused';
+    const grp = typeof groupOf === 'function' && groupOf(c); const st = on ? (c.bg ? 'Playing - keeps going when you switch' : 'Playing') : grp && liveChars().includes(c) ? 'In the group' + (grp.leader === c.id ? ' (leader)' : '') : c.bg ? (r.ghost ? 'Running (dead - on the way back)' : 'Running on its own') : 'Paused';
     const last = G.logs && G.logs[c.id] && G.logs[c.id][0];
     const xpNeed = (G.d.xp.levels[c.level - 1] || {}).xp_to_next || 0;
     h += '<div class="cw-row' + (on ? ' on' : '') + '"><img src="' + racePortrait(c.race, c.gender) + '"><div class="cw-info"><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b> <span class="muted">level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</span>' +

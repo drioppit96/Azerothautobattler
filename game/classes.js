@@ -317,6 +317,8 @@ function spellHit(c, sp, e, m, opts) {
 }
 function healSelf(c, v, label) {
   const s = charStats(c); v = Math.round(v * (1 + (s.healPct || 0) / 100));
+  const r = rt(c); if (r.healOn && r.healOn !== c && typeof healOther === 'function') { const to = r.healOn; r.healOn = null; return healOther(c, to, v, label); }
+  r.healOn = null;
   const before = c.hp; c.hp = Math.min(s.maxHp, c.hp + v); fx(c.pos.x, c.pos.y, '+' + Math.round(c.hp - before), '#5ee07a'); meterHeal(c, c.hp - before, label || 'Heal');
   return v;
 }
@@ -330,8 +332,15 @@ function spellHeal(c, sp, e, lo, hi) {
 
 /* ------------------------------------------------------------------ threat (pets tank) */
 function addThreat(m, src, v) {
-  if (src && src.isPet) m.petThreat = (m.petThreat || 0) + v * (src.tank ? 2.2 : 0.6);
-  else m.charThreat = (m.charThreat || 0) + v;
+  if (src && src.isPet) { m.petThreat = (m.petThreat || 0) + v * (src.tank ? 2.2 : 0.6); return; }
+  // in a group of your characters: threat per character (the tank makes more); the creature turns to the one it hates most
+  if (src && src.id && typeof groupOf === 'function' && groupOf(src)) {
+    m.cThr = m.cThr || {}; m.cThr[src.id] = (m.cThr[src.id] || 0) + v * (grpRole(src) === 'tank' ? 1.8 : 1);
+    const cur = m.tgt;
+    if (cur && cur !== src && m.st === 'chase' && cur.pos && cur.pos.map === src.pos.map && m.cThr[src.id] > (m.cThr[cur.id] || 0) * 1.1) m.tgt = src;
+    m.charThreat = m.tgt && m.tgt.id ? m.cThr[m.tgt.id] || 0 : m.cThr[src.id]; return;
+  }
+  m.charThreat = (m.charThreat || 0) + v;
 }
 
 /* ------------------------------------------------------------------ casting */

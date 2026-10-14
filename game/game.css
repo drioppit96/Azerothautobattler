@@ -347,3 +347,18 @@ label.chk.dim{opacity:.55}
 .mt-ab div{display:flex;justify-content:space-between;color:#cfc6b0}
 #btnMeter.on{background:var(--gold2);color:#1a1409}
 .mst .mst-m{margin:1px 0 1px 6px}
+/* group card */
+#groupCard .grp-m{border:1px solid #3a2f1c;border-radius:5px;padding:4px 5px;margin-bottom:4px;background:#0006}
+#groupCard .grp-m.me{border-color:#8a7034}
+#groupCard .grp-top{display:flex;align-items:center;gap:4px}
+#groupCard .grp-n{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#groupCard .grp-top select{font-size:11px;padding:1px}
+#groupCard .grp-bars{height:4px;background:#000;border-radius:2px;margin-top:3px;overflow:hidden}
+#groupCard .grp-bars i{display:block;height:100%;background:#3fae5a}
+#groupCard .grp-bars.mp i{background:#3a6ed8}
+#groupCard .grp-inv{display:flex;gap:4px;margin:4px 0}
+#groupCard .grp-inv select{flex:1;min-width:0}
+#groupCard .rgrid input[type=number]{width:50px}
+#groupCard .grp-top select{max-width:74px}
+#groupCard .grp-n{min-width:64px}
+#groupCard .grp-top .mini{padding:1px 5px}

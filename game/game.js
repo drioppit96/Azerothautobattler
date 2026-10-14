@@ -34,14 +34,19 @@ function log(msg) {
 function renderLog() { const el = $('log'); const c = active(); if (!el || !c) return; el.innerHTML = ((G.logs && G.logs[c.id]) || []).map(([t, m]) => '<div><span class="t">' + fmtTime(t) + '</span> ' + esc(m) + '</div>').join(''); }
 function isActive(c) { return !!(c && G.state && c.id === G.state.activeId); }
 /* the characters in the world right now: the one you play and the ones set to keep playing (Go) */
-function liveChars() { const me = active(); return G.state.characters.filter((c) => c === me || c.bg); }
+function liveChars() {
+  const me = active(); const out = G.state.characters.filter((c) => c === me || c.bg);
+  // a group is in the world together when one of them is
+  for (const g of G.state.groups || []) if (g.members.length > 1 && g.members.some((m) => out.some((c) => c.id === m.id))) for (const m of g.members) { const c = G.state.characters.find((x) => x.id === m.id); if (c && !out.includes(c)) out.push(c); }
+  return out;
+}
 function switchCharacter(id) {
   if (!G.state.characters.some((c) => c.id === id) || id === G.state.activeId) return;
   save(); G.state.activeId = id; const c = active();
   G.selected = null; if (SH.open) closeSheet(); hideMenu(); if (G.routeEdit) { G.routeEdit = null; if (typeof renderRouteBar === 'function') renderRouteBar(); }
   const uf = $('unitframes'); if (uf) uf._w = 0;
   ensureWorld(c.pos.map); loadGrid(c.pos.map); goToCharacter();
-  renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderAbar();
+  renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderAbar(); renderGroup();
   if (typeof meterReset === 'function') meterReset();
   log('Now playing ' + c.name + (c.order ? ' (' + orderText(c).t + ')' : '') + '.'); save(); renderCharSwitch();
 }
@@ -337,6 +342,7 @@ function orderText(c) {
   if (o.type === 'patrol') return patrolText(c, o);
   if (o.type === 'dungeon') return dungeonText(c, o);
   if (o.type === 'npc') return npcOrderText(c, o);
+  if (o.type === 'follow') return followText(c, o);
   if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
   if (o.type === 'questing') { const q = o.fq && G.q.byId[o.fq]; return { t: 'Questing: ' + (o.zones[o.zi] || 'done'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') }; }
   if (o.type === 'sell' || o.type === 'vendor') return { t: 'Vendor: ' + o.label, d: o.resume ? 'Selling junk, then back to work' : 'Walking to the vendor' };
@@ -573,10 +579,10 @@ function draw() {
   // the other characters (running in the background, or waiting where they were left)
   for (const o of G.state.characters) {
     if (o === c || o.pos.map !== m.map || !inMap(m, o.pos.x, o.pos.y)) continue;
-    const [x, y] = w2s(o.pos.x, o.pos.y); ctx.globalAlpha = o.bg ? 1 : 0.6;
+    const live = o.bg || (typeof sameGroup === 'function' && sameGroup(c, o)); const [x, y] = w2s(o.pos.x, o.pos.y); ctx.globalAlpha = live ? 1 : 0.6;
     ctx.fillStyle = CLASS_COLOR[o.cls] || '#9fc7ff'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke();
     ctx.font = 'bold 11px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#cfe3ff';
-    const t = o.name + (o.bg ? '' : ' (paused)'); ctx.strokeText(t, x, y - 11); ctx.fillText(t, x, y - 11); ctx.textAlign = 'start'; ctx.globalAlpha = 1;
+    const t = o.name + (live ? '' : ' (paused)'); ctx.strokeText(t, x, y - 11); ctx.fillText(t, x, y - 11); ctx.textAlign = 'start'; ctx.globalAlpha = 1;
   }
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
     const [x, y] = w2s(c.pos.x, c.pos.y); const r = rt(c);
@@ -755,7 +761,7 @@ function frame(ts) {
     G.uiT = ts; renderChar(); renderAbar(); if (c.order) renderOrder();
     if (!G.qT || ts - G.qT > 1500) { G.qT = ts; if (!$('questCard').matches(':hover')) renderQuests(); }
     if (G.selected && G.selected.kind === 'mob') renderInfo(G.selected);
-    if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); }
+    if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); if (!$('groupCard').matches(':hover')) renderGroup(); }
     if (METER.show && (!G.mtT || ts - G.mtT > 500)) { G.mtT = ts; renderMeter(); }
   }
   requestAnimationFrame(frame);
@@ -822,6 +828,7 @@ async function boot() {
     setSpeed(G.state.settings.speed === undefined ? 1 : G.state.settings.speed);
     renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); bindSheet(); syncNodeToggle();
     METER.show = !!G.state.settings.meter; renderMeter(true); syncMeterBtn();
+    bindGroupCard(); renderGroup();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');
     $('loading').style.display = 'none';
     requestAnimationFrame(frame);

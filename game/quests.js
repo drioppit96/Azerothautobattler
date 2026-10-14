@@ -255,6 +255,7 @@ function acceptQuest(c, q) {
   c.quests[q.id] = { prog: q.objectives.map(() => 0), t: G.gameTime };
   if (q.start_item && !bagCount(c, q.start_item)) addItem(c, q.start_item, 1);
   log('Quest accepted: ' + q.title + ' (level ' + q.level + ').'); save(); renderQuests(); refreshGear();
+  if (typeof questGroup === 'function') groupShareQuest(c, q);          // the group takes it too (quest mode)
 }
 function pickReward(c, q) {
   if (!q.choice_items.length) return null;
@@ -283,6 +284,7 @@ function turnInQuest(c, q) {
   for (const [id, n] of q.reward_items) { addItem(c, id, n); got.push((n > 1 ? n + ' x ' : '') + itemName(id)); }
   const ch = pickReward(c, q); if (ch) { const n = (q.choice_items.find((x) => x[0] === ch) || [0, 1])[1]; addItem(c, ch, n); got.push(itemName(ch) + ' (chosen reward)'); }
   masteryQuest(c);
+  if (typeof questGroup === 'function') groupTurnIn(c, q);
   log('Quest complete: ' + q.title + '. +' + xp + ' xp' + (cash ? ', +' + money(cash) : '') + (got.length ? '. Received: ' + got.join(', ') : '') + '.');
   rt(c).bagFull = bagFree(c) <= 0;
   autoEquip(c);
@@ -347,7 +349,7 @@ function progText(c, q, i) { const ob = q.objectives[i]; const a = c.quests[q.id
 function workObjective(c, q, i, o) {
   const r = rt(c); const ob = q.objectives[i];
   // no progress on this objective for 12 minutes (targets too strong, always taken, out of reach): give up for now
-  const pk = q.id + ':' + i + ':' + progText(c, q, i);
+  const pk = q.id + ':' + i + ':' + progText(c, q, i) + (typeof questGroup === 'function' ? questGroup(c).map((m) => m.quests[q.id] ? progText(m, q, i) : '').join(',') : '');
   if (o.progKey !== pk) { o.progKey = pk; o.progT = G.gameTime; }
   if (G.gameTime - o.progT > 720) { o.progT = G.gameTime; o.wt = null; return 'blocked'; }
   let t = o.wt && o.wt.q === q.id && o.wt.i === i ? o.wt : null;
@@ -467,7 +469,9 @@ function questStep(c, q, o) {
     return 'busy';
   }
   for (let i = 0; i < q.objectives.length; i++) {
-    if (objDone(c, q, i)) continue;
+    if (gObjDone(c, q, i)) continue;
+    // done myself, the group not yet: kills and drops - keep going (they count for them too); their own objects - wait for them
+    if (objDone(c, q, i) && ownHandsObjective(q, i, c)) { o.phase = q.title; o.wobj = [q.id, i]; o.where = 'waiting for the group: ' + q.objectives[i].name; rt(c).mv = null; return 'busy'; }
     const f = feederQuest(c, q, i, o); if (f) return { feeder: f };
     const dq = questDungeon(q); if (dq && c.pos.map !== dq.map && !objectiveOptions(c, q, i).length) return { dungeon: dq };
     o.phase = q.title;
@@ -580,7 +584,7 @@ function updateQuesting(c, o, dt) {
   let pick = null, pd = 1e18, turn = false;
   for (const id in c.quests) {
     const q = G.q.byId[id]; if (!q || skipped(c, o, id) || questSupport(q)) continue;
-    if (questDone(c, q) || !q.objectives.length) {
+    if (gQuestDone(c, q) || !q.objectives.length) {
       const t = nearestOf(c, giverSpawns(q.turnin)); if (t && t.d < pd) { pd = t.d; pick = q; turn = true; }
       else if (!t && questMeta(q).turnDungeon && dungeonQuestOk(c, q, true)) { const dd = dungeonQuestDist(c, questDungeon(q)); if (dd < pd) { pd = dd; pick = q; turn = true; } }
       continue;
@@ -588,7 +592,7 @@ function updateQuesting(c, o, dt) {
     if (o.type === 'leveling' && questMeta(q).elite && c.level < questMeta(q).elite + 3) continue;
     const dq = questDungeon(q);
     for (let i = 0; i < q.objectives.length; i++) {
-      if (objDone(c, q, i)) continue;
+      if (gObjDone(c, q, i)) continue;
       if (dq && c.pos.map !== dq.map && !objectiveOptions(c, q, i).length) { if (dungeonQuestOk(c, q, true)) { const dd = dungeonQuestDist(c, dq); if (dd < pd) { pd = dd; pick = q; turn = false; } } continue; }
       if (feederQuest(c, q, i, o)) { if (pd > 1) { pd = 1; pick = q; turn = false; } continue; }
       for (const x of objectiveOptions(c, q, i)) if (x.d < pd) { pd = x.d; pick = q; turn = false; }

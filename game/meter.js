@@ -7,7 +7,7 @@ const METER_KEEP = 12;
 function meterState() { G.meter = G.meter || { fights: [], cur: null, all: { start: G.gameTime, end: G.gameTime, units: {} } }; return G.meter; }
 function meterUnit(seg, key, name, cls) { let u = seg.units[key]; if (!u) u = seg.units[key] = { name, cls, dmg: 0, heal: 0, taken: 0, ab: {}, hab: {} }; return u; }
 /* who a unit belongs to: the character you play (and its pet and group) or nobody (background characters) */
-function meterOwner(src) { if (!src) return null; if (src.id && G.state && src.id === G.state.activeId) return src; return null; }
+function meterOwner(src) { if (!src || !src.id || !G.state) return null; if (src.id === G.state.activeId) return src; if (typeof sameGroup === 'function' && sameGroup(active(), src)) return src; return null; }
 function meterAdd(kind, key, name, cls, v, ability) {
   if (!(v > 0)) return; const M = meterState();
   for (const seg of [M.cur, M.all]) {
