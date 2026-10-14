@@ -53,7 +53,7 @@ function mercCost(c, u, sp) {
   if (pw[0] === 1 || pw[0] === 3) return (pw[1] || 0) / (pw[0] === 1 ? 10 : 1);
   if (pw[0] !== 0 || u.pt !== 0) return 0;
   let v = pw[1] || 0; if (pw[2]) { const cs = G.d.races.classstats[u.cls] && G.d.races.classstats[u.cls][mercLevel(c) - 1]; v = Math.round((cs ? cs[1] : 0) * pw[2] / 100); }
-  return Math.min(v, u.maxmana * 0.05);      // they wear gear with mana on it
+  return Math.min(v, u.maxmana * 0.15);
 }
 function mercPay(u, cost) {
   if (u.pt === 1) u.rage = Math.max(0, u.rage - cost); else if (u.pt === 3) u.energy = Math.max(0, u.energy - cost); else { u.mana = Math.max(0, u.mana - cost); u.lastCast = G.gameTime; }
@@ -133,15 +133,17 @@ function mercCastBuff(c, u, due) {
 }
 
 /* ------------------------------------------------------------------ casting with a cast bar */
-function mercStartCast(c, u, n, sp, tgt, time, done) {
-  u.cb = { name: n, ic: sp && sp.ic, t: 0, total: Math.max(0.3, time), tgt, done };
+function mercStartCast(c, u, n, sp, tgt, time, done, check) {
+  u.cb = { name: n, ic: sp && sp.ic, t: 0, total: Math.max(0.3, time), tgt, done, check };
   u.gcd = G.gameTime + 1.5;
 }
 /* true while casting (the mercenary does nothing else) */
 function mercCastStep(c, u, dt) {
   const k = u.cb; if (!k) return false;
   if (k.tgt && k.tgt.st && (k.tgt.st === 'dead' || k.tgt.hp <= 0)) { u.cb = null; return false; }
-  k.t += dt; if (k.t < k.total) return true;
+  k.t += dt;
+  if (k.check && !k.checked && k.t >= k.total * 0.8) { k.checked = true; if (!k.check()) { u.cb = null; fx(u.x, u.y, 'stops casting', '#cfc6b0'); return false; } }
+  if (k.t < k.total) return true;
   u.cb = null; k.done(); return false;
 }
 
@@ -156,7 +158,7 @@ function mercRegen(c, u, dt, inFight) {
   else { u.drinking = u.drinking ? u.mana < u.maxmana : u.mana < u.maxmana * 0.8; rate = u.drinking ? 0.07 : 0.02 * (1 + m.regen); }
   u.mana = Math.min(u.maxmana, u.mana + u.maxmana * rate * dt);
   // a mana potion when it runs dry in a fight
-  if (inFight && u.mana < u.maxmana * 0.15 && G.gameTime - u.potT > 120 && (u.role === 'healer' || Math.random() < 0.5)) { u.potT = G.gameTime; u.mana = Math.min(u.maxmana, u.mana + u.maxmana * 0.3); fx(u.x, u.y, 'Mana Potion', '#7fa8ff'); }
+  if (inFight && u.mana < u.maxmana * 0.15 && G.gameTime - u.potT > 120 && (u.role === 'healer' || (rt(c).threats || []).some((m) => m.rank >= 1 && m.maxhp > 3 * (u.baseHp || 100)))) { u.potT = G.gameTime; u.mana = Math.min(u.maxmana, u.mana + u.maxmana * 0.3); fx(u.x, u.y, 'Mana Potion', '#7fa8ff'); }
 }
 /* the mercenaries still drinking: the group waits for them before the next pull */
 function mercsResting(c) { return (partyOf(c) || []).some((u) => !u.dead && u.drinking); }
@@ -166,7 +168,8 @@ function mercIdle(c, u, dt) {
   mercMods(c, u); mercRegen(c, u, dt, false); mercAuraStep(c, u); mercHotStep(c, u, dt);
   if (mercCastStep(c, u, dt)) return;
   if (u.gcd > G.gameTime || u.drinking) return;
-  const due = mercBuffDue(c, u, false); if (due) mercCastBuff(c, u, due);
+  const due = mercBuffDue(c, u, false); if (due) { mercCastBuff(c, u, due); return; }
+  if (u.role === 'healer' && u.mana > u.maxmana * 0.5) mercHealStep(c, u, dt, false);
 }
 
 /* ------------------------------------------------------------------ debuffs and damage over time on the creatures */
@@ -214,23 +217,96 @@ function mercApplyDebuff(c, u, n, sp, mobs) {
   return true;
 }
 
-/* ------------------------------------------------------------------ heals */
-function mercHealTarget(c, low) {
-  let tgt = null;
-  for (const t of mercFolk(c)) {
-    const hp = t.merc ? t.merc.hp / t.merc.maxhp : t.c.hp / charStats(t.c).maxHp; const lim = t.role === 'tank' ? low + 0.08 : low;
-    if (hp < lim && (!tgt || hp - (lim - low) < tgt.p)) tgt = Object.assign(t, { p: hp - (lim - low), hp });
+/* ------------------------------------------------------------------ heals
+   Like a player: a heal only for health that is really missing, the rank that fits the gap (downranking - cheaper, less
+   wasted), the fast heal when someone is about to die, a heal over time on the tank that keeps taking hits, a shield
+   when it gets bad. An experienced healer stops a cast that is not needed any more and rarely heals the wrong one;
+   a beginner heals with the biggest rank, overheals and runs out of mana sooner. */
+function mercHealBonus(L) { return L * L / 12; }            // +healing from the gear of a player of that level
+function mercHealAmount(u, sp, L) {
+  const lv = { level: L }; let v = 0;
+  for (const e of sp.ef || []) {
+    if (e.t === 10) v += (effValue(lv, sp, e, e.lo) + effValue(lv, sp, e, e.hi || e.lo)) / 2 + (e.coef != null ? e.coef : Math.min(1, (sp.cast || 1500) / 3500)) * mercHealBonus(L);
+    else if (e.t === 6 && e.au === 8) { const ticks = Math.max(1, (sp.dur || 12000) / (e.amp || 3000)); v += effValue(lv, sp, e) * ticks + (e.coef != null ? e.coef : 0.2) * mercHealBonus(L); }
+    else if (e.t === 6 && e.au === 69) v += effValue(lv, sp, e) + 0.1 * mercHealBonus(L);
   }
-  if (!tgt && petAlive(c) && c.pet.hp / c.pet.maxhp < low) tgt = { pet: true, p: c.pet.hp / c.pet.maxhp, hp: c.pet.hp / c.pet.maxhp };
-  return tgt;
+  const ct = Math.max(1.5, (sp.cast || 1500) / 1000);
+  return Math.round(Math.max(v, (12 + L * 4.5) * ct / 2.5));       // odd data: what a heal of that cast time does
+}
+/* every rank a player of level L has of these spells: [{sp, val, cost, ct}] */
+function mercHealRanks(c, u, names, L) {
+  const out = [];
+  for (const n of names || []) for (const sp of classAbilityList(u.cls)[n] || []) if ((sp.lv || 1) <= L) out.push({ sp, n, val: mercHealAmount(u, sp, L), cost: mercCost(c, u, sp), ct: Math.max(1.5, Math.min(3.5, (sp.cast || 2500) / 1000)) });
+  return out.sort((a, b) => a.val - b.val);
+}
+/* how hurt someone of the group is: {hp, max, miss, pct} */
+function mercHurt(c, t) {
+  if (t.pet) return { hp: c.pet.hp, max: c.pet.maxhp, miss: c.pet.maxhp - c.pet.hp, pct: c.pet.hp / c.pet.maxhp };
+  if (t.merc) return { hp: t.merc.hp, max: t.merc.maxhp, miss: t.merc.maxhp - t.merc.hp, pct: t.merc.hp / t.merc.maxhp };
+  const mx = charStats(t.c).maxHp; return { hp: t.c.hp, max: mx, miss: mx - t.c.hp, pct: t.c.hp / mx };
 }
 function mercHealLand(c, u, t, v, n) {
   const r = rt(c); let got;
-  if (t.pet) { const h0 = c.pet.hp; c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); got = c.pet.hp - h0; }
+  if (t.pet) { if (!petAlive(c)) return; const h0 = c.pet.hp; c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); got = c.pet.hp - h0; }
   else if (t.merc) { const o = t.merc; if (o.dead) return; const h0 = o.hp; o.hp = Math.min(o.maxhp, o.hp + v); got = o.hp - h0; fx(o.x, o.y, '+' + Math.round(got), '#5ee07a'); }
   else { const o = t.c; if (rt(o).ghost || o.hp <= 0) return; const h0 = o.hp; o.hp = Math.min(charStats(o).maxHp, o.hp + v); got = o.hp - h0; fx(o.pos.x, o.pos.y, '+' + Math.round(got), '#5ee07a'); }
   meterGroup(c, u, 'heal', Math.round(got), n);
   const th = r.threats || []; for (const m of th) gThreat(m, u, got * 0.5 / Math.max(1, th.length));
+}
+/* who is being hit right now */
+function mercUnderFire(c, t) {
+  const th = rt(c).threats || [];
+  if (t.merc) return th.some((m) => mobVictimKey(m, c) === t.merc.id);
+  if (t.c === c) return th.some((m) => mobVictimKey(m, c) === 'c');
+  return th.some((m) => m.tgt === t.c);
+}
+/* a healer's turn: true when it did something (or is busy) */
+function mercHealStep(c, u, dt, inFight) {
+  const k = mercKit(u); const L = mercLevel(c); const ux = (u.ex == null ? 5 : u.ex) / 10; const now = G.gameTime;
+  if (u.react > now || u.gcd > now) return true;
+  const main = mercHealRanks(c, u, k.heal, L); if (!main.length) return false;
+  const fast = mercHealRanks(c, u, k.fast ? [k.fast] : [], L);
+  const smallest = main[0].val;
+  // who needs a heal: real health missing (not a scratch), the tank a little earlier; out of a fight only the ones low
+  const folk = mercFolk(c).concat(petAlive(c) ? [{ pet: true, role: 'pet', x: c.pet.x || c.pos.x, y: c.pet.y || c.pos.y }] : []);
+  const need = [];
+  for (const t of folk) {
+    const h = mercHurt(c, t); if (h.miss <= 0) continue;
+    const ok = inFight ? h.miss >= smallest * (0.75 - 0.25 * (1 - ux)) || h.pct < 0.5 : h.pct < 0.7;
+    if (ok) need.push(Object.assign(t, h, { prio: h.pct - (t.role === 'tank' ? 0.12 : 0) - (mercUnderFire(c, t) ? 0.05 : 0) }));
+  }
+  if (!need.length) return false;
+  need.sort((a, b) => a.prio - b.prio);
+  let t = need[0];
+  if (need.length > 1 && Math.random() < 0.2 * (1 - ux)) t = need[1 + Math.floor(Math.random() * (need.length - 1))];     // a beginner heals the wrong one now and then
+  const key = t.merc ? t.merc.id : t.c ? t.c.id : 'pet'; const tank = t.role === 'tank';
+  const castable = (o) => o && mercPower(u) >= o.cost;
+  const instant = (o, fn) => { mercPay(u, o.cost); u.gcd = now + 1.5; u.react = now + 1.5 + (0.1 + 0.8 * (1 - ux)) * Math.random(); fn(); return true; };
+  if (inFight) {
+    // a shield on the one about to go down (Weakened Soul: not again for 15 s)
+    const sh = k.shield && mercHealRanks(c, u, [k.shield], L).pop();
+    if (castable(sh) && !t.pet && t.pct < (tank ? 0.45 : 0.35) && mercUnderFire(c, t) && !((u.shieldOn || {})[key] > now)) return instant(sh, () => mercShield(c, u, t, sh.sp, sh.val));
+    // a heal over time on the tank that keeps taking hits (the rank that fits; a beginner always the biggest)
+    const hots = k.hot ? mercHealRanks(c, u, [k.hot], L) : [];
+    if (hots.length && tank && mercUnderFire(c, t) && t.miss >= hots[0].val * 0.6 && !mercHasBuff(t, hots[0].sp.n, 1)) {
+      const h = ux >= 0.5 ? hots.find((o) => o.val >= t.miss * 0.8) || hots[hots.length - 1] : hots[hots.length - 1];
+      if (castable(h) && t.pct > 0.4) return instant(h, () => mercGiveHot(c, u, t, h.sp.n, h.sp, h.val));
+    }
+  }
+  // the heal: the fast one when someone is about to die, else the rank that fits the gap
+  const urgent = inFight && t.pct < 0.35 && fast.length;
+  const pool = urgent ? fast : main;
+  const fit = pool.filter((o) => o.val >= t.miss * 0.85);
+  let pick = Math.random() < 0.1 + 0.9 * Math.sqrt(ux) ? fit[0] || pool[pool.length - 1] : pool[pool.length - 1];      // experienced: the rank that fits; a beginner mostly the biggest
+  if (!castable(pick)) pick = pool.filter(castable).pop();          // low on mana: a smaller rank
+  if (!pick) { if (now - (u.oomT || -99) > 20) { u.oomT = now; fx(u.x, u.y, 'Out of mana', '#7fa8ff'); log(u.name + ' is out of mana.'); } return false; }
+  const ct = pick.ct; const v = Math.round(pick.val * rnd(0.92, 1.08));
+  u.react = now + ct + (0.15 + 1.2 * (1 - ux)) * Math.random();
+  // an experienced healer stops the cast when the gap is mostly gone (someone else healed it); anyone stops it on a full
+  // health bar
+  const miss0 = t.miss; const check = ux >= 0.35 ? () => mercHurt(c, t).miss >= Math.min(v, miss0) * 0.3 : () => mercHurt(c, t).miss > 0;
+  mercStartCast(c, u, pick.sp.n, pick.sp, null, ct, () => { mercPay(u, pick.cost); mercHealLand(c, u, t, v, pick.sp.n); }, check);
+  return true;
 }
 /* heals over time: on the mercenaries ticked here, on the characters through their buffs (classes.js) */
 function mercHotStep(c, u, dt) {
@@ -249,42 +325,13 @@ function mercShield(c, u, t, sp, v) {
   u.shieldOn = u.shieldOn || {}; u.shieldOn[t.merc ? t.merc.id : t.c.id] = G.gameTime + 15;     // Weakened Soul
   fx(t.x, t.y, sp.n, '#9fe0ff');
 }
-/* a healer's turn in a fight: true when it did something (or is busy) */
-function mercHealStep(c, u, dt, inc, healers) {
-  const k = mercKit(u); const L = mercLevel(c); const ux = (u.ex == null ? 5 : u.ex) / 10;
-  if (u.react > G.gameTime || u.gcd > G.gameTime) return true;
-  const t = mercHealTarget(c, 0.9); if (!t) return false;
-  if (Math.random() < 0.15 * (1 - ux)) { const f = mercFolk(c); const o = f[Math.floor(Math.random() * f.length)]; if (o) Object.assign(t, o, { pet: false }); }     // healed the wrong one
-  const v0 = Math.round(Math.max(12 + L * 4.5, inc * 2.5 * 1.25 / healers) * rnd(0.9, 1.1));
-  const sp = (n) => n && mercSpell(u.cls, n, L);
-  const tank = t.role === 'tank';
-  // a shield on the tank taking a beating
-  const sh = sp(k.shield); const key = t.merc ? t.merc.id : t.c ? t.c.id : 'pet';
-  if (sh && !t.pet && tank && t.hp < 0.7 && !((u.shieldOn || {})[key] > G.gameTime) && mercPower(u) >= mercCost(c, u, sh)) { mercPay(u, mercCost(c, u, sh)); u.gcd = G.gameTime + 1.5; mercShield(c, u, t, sh, Math.round(v0 * 0.9)); return true; }
-  // a heal over time on the tank before it is needed
-  const hot = sp(k.hot);
-  if (hot && !t.pet && tank && t.hp < 0.95 && !mercHasBuff(t, hot.n, 1) && mercPower(u) >= mercCost(c, u, hot)) { mercPay(u, mercCost(c, u, hot)); u.gcd = G.gameTime + 1.5; mercGiveHot(c, u, t, hot.n, hot, v0 * 0.9); return true; }
-  // a fast heal when it is urgent, the big one otherwise
-  let spell = null, fast = false;
-  if (t.hp < 0.45 && sp(k.fast)) { spell = sp(k.fast); fast = true; }
-  if (!spell) for (const n of k.heal || []) { spell = sp(n); if (spell) break; }
-  if (!spell) return false;
-  const cost = mercCost(c, u, spell) * (fast ? 0.8 : 1);
-  if (mercPower(u) < cost) { if (G.gameTime - (u.oomT || -99) > 20) { u.oomT = G.gameTime; fx(u.x, u.y, 'Out of mana', '#7fa8ff'); log(u.name + ' is out of mana.'); } return false; }
-  const ct = Math.max(1.5, Math.min(3.5, (spell.cast || 2500) / 1000)) * (fast ? 0.6 : 1);
-  const v = Math.round(v0 * ct / 2.5 * (fast ? 1.1 : 1));
-  u.react = G.gameTime + ct + (0.2 + 1.8 * (1 - ux)) * Math.random();
-  mercStartCast(c, u, spell.n, spell, null, ct, () => { mercPay(u, cost); mercHealLand(c, u, t, v, spell.n); });
-  return true;
-}
-
 /* ------------------------------------------------------------------ damage spells (the ranged damage dealers) */
-function mercNukeStep(c, u, m) {
+function mercNukeStep(c, u, m, wandOnly) {
   const k = mercKit(u); const L = mercLevel(c);
   if (u.gcd > G.gameTime || u.react > G.gameTime) return;
-  let sp = null; for (const n of k.nuke || []) { const s = mercSpell(u.cls, n, L); if (s && !(n === 'Aimed Shot' && (u.aimT || 0) > G.gameTime) && !(n === 'Mind Blast' && (u.mbT || 0) > G.gameTime)) { sp = s; break; } }
+  let sp = null; if (!wandOnly) for (const n of k.nuke || []) { const s = mercSpell(u.cls, n, L); if (s && !(n === 'Aimed Shot' && (u.aimT || 0) > G.gameTime) && !(n === 'Mind Blast' && (u.mbT || 0) > G.gameTime)) { sp = s; break; } }
   let cost = sp ? mercCost(c, u, sp) : 0;
-  const wand = !sp || mercPower(u) < cost;
+  const wand = !sp || mercPower(u) < cost || (u.pt === 0 && !mercSpendOk(u, m));     // the wand when the mana is worth saving
   if (wand) { sp = { n: u.cls === 3 ? 'Auto Shot' : 'Shoot', ic: u.cls === 3 ? 'ability_whirlwind' : 'ability_shootwand', cast: 1500 }; cost = 0; }
   let ct = Math.max(1.5, Math.min(3.5, (sp.cast || 1500) / 1000)); if (u.cls === 8 && sp.n === 'Frostbolt') ct = Math.min(ct, 2.5);     // Improved Frostbolt
   const ux = (u.ex == null ? 5 : u.ex) / 10;
@@ -307,26 +354,43 @@ function mercFight(c, u, dt, threats, inc, healers, mv) {
   if (mercCastStep(c, u, dt)) return true;
   const r = rt(c);
   if (u.gcd <= G.gameTime) { const due = mercBuffDue(c, u, true); if (due && mercCastBuff(c, u, due)) return true; }
+  mercOpening(c, u);
   if (u.role === 'healer') {
     mv(c.pos.x, c.pos.y, 14);
-    if (mercHealStep(c, u, dt, inc, healers)) return true;
-    // nothing to heal: a damage over time on the target now and then
+    if (mercHealStep(c, u, dt, true)) return true;
+    // nothing to heal: like a player, the wand on the target (a damage over time on something big when the mana is plenty)
     const m = r.tgt && r.tgt.st !== 'dead' ? r.tgt : threats[0];
-    if (m && u.gcd <= G.gameTime && mercPower(u) > mercPowerMax(u) * 0.6) { const d = mercDebuffDue(c, u, m, threats); if (d && (u.cls !== 2)) mercApplyDebuff(c, u, d[0], d[1], d[2]); }
+    if (!m || G.gameTime < u.openAt || u.gcd > G.gameTime) return true;
+    if (u.cls !== 2 && mercPower(u) > mercPowerMax(u) * 0.8) { const d = mercDebuffDue(c, u, m, threats); if (d && (m.rank >= 1 || m.maxhp > 2 * (u.baseHp || 100)) && mercApplyDebuff(c, u, d[0], d[1], d[2])) return true; }
+    if (u.cls !== 2 && Math.hypot(m.x - u.x, m.y - u.y) < 30) mercNukeStep(c, u, m, true);
     return true;
   }
   const k = mercKit(u);
   const m = u.role === 'tank' ? null : r.tgt && r.tgt.st !== 'dead' ? r.tgt : threats[0];
   if (u.role !== 'tank' && k.ranged && m) {
     if (!mv(m.x, m.y, 22)) return true;
-    if (u.gcd <= G.gameTime) { const d = mercDebuffDue(c, u, m, threats); if (d && mercApplyDebuff(c, u, d[0], d[1], d[2])) return true; }
+    if (G.gameTime < u.openAt) return true;                   // the tank gets a moment to take the pull first
+    if (u.gcd <= G.gameTime && mercSpendOk(u, m)) { const d = mercDebuffDue(c, u, m, threats); if (d && mercApplyDebuff(c, u, d[0], d[1], d[2])) return true; }
     mercNukeStep(c, u, m); return true;
   }
   return false;
 }
+/* at the start of each fight: how long a damage dealer waits for the tank (an experienced one waits for the tank to
+   have the pack, a beginner goes at once - and pulls the aggro) */
+function mercOpening(c, u) {
+  const r = rt(c); const fs = r.fightStart || 0; if (u.fsSeen === fs) return; u.fsSeen = fs;
+  const ux = (u.ex == null ? 5 : u.ex) / 10;
+  u.openAt = u.role === 'tank' ? 0 : fs + (0.3 + 2.4 * ux) * (0.7 + 0.6 * Math.random());
+}
+/* worth the mana: a damage over time / a spell on something that dies anyway in a moment is a waste - with little mana
+   left, only on the big ones */
+function mercSpendOk(u, m) {
+  if (u.pt !== 0) return true; const big = m.rank >= 1 || m.maxhp > 3 * (u.baseHp || 100); const mp = u.mana / Math.max(1, u.maxmana);
+  if (big) return mp > 0.1; return mp > 0.3 && m.hp / m.maxhp > 0.25;
+}
 /* melee mercenaries (tank, warrior, rogue, paladin, shaman ...): their debuffs between the swings */
 function mercMeleeExtra(c, u, m, threats) {
-  if (u.gcd > G.gameTime || !m || m.st === 'dead') return;
+  if (u.gcd > G.gameTime || !m || m.st === 'dead' || !mercSpendOk(u, m)) return;
   if (Math.hypot(m.x - u.x, m.y - u.y) > MELEE_RANGE + 2) return;
   const d = mercDebuffDue(c, u, m, threats); if (d) mercApplyDebuff(c, u, d[0], d[1], d[2]);
 }

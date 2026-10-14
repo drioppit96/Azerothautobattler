@@ -336,6 +336,7 @@ function partyStep(c, dt) {
     if (u.role === 'tank') for (const x of threats) if (x !== m && Math.hypot(x.x - u.x, x.y - u.y) < 10) gThreat(x, u, (c.level + 10) * dt * 2);      // shouts and area attacks keep the pack on the tank
     if (!m || m.st === 'dead') return;
     if (!mv(m.x, m.y, MELEE_RANGE - 0.5)) return;
+    if (u.role !== 'tank' && G.gameTime < (u.openAt || 0)) return;          // waits for the tank to take the pull
     mercMeleeExtra(c, u, m, threats);
     u.swing -= dt; if (u.swing > 0) return; u.swing += 2.0; if (Math.random() < 0.4 * (1 - (u.ex == null ? 5 : u.ex) / 10)) u.swing += 0.3 + Math.random() * 1.2;
     const diff = m.lvl - c.level; if (Math.random() < 0.05 + Math.max(0, diff) * 0.02) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
