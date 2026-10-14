@@ -44,23 +44,9 @@ function ufMake(s, mirror) {
   return el;
 }
 function ufSet(el, k, v, fn) { if (el['_v' + k] !== v) { el['_v' + k] = v; fn(v); } }
-function renderUnitFrames() {
-  const box = $('unitframes'); if (!box) return;
-  const c = active(); if (!c) return; const r = rt(c); const s = charStats(c);
-  /* the character on top across the whole card, below it the creatures it fights (up to five), the same size */
-  /* the width of the card, not counting a scrollbar of the left column: with many creatures the column grows, a scrollbar
-     comes and goes, and the frames would rescale back and forth with it */
-  const lc = $('left'); const sb = lc ? lc.offsetWidth - lc.clientWidth - (parseFloat(getComputedStyle(lc).borderRightWidth) || 0) : 0;
-  const W = (box.clientWidth || 254) + Math.max(0, sb);
-  if (!box._w || Math.abs(box._w - W) > 2) { box._w = W; box.innerHTML = ''; box._me = null; box._en = []; }
-  const sp = Math.min(1.6, (box._w - 4 - 18) / UF.w), se = sp * 0.94;
-  // the character
-  if (!box._me) {
-    box._me = ufMake(sp, true); box._me.classList.add('ufplayer'); box.appendChild(box._me);
-    box._me.onclick = (e) => { if (e.target.closest('.ufpor')) openCharSwitch(); else openSheet('char'); };
-    box._me._por.title = 'Characters - switch, or let them play on their own';
-  }
-  const me = box._me;
+/* a character's frame: portrait, name, level, health, power, combo points, cast bar, buffs */
+function ufFillChar(me, c) {
+  const r = rt(c); const s = charStats(c);
   ufSet(me, 'img', c.race + '_' + (c.gender || 0), () => { me._img.src = '../ui/CharacterFrame/TemporaryPortrait-' + (c.gender ? 'Female' : 'Male') + '-' + (RACE_PORTRAIT[c.race] || 'Orc') + '.png'; });
   ufSet(me, 'name', c.name, (v) => { me._name.textContent = v; });
   ufSet(me, 'lv', c.level, (v) => { me._lv.textContent = v; });
@@ -77,33 +63,100 @@ function renderUnitFrames() {
   });
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufAuras(me, ufPlayerAuras(c, r));
+}
+/* a dungeon companion's frame: its class icon, name, health and role */
+function ufFillComp(me, u, lvl) {
+  ufSet(me, 'img', 'cls' + u.cls, () => { me._img.src = 'img/class/' + u.cls + '.png'; });
+  ufSet(me, 'name', u.name, (v) => { me._name.textContent = v; });
+  ufSet(me, 'lv', lvl, (v) => { me._lv.textContent = v; });
+  ufSet(me, 'bg', 1, () => { me._bg.style.backgroundImage = 'url(' + ufFrameTexture(0) + ')'; me._namebg.style.background = 'rgba(0,0,0,.35)'; });
+  const hp = Math.max(0, Math.round(u.hp));
+  ufSet(me, 'hp', hp + '/' + u.maxhp + u.dead, () => { me._hpi.style.width = (u.dead ? 0 : 100 * hp / u.maxhp) + '%'; me._hpt.textContent = u.dead ? 'Dead' : hp + ' / ' + u.maxhp; });
+  ufSet(me, 'pw', u.role, (v) => { me._pwi.style.width = '0%'; me._pwt.textContent = v === 'tank' ? 'Tank' : v === 'healer' ? 'Healer' : 'Damage'; });
+  ufAuras(me, []);
+}
+/* a creature's frame, as seen by the character c */
+function ufFillMob(e, m, c, isTgt) {
+  const info = m.info; const beh = behOf(m, c);
+  ufSet(e, 'id', m, () => {
+    e._bg.style.backgroundImage = 'url(' + ufFrameTexture(m.rank) + ')';
+    // portraits/by_name/<entry>_<name>.png is the creature's own picture (portraits/small is by model id, not creature)
+    const p = G.portraits[m.e] ? '../portraits/by_name/' + encodeURIComponent(G.portraits[m.e]) : '../ui/CharacterFrame/TemporaryPortrait-Monster.png';
+    e._img.onerror = () => { e._img.onerror = null; e._img.src = '../ui/CharacterFrame/TemporaryPortrait-Monster.png'; };
+    e._img.src = p;
+    e._name.textContent = info ? info[1] : 'Creature';
+  });
+  ufSet(e, 'react', beh, (v) => { e._namebg.style.background = REACTION_BG[v] || REACTION_BG.N; });
+  ufSet(e, 'lv', m.lvl + '|' + c.level, () => { e._lv.textContent = effLevel(m) - c.level >= 10 ? '??' : m.lvl; e._lv.style.color = levelColor(m.lvl, c.level); });
+  const hpPct = Math.max(0, Math.round(100 * m.hp / m.maxhp));
+  ufSet(e, 'hp', hpPct, (v) => { e._hpi.style.width = v + '%'; e._hpt.textContent = v + '%'; });
+  ufSet(e, 'tgt', isTgt, (v) => e.classList.toggle('target', v));
+  ufAuras(e, ufMobAuras(m));
+}
+/* the other members of the group (your other characters and the dungeon companions), each with what it is fighting */
+function ufMates(c) {
+  const out = [];
+  if (typeof groupOf === 'function' && groupOf(c)) for (const o of groupChars(groupOf(c))) if (o !== c) out.push({ c: o });
+  const p = typeof partyOf === 'function' ? partyOf(c) : null;
+  if (p) for (const u of p) if (u.comp) out.push({ u });
+  return out;
+}
+function ufMateTarget(o) {
+  if (!o.c) return null; const r = rt(o.c);
+  if (r.tgt && r.tgt.st !== 'dead' && r.tgt.st !== 'evade' && r.tgt.hp > 0) return r.tgt;
+  return (r.threats || []).find((m) => m.st !== 'dead') || null;
+}
+function renderUnitFrames() {
+  const box = $('unitframes'); if (!box) return;
+  const c = active(); if (!c) return; const r = rt(c);
+  /* the character on top across the whole card, below it the creatures it fights (up to five), the same size;
+     in a group the other members follow, smaller, each with its own target */
+  /* the width of the card, not counting a scrollbar of the left column: with many creatures the column grows, a scrollbar
+     comes and goes, and the frames would rescale back and forth with it */
+  const lc = $('left'); const sb = lc ? lc.offsetWidth - lc.clientWidth - (parseFloat(getComputedStyle(lc).borderRightWidth) || 0) : 0;
+  const W = (box.clientWidth || 254) + Math.max(0, sb);
+  if (!box._w || Math.abs(box._w - W) > 2) { box._w = W; box.innerHTML = ''; box._me = null; box._en = []; box._mt = []; }
+  const sp = Math.min(1.6, (box._w - 4 - 18) / UF.w), se = sp * 0.94, sm = sp * 0.78, st = sp * 0.7;
+  // the character
+  if (!box._me) {
+    box._me = ufMake(sp, true); box._me.classList.add('ufplayer'); box.appendChild(box._me);
+    box._me.onclick = (e) => { if (e.target.closest('.ufpor')) openCharSwitch(); else openSheet('char'); };
+    box._me._por.title = 'Characters - switch, or let them play on their own';
+  }
+  const me = box._me; ufFillChar(me, c);
   // the creatures it fights: current target first
   const list = []; if (r.tgt && r.tgt.st !== 'dead' && (r.tgt.tgt === c || (r.threats || []).length === 0)) list.push(r.tgt);
   for (const m of r.threats || []) if (!list.includes(m)) list.push(m);
-  const shown = list.slice(0, UF.maxEnemies);
+  const mates = ufMates(c);
+  const shown = list.slice(0, mates.length ? 3 : UF.maxEnemies);
   while (box._en.length < shown.length) { const e = ufMake(se, false); e.classList.add('ufenemy'); box.appendChild(e); box._en.push(e); e.onclick = () => { if (e._mob) { G.selected = { kind: 'mob', mob: e._mob }; renderInfo(G.selected); } }; }
   let y = ufSlot(me) * sp + 6;
   box._en.forEach((e, i) => {
     const m = shown[i]; e.style.display = m ? '' : 'none'; e._mob = m || null; if (!m) return;
-    e.style.top = Math.round(y) + 'px';
-    const info = m.info; const beh = behOf(m, c);
-    ufSet(e, 'id', m, () => {
-      e._bg.style.backgroundImage = 'url(' + ufFrameTexture(m.rank) + ')';
-      // portraits/by_name/<entry>_<name>.png is the creature's own picture (portraits/small is by model id, not creature)
-      const p = G.portraits[m.e] ? '../portraits/by_name/' + encodeURIComponent(G.portraits[m.e]) : '../ui/CharacterFrame/TemporaryPortrait-Monster.png';
-      e._img.onerror = () => { e._img.onerror = null; e._img.src = '../ui/CharacterFrame/TemporaryPortrait-Monster.png'; };
-      e._img.src = p;
-      e._name.textContent = info ? info[1] : 'Creature';
-    });
-    ufSet(e, 'react', beh, (v) => { e._namebg.style.background = REACTION_BG[v] || REACTION_BG.N; });
-    ufSet(e, 'lv', m.lvl + '|' + c.level, () => { e._lv.textContent = effLevel(m) - c.level >= 10 ? '??' : m.lvl; e._lv.style.color = levelColor(m.lvl, c.level); });
-    const hpPct = Math.max(0, Math.round(100 * m.hp / m.maxhp));
-    ufSet(e, 'hp', hpPct, (v) => { e._hpi.style.width = v + '%'; e._hpt.textContent = v + '%'; });
-    ufSet(e, 'tgt', m === r.tgt, (v) => e.classList.toggle('target', v));
-    ufAuras(e, ufMobAuras(m));
+    e.style.top = Math.round(y) + 'px'; ufFillMob(e, m, c, m === r.tgt);
     y += ufSlot(e) * se + 3;
   });
-  box.style.height = Math.ceil(shown.length ? y : ufSlot(me) * sp) + 'px';
+  // the group
+  while (box._mt.length < mates.length) {
+    const sep = document.createElement('div'); sep.className = 'ufsep'; box.appendChild(sep);
+    const f = ufMake(sm, true); f.classList.add('ufmate'); box.appendChild(f);
+    const t = ufMake(st, false); t.classList.add('ufenemy', 'ufmtgt'); box.appendChild(t);
+    const slot = { sep, f, t }; box._mt.push(slot);
+    f.onclick = () => { if (slot.o && slot.o.c) switchCharacter(slot.o.c.id); };
+    t.onclick = () => { if (t._mob) { G.selected = { kind: 'mob', mob: t._mob }; renderInfo(G.selected); } };
+  }
+  box._mt.forEach((slot, i) => {
+    const o = mates[i]; slot.o = o || null; const on = !!o;
+    slot.sep.style.display = slot.f.style.display = on ? '' : 'none'; if (!on) { slot.t.style.display = 'none'; return; }
+    slot.sep.style.top = Math.round(y) + 'px'; y += 5;
+    slot.f.style.top = Math.round(y) + 'px';
+    if (o.c) { ufFillChar(slot.f, o.c); slot.f.title = 'Play ' + o.c.name; } else { ufFillComp(slot.f, o.u, c.level); slot.f.title = o.u.name + ' (companion)'; }
+    slot.f.classList.toggle('dead', !!(o.u ? o.u.dead : rt(o.c).ghost));
+    y += ufSlot(slot.f) * sm + 2;
+    const m = ufMateTarget(o); slot.t.style.display = m ? '' : 'none'; slot.t._mob = m;
+    if (m) { slot.t.style.top = Math.round(y) + 'px'; ufFillMob(slot.t, m, o.c, true); y += ufSlot(slot.t) * st + 3; }
+  });
+  box.style.height = Math.ceil(shown.length || mates.length ? y : ufSlot(me) * sp) + 'px';
   me.style.top = '0px';
 }
 /* height of a frame with its rows of auras (in texture pixels) */

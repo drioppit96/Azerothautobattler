@@ -324,10 +324,16 @@ function updatePatrol(c, o, dt) {
   if (o.trip) { const st = tripStep(c, o.trip); if (st === 'busy') return; if (st === 'fail') { log('Could not reach the ' + ROUTE_KIND[kind].name.toLowerCase() + '.'); c.order = null; renderOrder(); return; } o.trip = null; }
   if (kind === 'gather' && gatherStep(c, o, NODE_SEE)) return;
   if (kind === 'grind') {
-    // creatures near the route: the nearest one that is worth it, then on along the route
+    // every creature within the fight range of the route is attacked (the nearest first); then back to the route
     if (r.tgt && (r.tgt.st !== 'alive' || (r.tgt.banUntil || 0) > G.gameTime)) r.tgt = null;
-    if (!r.tgt && G.gameTime - (o.lookT || -9) > 0.5) { o.lookT = G.gameTime; const oo = { cx: c.pos.x, cy: c.pos.y, radius: o.radius || 45, loneWait: o.loneWait }; r.tgt = pickTarget(c, oo); o.loneWait = oo.loneWait; }
-    if (r.tgt) { const st = approach(c, r.tgt); if (st === 'gone') r.tgt = null; return; }
+    if (r.tgt && r.tgt.st === 'alive' && routeDist(R, r.tgt.x, r.tgt.y) > (R.range || ROUTE_FIGHT_RANGE) + 25) r.tgt = null;     // walked away from the route before the fight began
+    if (!r.tgt && G.gameTime - (o.lookT || -9) > 0.5) { o.lookT = G.gameTime; r.tgt = routeTarget(c, R, o); }
+    if (r.tgt) { o.off = true; const st = approach(c, r.tgt); if (st === 'gone') r.tgt = null; return; }
+    if (o.off) {      // back onto the route where it left it (the nearest point of the leg it was walking)
+      const a = R.pts[(o.i - 1 + R.pts.length) % R.pts.length], b = R.pts[o.i % R.pts.length]; const q = nearestOnSeg(c.pos, a, b);
+      if (Math.hypot(q.x - c.pos.x, q.y - c.pos.y) > 6 && !goTo(c, q.x, q.y, 3) && !r.blocked) return;
+      r.blocked = false; o.off = false;
+    }
   }
   const p = R.pts[o.i % R.pts.length];
   if (goTo(c, p.x, p.y, 3) || r.blocked) {
@@ -335,6 +341,28 @@ function updatePatrol(c, o, dt) {
     o.i = (o.i + 1) % R.pts.length; if (o.i === 0 && !R.open) o.laps++;
     if (R.open && o.i === 0) { R.pts.reverse(); o.i = 1; o.laps++; }
   }
+}
+const ROUTE_FIGHT_RANGE = 40;
+function nearestOnSeg(p, a, b) { const dx = b.x - a.x, dy = b.y - a.y; const L = dx * dx + dy * dy || 1; const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / L, 0, 1); return { x: a.x + dx * t, y: a.y + dy * t }; }
+function routeDist(R, x, y) {
+  let best = Infinity; const n = R.pts.length; const segs = R.open ? n - 1 : n;
+  for (let i = 0; i < segs; i++) { const a = R.pts[i], b = R.pts[(i + 1) % n]; const q = nearestOnSeg({ x, y }, a, b); best = Math.min(best, Math.hypot(q.x - x, q.y - y)); }
+  return best;
+}
+/* the grinding route: every creature near the way that can be fought (not critters, totems, town guards, elites,
+   ones far above the character's level or too dangerous) - the nearest to the character first */
+function routeTarget(c, R, o) {
+  const W = ensureWorld(c.pos.map); const rng = R.range || ROUTE_FIGHT_RANGE; let best = null, bd = Infinity;
+  // only along the leg being walked (what the character passes), so it keeps moving on instead of waiting for respawns
+  const n = R.pts.length; const a = R.pts[(o.i - 1 + n) % n], b = R.pts[o.i % n];
+  mobsNear(W, c.pos.x, c.pos.y, rng + 30, (m) => {
+    if (m.st !== 'alive' || !attackable(m, c) || (m.banUntil || 0) > G.gameTime || m.civ) return;
+    if (m.info && (m.info[5] === 8 || m.info[5] === 11)) return;
+    if (factionNpc(m) || m.rank >= 1 || dangerous(m, c) || m.lvl > c.level + 3) return;
+    const q = nearestOnSeg({ x: m.x, y: m.y }, a, b); if (Math.hypot(q.x - m.x, q.y - m.y) > rng) return;      // where it is now (some walk far from home)
+    const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d < bd) { bd = d; best = m; }
+  });
+  return best;
 }
 function patrolText(c, o) {
   const kind = o.kind || 'gather'; const R = routeOf(c, kind);
@@ -366,18 +394,23 @@ function routeAddPoint(w) {
 function renderRouteBar() {
   let el = $('routebar');
   if (!G.routeEdit) { if (el) el.hidden = true; return; }
-  if (!el) { el = document.createElement('div'); el.id = 'routebar'; $('mapwrap').appendChild(el); el.onclick = routeBarClick; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'routebar'; $('mapwrap').appendChild(el); el.onclick = routeBarClick;
+    el.onchange = (e) => { if (e.target.dataset && e.target.dataset.rrange != null) { const R = routeOf(active(), 'grind'); if (R) { R.range = clamp(+e.target.value || ROUTE_FIGHT_RANGE, 10, 150); save(); } } };
+  }
   const kind = typeof G.routeEdit === 'string' ? G.routeEdit : 'gather';
   const R = routeOf(active(), kind); const n = R ? R.pts.length : 0;
   el.hidden = false;
   el.innerHTML = '<b>' + ROUTE_KIND[kind].name + '</b> - click the map to add checkpoints (' + n + ')' +
     '<label class="chk"><input type="checkbox" data-ropen' + (R && R.open ? ' checked' : '') + '> walk back and forth</label>' +
+    (kind === 'grind' ? '<label class="chk">fight everything within <input type="number" data-rrange min="10" max="150" step="5" value="' + ((R && R.range) || ROUTE_FIGHT_RANGE) + '" style="width:52px"> yd of the route</label>' : '') +
     '<button class="mini" data-r="undo"' + (n ? '' : ' disabled') + '>Undo</button><button class="mini" data-r="clear"' + (n ? '' : ' disabled') + '>Clear</button>' +
     '<button class="mini" data-r="done">Done</button><button class="act" data-r="start"' + (n >= 2 ? '' : ' disabled') + '>Start route</button>';
 }
 function routeBarClick(e) {
   const c = active(); const kind = typeof G.routeEdit === 'string' ? G.routeEdit : 'gather'; const R = routeOf(c, kind);
   if (e.target.dataset && e.target.dataset.ropen != null) { if (R) R.open = e.target.checked; save(); return; }
+  if (e.target.dataset && e.target.dataset.rrange != null) return;
   const b = e.target.closest('[data-r]'); if (!b) return; const a = b.dataset.r;
   if (a === 'undo' && R) R.pts.pop();
   if (a === 'clear' && R) R.pts = [];

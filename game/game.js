@@ -462,7 +462,7 @@ function showMenu(sx, sy, sel) {
   }
   m.innerHTML = '<h4>' + esc(title) + '</h4>' +
     '<button data-a="travel">Travel here' + (away ? (isDungeonMap(c.pos.map) ? ' (out of the dungeon first)' : ' (ships and flights)') : '') + '</button>' +
-    (away ? '' : '<button data-a="grind">Grind around here</button>' + extra) +
+    (away ? '' : extra) +
     (typeof hasProf === 'function' && hasProf(c, 356) && !away ? '<button data-a="fish">Fish at the water here</button>' : '') +
     '<button data-a="route">Add a gathering route checkpoint here</button>' +
     '<button data-a="kroute">Add a grinding route checkpoint here</button>' +
@@ -475,7 +475,6 @@ function showMenu(sx, sy, sel) {
     if (a === 'travel') orderTravel(c, target, label);
     else if (a === 'fish') orderFishing(c, false, target);
     else if (a === 'route' || a === 'kroute') { const k = a === 'route' ? 'gather' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
-    else if (a === 'grind') orderGrind(c, target.x, target.y, 100, null, 'around ' + (sel.kind === 'ground' ? label : title));
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));
     else if (a === 'vendor') { const v = vendorList().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || vendorList().find((x) => x.e === sel.mob.e); if (v) orderVendor(c, v); }
@@ -660,12 +659,13 @@ function bindInput() {
     if (ptrs.size === 2) {
       const [p1, p2] = [...ptrs.values()]; pinch = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y), s: G.scale, cx: (p1.x + p2.x) / 2, cy: (p1.y + p2.y) / 2, ox: G.ox, oy: G.oy }; G.drag = null; return;
     }
-    G.drag = { x, y, ox: G.ox, oy: G.oy, moved: false, touch: e.pointerType === 'touch' }; hideMenu();
+    G.drag = { x, y, ox: G.ox, oy: G.oy, moved: false, touch: e.pointerType === 'touch', closed: G.menuOpen }; hideMenu();
   });
   cv.addEventListener('pointerup', (e) => {
     ptrs.delete(e.pointerId);
     if (pinch) { if (ptrs.size < 2) pinch = null; G.drag = null; return; }
     const d = G.drag; G.drag = null; if (!d || d.moved) return;
+    if (d.closed) return;                 // a click away from an open menu only closes it
     const [sx, sy] = pos(e);
     if (e.button === 2) return;
     const ex = !G.routeEdit && dungeonExitHit(sx, sy); if (ex) { dungeonExitClick(ex); return; }
@@ -679,6 +679,8 @@ function bindInput() {
     G.selected = sel; renderInfo(sel); showMenu(sx, sy, sel);
   });
   cv.addEventListener('contextmenu', (e) => { e.preventDefault(); hideMenu(); goUp(); });
+  // a click anywhere outside the menu closes it
+  document.addEventListener('pointerdown', (e) => { if (G.menuOpen && e.target !== cv && !$('menu').contains(e.target)) hideMenu(); }, true);
   cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; G.drag = null; });
   cv.addEventListener('pointermove', (e) => {
     const [sx, sy] = pos(e);
