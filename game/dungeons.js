@@ -460,7 +460,8 @@ function dungeonText(c, o) {
   if (o.phase === 'leaving') return { t: 'Dungeon: ' + o.label, d: 'walking to the exit' + (o.exit ? ' (' + Math.round(Math.hypot(o.exit.x - c.pos.x, o.exit.y - c.pos.y)) + ' yd)' : '') };
   if (o.phase === 'travel') return { t: (o.onlyTravel ? 'Travel to ' : 'Dungeon: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'to the entrance' };
   const left = d ? dungeonBossesLeft(c, d).length : 0;
-  return { t: 'Dungeon: ' + o.label, d: (o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
+  const pl = d && o.gi != null && G.pullPlans && G.pullPlans[d.map]; const rp = pl && pl.cum ? ' - route ' + Math.round(100 * (pl.cum[Math.min(o.gi, pl.cum.length - 1)] || 0) / Math.max(1, pl.length)) + '%' : '';
+  return { t: 'Dungeon: ' + o.label + rp, d: (o.target && o.target.wp ? 'following the route, ' : o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
 }
 function dungeonBossesLeft(c, d) {
   const W = ensureWorld(d.map); const ids = new Set(d.bosses.map((b) => b.e));
@@ -494,6 +495,54 @@ function dungeonQuestTargets(c, d) {
   for (const [e, qi] of gos) objSpawns(e).forEach((s, idx) => { if (s[0] === d.map && goFree(e, idx)) out.push({ go: true, e, i: idx, x: s[1], y: s[2], z: s[3], st: 'alive', info: [0, objName(e)], qi }); });
   return out;
 }
+/* ------------------------------------------------------------------ the guide route
+   With a route (make_dungeon_routes.py) the group walks it from start to end, a yard or two to either side of the line,
+   fights the packs that stand on the way and every boss of the guide on the way, and walks past the rest (unless it
+   comes too close and they come). Before a big pack the classes of the group crowd-control what they can (skilled
+   groups more often). */
+function dungeonGroupClasses(c) {
+  const cl = [c.cls]; for (const u of partyOf(c) || []) if (!u.dead && u.cls) cl.push(u.cls);
+  if (typeof groupOf === 'function' && groupOf(c)) for (const o of groupChars(groupOf(c))) if (o !== c) cl.push(o.cls);
+  return cl;
+}
+function dungeonSkill(c) { const p = partyOf(c) || []; const aw = p.filter((u) => u.aw != null).map((u) => u.aw); return aw.length ? aw.reduce((a, b) => a + b, 0) / aw.length : 5; }
+function routeCC(c, d, o, p) {
+  o.ccDone = o.ccDone || {}; const key = Math.round(p.x) + ',' + Math.round(p.y); if (o.ccDone[key]) return; o.ccDone[key] = true;
+  if (p.kind === 'boss' || p.n < 3) return;
+  if (Math.random() > 0.3 + 0.07 * dungeonSkill(c)) return;      // first-timers forget it
+  const cc = packCcFor(p, dungeonGroupClasses(c)).filter((x) => x.m.st === 'alive').slice(0, p.n >= 5 ? 2 : 1);
+  for (const x of cc) { addMobAura(c, x.m, { n: x.n, dur: 30000 }, { au: 12, lo: 0 }); fx(x.m.x, x.m.y, x.n, '#c8a2ff'); log(CLASS_NAMES[x.cls] + ': ' + x.n + ' on ' + (x.m.info ? x.m.info[1] : 'a creature') + '.'); }
+}
+/* the group moves to another wing (its own way in) or through a teleporter */
+function routeJump(c, d, q, say) {
+  const r = rt(c); c.pos = { map: d.map, x: q.x, y: q.y, z: q.z, o: c.pos.o }; r.mv = null; r.tgt = null;
+  for (const u of partyOf(c) || []) { u.x = q.x + (Math.random() - 0.5) * 4; u.y = q.y + (Math.random() - 0.5) * 4; }
+  if (typeof groupOf === 'function' && groupOf(c)) for (const g of groupChars(groupOf(c))) if (g !== c) { g.pos = { map: d.map, x: q.x + (Math.random() - 0.5) * 4, y: q.y + (Math.random() - 0.5) * 4, z: q.z, o: 0 }; rt(g).mv = null; }
+  const gr = (G.dgRoutes[String(d.map)] || [])[q.ri]; if (say) log('On to ' + (gr ? gr.name : 'the next part of ' + d.name) + '.');
+}
+function routeNext(c, d, o) {
+  const plan = dungeonPullPlan(d); if (!plan.cum) return undefined;          // no guide route for this dungeon
+  const R = plan.route; if (o.gi == null) o.gi = 0;
+  if (!o.routeBegun) { o.routeBegun = true; if (Math.hypot(R[0].x - c.pos.x, R[0].y - c.pos.y) > 60) routeJump(c, d, R[0], false); }
+  // the packs on the way up to here (and the guide's bosses): the nearest one not crowd-controlled first
+  const due = plan.packs.filter((p) => (p.kind === 'pull' || p.kind === 'boss') && p.gi != null && p.gi <= o.gi + 1 && p.members.some((m) => m.st === 'alive' && !m.unreach));
+  if (due.length) {
+    let best = null, bd = Infinity;
+    for (const p of due) for (const m of p.members) {
+      if (m.st !== 'alive' || m.unreach) continue; const ccd = (m.auras || []).some((a) => a.au === 12 && a.until > G.gameTime);
+      const dd = Math.hypot(m.x - c.pos.x, m.y - c.pos.y) + (ccd ? 1000 : 0); if (dd < bd) { bd = dd; best = { m, p }; }
+    }
+    if (best) { routeCC(c, d, o, best.p); return best.m; }
+  }
+  // on along the line
+  while (o.gi < R.length) {
+    const q = R[o.gi];
+    if (q.cut && Math.hypot(q.x - c.pos.x, q.y - c.pos.y) > 60) routeJump(c, d, q, true);     // another wing, or a teleporter
+    o.jit = o.jit || {}; if (!o.jit[o.gi]) o.jit[o.gi] = [(Math.random() - 0.5) * 3.5, (Math.random() - 0.5) * 3.5];
+    return { wp: true, gi: o.gi, x: q.x + o.jit[o.gi][0], y: q.y + o.jit[o.gi][1], z: q.z, st: 'alive', info: [0, 'the way on'] };
+  }
+  return null;     // the end of the route
+}
 function dungeonNext(c, d, o) {
   const W = ensureWorld(d.map); const full = G.state.settings.dgFullClear;
   // quests first (bosses are often quest targets anyway)
@@ -505,6 +554,7 @@ function dungeonNext(c, d, o) {
     if (o.questRun) return qc[0];
   }
   if (o.questRun && !full) return null;
+  if (!full) { const rn = routeNext(c, d, o); if (rn !== undefined) return rn; }
   const cand = full ? W.list.filter((m) => m.st === 'alive' && !m.unreach && attackable(m, c) && !(m.info && (m.info[5] === 8 || m.info[5] === 11))) : dungeonBossesLeft(c, d).filter((m) => m.st === 'alive');
   if (!cand.length) return null;
   cand.sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
@@ -565,7 +615,13 @@ function updateDungeon(c, o, dt) {
   // stuck = no fight and no walking for 3 minutes (or 15 minutes on one target)
   if (!o.lastPos || Math.hypot(c.pos.x - o.lastPos.x, c.pos.y - o.lastPos.y) > 8 || (r.threats && r.threats.length) || r.resting) { o.since = G.gameTime; o.lastPos = { x: c.pos.x, y: c.pos.y }; }
   if (!o.targetSince || o.targetFor !== o.target || o.killsAt !== o.kills) { o.targetFor = o.target; o.targetSince = G.gameTime; o.killsAt = o.kills; }
-  if (G.gameTime - (o.since || 0) > 180 || (G.gameTime - o.targetSince > 900 && !(r.threats && r.threats.length))) { o.target.unreach = true; if (o.target.go || o.target.npc) (o.qSkip = o.qSkip || []).push(dgTargetKey(o.target)); log('Cannot get to ' + (o.target.info ? o.target.info[1] : 'a creature') + ' - skipping it.'); o.target = null; return; }
+  if (G.gameTime - (o.since || 0) > 180 || (G.gameTime - o.targetSince > 900 && !(r.threats && r.threats.length))) { o.target.unreach = true; if (o.target.wp) o.gi = o.target.gi + 1; if (o.target.go || o.target.npc) (o.qSkip = o.qSkip || []).push(dgTargetKey(o.target)); log('Cannot get to ' + (o.target.info ? o.target.info[1] : 'a creature') + ' - skipping it.'); o.target = null; return; }
+  if (o.target.wp) {        // the way on along the route; packs that come into the way are fought on the spot
+    const t = o.target;
+    if (G.gameTime - (o.packT || 0) > 0.5) { o.packT = G.gameTime; const nx = routeNext(c, d, o); if (nx && !nx.wp) { o.target = nx; return; } }
+    if (goTo(c, t.x, t.y, 2.5, t.z) || r.blocked) { r.blocked = false; o.gi = t.gi + 1; o.target = null; o.since = G.gameTime; }
+    return;
+  }
   if (o.target.npc) {       // a quest giver or turn-in in here
     const t = o.target;
     if (!goTo(c, t.x, t.y, 3, t.z)) { if (r.blocked) { r.blocked = false; (o.qSkip = o.qSkip || []).push(dgTargetKey(t)); o.target = null; } return; }

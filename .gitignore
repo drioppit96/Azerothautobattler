@@ -7,5 +7,3 @@ android/
 __pycache__/
 *.pyc
 
-# dungeon wall drawings: only the drawn floors are sent (send_walls.bat), not the reference pictures
-dungeon_walls/*/reference/

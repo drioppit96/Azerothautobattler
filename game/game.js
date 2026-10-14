@@ -745,7 +745,6 @@ function bindInput() {
   $('btnLoad').onclick = () => $('fileLoad').click();
   $('btnChars').onclick = () => openCharSwitch();
   $('btnMeter').onclick = () => toggleMeter();
-  if ($('btnWalls')) $('btnWalls').onclick = () => openWallTest();
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
@@ -799,6 +798,7 @@ async function boot() {
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }
     try { G.d.eventMobs = new Set(await J('../gamedata/event_mobs.json')); } catch (e) { G.d.eventMobs = null; }
     try { G.d.dungeons = await J('../gamedata/dungeons.json'); } catch (e) { G.d.dungeons = null; console.warn('dungeons.json not found - no dungeons'); }
+    try { G.dgRoutes = await J('../gamedata/dungeon_routes.json'); } catch (e) { G.dgRoutes = {}; }
     try { G.d.prof = await J('../gamedata/professions.json'); } catch (e) { G.d.prof = null; console.warn('professions.json not found - no professions'); }
     try { G.d.skinning = await J('../gamedata/skinning.json'); } catch (e) { G.d.skinning = null; }
     try { G.d.gathering = await J('../gamedata/gathering.json'); } catch (e) { G.d.gathering = null; }

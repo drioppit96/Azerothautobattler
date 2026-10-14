@@ -26,12 +26,8 @@ git fetch origin main
 if errorlevel 1 (echo. & echo Download FAILED - send a screenshot of this window. & pause & exit /b)
 :apply
 rem the game files become exactly the GitHub version (your own extra files, like dbc and the excel files, are not touched)
-rem your dungeon wall drawings are kept: saved before the update, put back after it
-if exist "%TEMP%\azeroth_walls" rmdir /s /q "%TEMP%\azeroth_walls"
-if exist "dungeon_walls" xcopy "dungeon_walls" "%TEMP%\azeroth_walls\" /E /I /Y /Q >nul
 git reset --hard origin/main
 if errorlevel 1 (echo. & echo Update FAILED - send a screenshot of this window. & pause & exit /b)
-if exist "%TEMP%\azeroth_walls" xcopy "%TEMP%\azeroth_walls" "dungeon_walls\" /E /I /Y /Q >nul
 echo.
 echo Up to date. Start the game with game\start_game.bat
 pause
