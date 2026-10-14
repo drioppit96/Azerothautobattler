@@ -136,7 +136,8 @@ function dungeonInfoHtml(d) {
   if (!running) h += '<button class="act" data-dg="run"' + (low ? ' disabled title="Needs level ' + (d.lmin - (d.kind === 'raid' ? 0 : 3)) + '"' : '') + '>' + (here ? 'Clear it' : 'Run it') + ' with a group of ' + d.players + '</button>' +
     '<button class="mini" data-dg="solo"' + (low ? ' disabled' : '') + '>Run it alone</button>' +
     (!here && d.entrance ? '<button class="mini" data-dg="go">Travel to the entrance</button>' : '');
-  h += '</div>' + masteryDungeonHtml(c, d) + (typeof pullPlanHtml === 'function' && d.bosses.length ? pullPlanHtml(d) : '') + '<label class="chk"><input type="checkbox" data-dgset="dgFullClear"' + (G.state.settings.dgFullClear ? ' checked' : '') + '> Kill every creature (otherwise: the bosses and what is in the way)</label>';
+  h += '</div>' + masteryDungeonHtml(c, d) + (typeof pullPlanHtml === 'function' && d.bosses.length ? pullPlanHtml(d) : '') + '<label class="chk"><input type="checkbox" data-dgset="dgFullClear"' + (G.state.settings.dgFullClear ? ' checked' : '') + '> Kill every creature (otherwise: the bosses and what is in the way)</label>' +
+    '<label class="chk"><input type="checkbox" data-dgset="mercLoot"' + (G.state.settings.mercLoot ? ' checked' : '') + '> Mercenaries roll on the loot too (otherwise they are paid and everything is yours)</label>';
   return h;
 }
 /* only walk (fly, sail) to the entrance */

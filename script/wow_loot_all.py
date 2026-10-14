@@ -15,6 +15,7 @@ loot.json layout (compact on purpose, ~ a few MB):
                       expectedValueCopper, spawnCount]}
   quest_items {itemId: [questId, ...]}      items needed by quests (drop only with the quest)
   fishing_areas {areaId: [name, lootId]}
+  raw        {creature: {lootId: rows}, reference: {refId: rows}}  the tables as the server rolls them (wow_loot_groups.py)
 
 Expected value = average gold + sum(chance * average count * vendor sell price)
 over non-quest items (what a kill is worth if you sell everything).
@@ -27,6 +28,7 @@ from collections import defaultdict
 
 from wow_util import *   # noqa
 from wow_dungeons import LootBook
+from wow_loot_groups import raw_from_cursor
 
 OUTPUT = os.path.join(OUT_FOLDER, "wow_loot_all.xlsx")
 ONLY_SPAWNED = True       # skip creature templates that never spawn in the world
@@ -191,7 +193,9 @@ def main():
                        "tables": {k: {str(i): rows for i, rows in v.items()} for k, v in kinds.items()},
                        "creatures": creatures,
                        "quest_items": {str(k): v for k, v in quest_items.items()},
-                       "fishing_areas": {str(k): v for k, v in fish_areas.items()}})
+                       "fishing_areas": {str(k): v for k, v in fish_areas.items()},
+                       # the tables as the server rolls them (groups, references): game/combat.js lootDrops
+                       "raw": raw_from_cursor(cur, [c[6] for c in creatures.values() if c[6]])})
 
     # ------------------------------------------------------------- Excel
     book = BigBook(OUTPUT)

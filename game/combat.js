@@ -118,6 +118,42 @@ function questNeeds(c, id) {
   }
   return false;
 }
+/* what a corpse holds: [[item, count, questItem]] - rolled like the server does (loot.json "raw": groups give at most
+   one item each, references roll another table); without the raw tables, every item on its own (the flat chances) */
+function lootDrops(lootId, needs) {
+  const raw = G.d.loot.raw; const out = [];
+  const rows = raw && raw.creature[lootId];
+  if (!rows) {
+    for (const [item, pct, mn, mx, quest] of G.d.loot.tables.creature[lootId] || []) { if (quest && !needs(item)) continue; if (Math.random() * 100 < pct) out.push([item, irnd(mn, mx), !!quest]); }
+    return out;
+  }
+  lootRollRows(rows, needs, out, 0);
+  return out;
+}
+function lootRollRows(rows, needs, out, depth) {
+  const groups = {};
+  for (const r of rows) { if (r[2]) (groups[r[2]] = groups[r[2]] || []).push(r); else lootRollRow(r, needs, out, depth, false); }
+  for (const g in groups) {
+    // one item of the group at most: the ones with a chance first (a single roll over their chances), else one of the
+    // ones with an equal share
+    const list = groups[g]; let roll = Math.random() * 100; let pick = null;
+    for (const r of list) { if (!r[1]) continue; const ch = Math.abs(r[1]); if (ch >= 100 || roll < ch) { pick = r; break; } roll -= ch; }
+    if (!pick) { const eq = list.filter((r) => !r[1]); if (eq.length) pick = eq[Math.floor(Math.random() * eq.length)]; }
+    if (pick) lootRollRow(pick, needs, out, depth, true);
+  }
+}
+function lootRollRow(r, needs, out, depth, chosen) {
+  const [item, ch, , mref, mx] = r;
+  if (!chosen && Math.random() * 100 >= Math.abs(ch)) return;
+  if (mref < 0) {          // a reference table, rolled maxCount times
+    const ref = G.d.loot.raw.reference[-mref]; if (!ref || depth > 4) return;
+    for (let k = 0; k < Math.max(1, mx); k++) lootRollRows(ref, needs, out, depth + 1);
+    return;
+  }
+  const quest = ch < 0;
+  if (quest && !needs(item)) return;
+  out.push([item, irnd(Math.max(1, mref), Math.max(1, mref, mx)), quest]);
+}
 /* roll: group loot - {chars: the characters near (money is shared), comps: dungeon companions}; green and better items
    are rolled for (Need / Greed), the rest goes to the looter (c) */
 function lootMob(c, m, questOnly, roll) {
@@ -129,14 +165,13 @@ function lootMob(c, m, questOnly, roll) {
     c.gold += g - share * ((roll && roll.chars.length > 1 ? roll.chars.length : 1) - 1); if (g) got.push(money(g) + (share !== g ? ' (shared)' : ''));
     if (share !== g) for (const o of roll.chars) if (o !== c && share) { o.gold += share; withLog(o, () => log('Your share of the loot: ' + money(share) + '.')); }
   }
-  const rows = G.d.loot.tables.creature[info[6]] || [];
-  for (const [item, pct, mn, mx, quest] of rows) {
-    if (quest && !questNeeds(c, item)) continue;
+  // mercenaries are paid for the run: they roll on the loot only when the setting says so
+  if (roll && !G.state.settings.mercLoot) roll = Object.assign({}, roll, { comps: [] });
+  for (const [item, n, quest] of lootDrops(info[6], (it) => questNeeds(c, it))) {
     if (questOnly && !questNeeds(c, item)) continue;              // a group member: only its own quest drops
-    if (Math.random() * 100 >= pct) continue;
-    if (roll && !quest && !questNeeds(c, item) && itemQuality(item) >= LOOT_ROLL_Q && roll.chars.length + roll.comps.length > 1) { rolls.push([item, irnd(mn, mx)]); continue; }
+    if (roll && !quest && !questNeeds(c, item) && itemQuality(item) >= LOOT_ROLL_Q && roll.chars.length + roll.comps.length > 1) { rolls.push([item, n]); continue; }
     if (G.q.startBy[item] && (bagCount(c, item) || G.q.startBy[item].every((q) => c.done[q.id] || c.quests[q.id]))) continue;   // one quest starter is enough
-    const n = irnd(mn, mx); const before = c.bags.length;
+    const before = c.bags.length;
     if (addItem(c, item, n)) {
       const inst = c.bags.length > before ? c.bags[c.bags.length - 1] : null;
       got.push((n > 1 ? n + ' x ' : '') + itemName(item, inst && inst.id === item ? inst : null));
