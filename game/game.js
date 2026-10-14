@@ -745,6 +745,7 @@ function bindInput() {
   $('btnLoad').onclick = () => $('fileLoad').click();
   $('btnChars').onclick = () => openCharSwitch();
   $('btnMeter').onclick = () => toggleMeter();
+  if ($('btnWalls')) $('btnWalls').onclick = () => openWallTest();
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {

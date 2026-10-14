@@ -373,3 +373,17 @@ label.chk.dim{opacity:.55}
 #groupCard .grp-top select{max-width:74px}
 #groupCard .grp-n{min-width:64px}
 #groupCard .grp-top .mini{padding:1px 5px}
+
+/* the dungeon walls test window */
+#walltest{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:flex;align-items:center;justify-content:center}
+#walltest[hidden]{display:none}
+#walltest .wt-box{width:min(1240px,96vw);max-height:96vh;overflow:auto;background:#17120b;border:1px solid #6b5631;border-radius:8px;padding:8px 10px;box-shadow:0 8px 30px #000c}
+#walltest .wt-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+#walltest .wt-head b{color:#ffd76a;font-family:Georgia,serif;font-size:16px}
+#walltest .wt-head select{background:#0f0c08;color:#f0e6cc;border:1px solid #6b5631;border-radius:4px;padding:3px}
+#walltest .wt-head .mini.on{background:#c9a646;color:#1a1409}
+#walltest .wt-opts{display:flex;flex-wrap:wrap;gap:10px;margin-left:auto}
+#walltest .wt-opts .chk{margin:0}
+#walltest #wtClose{margin-left:4px}
+#walltest canvas{display:block;margin:0 auto;border:1px solid #3a2f1c;border-radius:4px;cursor:crosshair}
+#walltest #wtInfo{margin-top:5px;color:#d8ccb0;min-height:32px}
