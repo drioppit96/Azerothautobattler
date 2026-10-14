@@ -133,7 +133,7 @@ function addMobAura(c, m, sp, e) {
   const key = sp.n; let a = m.auras.find((x) => x.key === key && x.au === e.au);
   const tm = auraTalentMods(c, sp.n, sp.dur && sp.dur > 0 ? sp.dur / 1000 : 10, e.lo); const dur = tm.dur;
   if (!a) { a = { key, au: e.au, val: tm.val, stacks: 0, src: c, t: 0 }; m.auras.push(a); }
-  a.until = G.gameTime + dur; a.val = tm.val; a.src = c;
+  a.until = G.gameTime + dur; a.val = tm.val; a.src = c; a.cu = null;
   if (sp.stack) a.stacks = Math.min(sp.stack, a.stacks + 1); else a.stacks = 1;
   if (e.au === 3) { a.every = (e.amp || 3000) / 1000; a.t = 0; a.leech = !!e.leech; }
   if (e.au === 7 || e.au === 12) { a.brk = G.gameTime + 1; }
@@ -161,9 +161,10 @@ function mobAuraTick(W, m, dt) {
     if (a.au !== 3 || a.until <= G.gameTime - 0.01) continue;
     a.t += dt;
     while (a.t >= a.every && m.hp > 0) {
-      a.t -= a.every; const v = Math.round(a.val * (a.src ? charStats(a.src).dmgDone : 1));
-      m.hp -= v; fx(m.x, m.y, '' + v, a.leech ? '#c56cf0' : '#ff9a3c'); if (a.src) meterDmg(a.src, v, a.key);
-      if (a.src) { addThreat(m, a.src, v); if (a.leech && a.src.hp > 0) healSelf(a.src, v); }
+      a.t -= a.every; const v = Math.round(a.val * (a.src && !a.cu ? charStats(a.src).dmgDone : 1));
+      m.hp -= v; fx(m.x, m.y, '' + v, a.leech ? '#c56cf0' : '#ff9a3c');
+      if (a.cu) { if (a.src) meterGroup(a.src, a.cu, 'dmg', v, a.key); gThreat(m, a.cu, v); onMobDamaged(m); }      // a mercenary's
+      else { if (a.src) meterDmg(a.src, v, a.key); if (a.src) { addThreat(m, a.src, v); if (a.leech && a.src.hp > 0) healSelf(a.src, v); } }
       if (m.hp <= 0 && a.src) { killMob(a.src, m); return; }
     }
   }

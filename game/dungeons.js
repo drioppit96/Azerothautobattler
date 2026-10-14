@@ -267,14 +267,15 @@ function makeParty(c, d) {
   const myDps = Math.max(typical, (c.cls === 1 ? (s.mhDps + s.ohDps) * red * 1.3 : classDps(c, s, 1 - red))) * (raid ? 2.5 : 1);
   // the companions: hired from the roster (their skill and knowledge of this place decide how well they play)
   const plan = G.dgPlan && G.dgPlan.map === d.map && G.dgPlan.cid === c.id && G.dgPlan.t > G.gameTime - 900 ? G.dgPlan.p : partyPlan(c, d); G.dgPlan = null;
-  if (plan.fee) { const pay = Math.min(plan.fee, c.gold); c.gold -= pay; log('Hired ' + plan.members.length + ' companion' + (plan.members.length > 1 ? 's' : '') + ' for ' + money(pay) + '.'); }
-  else if (plan.members.length) log(plan.members.length + ' companions come along for free (first-timers).');
+  if (plan.fee) { const pay = Math.min(plan.fee, c.gold); c.gold -= pay; log('Hired ' + plan.members.length + ' mercenar' + (plan.members.length > 1 ? 'ies' : 'y') + ' for ' + money(pay) + '.'); }
+  else if (plan.members.length) log(plan.members.length + ' mercenaries come along for free (first-timers).');
   plan.members.forEach((x, i) => {
     const role = x.role; const mm = x.m; const ex = execLevel(mm, d.map), aw = awareLevel(mm, d.map); const eff = 0.65 + 0.35 * ex / 10;
     const hp = Math.round(s.maxHp * (role === 'tank' ? 1.7 : role === 'healer' ? 0.95 : 1.05) * (raid ? 1.6 : 1));
     out.push({ id: 'g' + i, rid: mm.id, cls: mm.cls, ex, aw, thr: role === 'tank' ? 3 * (0.7 + 0.3 * ex / 10) : role === 'healer' ? 0.5 : 0.55 + 0.35 * (1 - aw / 10),
       comp: true, role, name: mm.name, maxhp: hp, hp, dps: myDps * (role === 'dps' ? 1.0 : role === 'tank' ? 0.55 : 0.15) * eff, armorRed: role === 'tank' ? 0.55 : 0.2,
       x: c.pos.x + Math.cos(i * 2.1) * 3, y: c.pos.y + Math.sin(i * 2.1) * 3, swing: Math.random() * 2, cast: 0, dead: false, taunt: 0 });
+    mercInit(c, out[out.length - 1]);
   });
   rt(c).party = out; rt(c).dmgLog = [];
   return out;
@@ -291,8 +292,10 @@ function gThreat(m, u, v) { m.gThr = m.gThr || {}; m.gThr[u.id] = (m.gThr[u.id] 
 function compTakeHit(c, u, m, d) {
   d = Math.max(1, Math.round(d * (1 - u.armorRed)));
   if (Math.random() < (u.role === 'tank' ? 0.25 : 0.08)) { fx(u.x, u.y, u.role === 'tank' ? 'parry' : 'dodge', '#cfc6b0'); return; }
+  mercOnHit(u);
+  if (u.absorb && u.absorb.until > G.gameTime && u.absorb.v > 0) { const a = Math.min(d, u.absorb.v); u.absorb.v -= a; d -= a; if (a) fx(u.x, u.y, 'absorb ' + a, '#9fe0ff'); if (u.absorb.v <= 0) { u.absorb = null; const b = mercBuff(u, 'Power Word: Shield'); if (b) b.until = 0; } if (!d) return; }
   u.hp -= d; meterGroup(c, u, 'taken', d); fx(u.x, u.y, '-' + d, '#ff9a8a'); const r = rt(c); (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
-  if (u.hp <= 0) { u.hp = 0; u.dead = true; u.deadAt = G.gameTime; log(u.name + ' (' + u.role + ') has died.'); for (const x of threatsOf(c)) if (x.gThr) delete x.gThr[u.id]; }
+  if (u.hp <= 0) { u.hp = 0; u.dead = true; u.deadAt = G.gameTime; u.cb = null; u.buffs = []; u.absorb = null; log(u.name + ' (' + u.role + ') has died.'); for (const x of threatsOf(c)) if (x.gThr) delete x.gThr[u.id]; }
 }
 function partyStep(c, dt) {
   const p = partyOf(c); if (!p || !p.length) return; const r = rt(c);
@@ -305,7 +308,7 @@ function partyStep(c, dt) {
     if (u.dead) {
       // out of combat a healer brings them back; with every healer dead it takes longer (a soulstone, a long walk back)
       const healer = p.some((h) => h.role === 'healer' && !h.dead);
-      if (!threats.length && !r.ghost && now - u.deadAt > (healer ? 12 : 30)) { u.dead = false; u.hp = Math.round(u.maxhp * 0.6); u.x = c.pos.x; u.y = c.pos.y; log(u.name + ' is back on their feet.'); }
+      if (!threats.length && !r.ghost && now - u.deadAt > (healer ? 12 : 30)) { u.dead = false; u.hp = Math.round(u.maxhp * 0.6); if (u.pt === 0) u.mana = Math.round(u.maxmana * 0.6); u.x = c.pos.x; u.y = c.pos.y; log(u.name + ' is back on their feet.'); }
       return;
     }
     const mv = (tx, ty, stop) => { const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy); if (d > stop) { const st = Math.min(d - stop, 7.5 * dt); u.x += dx / d * st; u.y += dy / d * st; return false; } return true; };
@@ -315,26 +318,10 @@ function partyStep(c, dt) {
     }
     if (!threats.length) {
       const a = i * 2.4 + 0.6, rad = 3 + (i % 3) * 1.5; mv(c.pos.x + Math.cos(a) * rad, c.pos.y + Math.sin(a) * rad, 0.8);
-      u.hp = Math.min(u.maxhp, u.hp + u.maxhp * 0.06 * dt); return;
+      u.hp = Math.min(u.maxhp, u.hp + u.maxhp * 0.06 * dt); mercIdle(c, u, dt); return;
     }
-    if (u.role === 'healer') {
-      // keep about 18 yards behind the character and heal the one that needs it most
-      mv(c.pos.x, c.pos.y, 14);
-      u.cast -= dt; if (u.cast > 0) return;
-      let tgt = null, low = 0.9;
-      const s = charStats(c); if (!r.ghost && c.hp / s.maxHp < low) { tgt = 'c'; low = c.hp / s.maxHp; }
-      for (const o of p) if (!o.dead && o.hp / o.maxhp < low) { tgt = o; low = o.hp / o.maxhp; }
-      if (petAlive(c) && c.pet.hp / c.pet.maxhp < low) { tgt = 'pet'; }
-      if (!tgt) return;
-      const ux = (u.ex == null ? 5 : u.ex) / 10;
-      if (Math.random() < 0.15 * (1 - ux)) { const alive = p.filter((o) => !o.dead); tgt = alive[Math.floor(Math.random() * alive.length)] || tgt; }      // healed the wrong one
-      u.cast = 2.5 + (0.2 + 1.8 * (1 - ux)) * Math.random();
-      const v = Math.round(Math.max(12 + c.level * 4.5, inc * 2.5 * 1.25 / healers) * rnd(0.9, 1.1));
-      meterGroup(c, u, 'heal', tgt === 'c' ? Math.min(v, charStats(c).maxHp - c.hp) : tgt === 'pet' ? Math.min(v, c.pet.maxhp - c.pet.hp) : Math.min(v, tgt.maxhp - tgt.hp), 'Heals');
-      if (tgt === 'c') { const hp0 = c.hp; c.hp = Math.min(charStats(c).maxHp, c.hp + v); fx(c.pos.x, c.pos.y, '+' + Math.round(c.hp - hp0), '#5ee07a'); } else if (tgt === 'pet') c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); else { tgt.hp = Math.min(tgt.maxhp, tgt.hp + v); fx(tgt.x, tgt.y, '+' + v, '#5ee07a'); }
-      for (const m of threats) gThreat(m, u, v * 0.5 / threats.length);
-      return;
-    }
+    // spells: buffs, heals, debuffs, the casters' damage (mercs.js); the melee ones go on below
+    if (mercFight(c, u, dt, threats, inc, healers, mv)) return;
     // tank: take the creatures that are not on a tank; damage dealers: the character's target
     let m = null;
     if (u.role === 'tank') {
@@ -348,11 +335,12 @@ function partyStep(c, dt) {
     if (u.role === 'tank') for (const x of threats) if (x !== m && Math.hypot(x.x - u.x, x.y - u.y) < 10) gThreat(x, u, (c.level + 10) * dt * 2);      // shouts and area attacks keep the pack on the tank
     if (!m || m.st === 'dead') return;
     if (!mv(m.x, m.y, MELEE_RANGE - 0.5)) return;
+    mercMeleeExtra(c, u, m, threats);
     u.swing -= dt; if (u.swing > 0) return; u.swing += 2.0; if (Math.random() < 0.4 * (1 - (u.ex == null ? 5 : u.ex) / 10)) u.swing += 0.3 + Math.random() * 1.2;
     const diff = m.lvl - c.level; if (Math.random() < 0.05 + Math.max(0, diff) * 0.02) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
     const arm = Math.max(0, m.armor + mobMods(m).armor); const red = 1 - clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
     let v = u.dps * 2.0 * rnd(0.85, 1.15) * red; if (Math.random() < 0.08) v *= 2;
-    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, u.role === 'tank' ? 'Tanking attacks' : 'Attacks'); fx(m.x, m.y, '' + v, '#e8d8b8');
+    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m); gThreat(m, u, v); mercOnSwing(u, v); meterGroup(c, u, 'dmg', v, u.role === 'tank' ? 'Tanking attacks' : 'Attacks'); fx(m.x, m.y, '' + v, '#e8d8b8');
     if (m.st === 'alive') engage(m, c);
     if (m.hp <= 0) killMob(c, m);
   });
@@ -391,7 +379,7 @@ function enterDungeon(c, d, o) {
   if (o.group) makeParty(c, d); else r.party = null;
   if (c.pet && rt(c).pet) { rt(c).pet.x = c.pos.x + 2; rt(c).pet.y = c.pos.y + 1; }
   o.phase = 'inside'; o.entered = G.gameTime; o.lastProgress = G.gameTime;
-  log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' companions' : '') + '.');
+  log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' mercenaries' : '') + '.');
   if (isActive(c) && $('follow').checked) setMap(dungeonMapAt(c.pos), false, true);
   save();
 }
@@ -534,6 +522,24 @@ function routeNext(c, d, o) {
     }
     if (best) { routeCC(c, d, o, best.p); return best.m; }
   }
+  // back on the line: after a fight (a pack a bit ahead, or one that came at us) the group picks the route up at the
+  // nearest point ahead of where it stands - never walks back to a waypoint it is already past
+  if (o.gi > 0 && o.gi < R.length && !R[o.gi].cut) {
+    let bi = -1, bd = Infinity, bp = null;
+    for (let i = o.gi; i < Math.min(R.length, o.gi + 12); i++) {
+      if (R[i].cut) break; const a = R[i - 1], b = R[i];
+      const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy || 1;
+      const t = clamp(((c.pos.x - a.x) * vx + (c.pos.y - a.y) * vy) / L2, 0, 1);
+      const px = a.x + vx * t, py = a.y + vy * t, pz = (a.z || 0) + ((b.z || 0) - (a.z || 0)) * t;
+      const dd = Math.hypot(px - c.pos.x, py - c.pos.y) + Math.abs(pz - (c.pos.z || pz)) * 2;
+      if (dd <= bd + 0.5) { bd = dd; bi = i; bp = { x: px, y: py, z: pz, t }; }
+    }
+    if (bi > o.gi) { o.gi = bi; }
+    if (bp && bd > 8 && bp.t < 0.9) {       // well off the line: straight back to it, a little ahead
+      const a = R[bi - 1], b = R[bi], s = Math.min(1, bp.t + 4 / Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)));
+      return { wp: true, gi: bi - 1, x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s, z: (a.z || 0) + ((b.z || 0) - (a.z || 0)) * s, st: 'alive', info: [0, 'the way on'] };
+    }
+  }
   // on along the line
   while (o.gi < R.length) {
     const q = R[o.gi];
@@ -604,7 +610,7 @@ function updateDungeon(c, o, dt) {
   if (r.bagFull || bagFree(c) <= 0) { const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n); if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 3)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('Bags are full - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); } }
   if (G.gameTime - o.entered > DG_TIME_LIMIT * (d.kind === 'raid' ? 1.5 : 1)) { orderLeaveDungeon(c, null, 'Spent too long in ' + d.name + ' - left.'); return; }
   // before each pull: everyone back on their feet
-  const p = partyOf(c); const ready = masteryReady(c); if (p && p.some((u) => u.dead || u.hp < u.maxhp * ready)) { r.mv = null; o.since = G.gameTime; return; }
+  const p = partyOf(c); const ready = masteryReady(c); if (p && (p.some((u) => u.dead || u.hp < u.maxhp * ready) || mercsResting(c))) { r.mv = null; o.since = G.gameTime; return; }
   if (!o.target || o.target.st === 'dead' || o.target.unreach) {
     if (o.target && o.target.st === 'dead') o.lastProgress = G.gameTime;
     o.target = dungeonNext(c, d, o);

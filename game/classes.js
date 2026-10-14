@@ -360,6 +360,7 @@ function finishSpell(c, name, sp, tgt) {
   startCooldown(c, name, sp);
   if (pt === 0 && cost > 0) r.lastCast = G.gameTime;
   if (tgt && tgt !== c && tgt.equip && tgt.pos) { buffOther(c, tgt, sp); return; }      // a buff on another character
+  if (tgt && tgt.merc) { mercGiveBuff(c, null, tgt, name, sp); fx(tgt.merc.x, tgt.merc.y, name, '#9fe0ff'); return; }      // on a mercenary
   const mob = tgt && tgt !== c ? tgt : (sp.ef || []).some((e) => e.k === 'enemy' || e.k === 'area_enemy') ? r.tgt : null;
   applySpell(c, sp, mob, { name });
   fx(c.pos.x, c.pos.y, name, '#ffe9a8');
@@ -769,7 +770,9 @@ function groupBuffable(name, sp) {
   const au = (sp.ef || []).filter((e) => e.t === 6 || e.t === 35); return au.length > 0 && au.every((e) => e.k === 'friend');
 }
 function groupBuffTarget(c, name, sp) {
-  if (typeof groupOf !== 'function' || !groupOf(c) || !groupBuffable(name, sp)) return null;
+  if (!groupBuffable(name, sp)) return null;
+  if (rt(c).party && typeof mercBuffTarget === 'function') { const u = mercBuffTarget(c, name); if (u) return u; }     // the mercenaries
+  if (typeof groupOf !== 'function' || !groupOf(c)) return null;
   const g = groupOf(c);
   for (const o of groupChars(g)) {
     if (o === c || o.pos.map !== c.pos.map || o.hp <= 0 || rt(o).ghost || hasBuff(o, name)) continue;

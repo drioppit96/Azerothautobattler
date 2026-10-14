@@ -68,23 +68,38 @@ function ufFillChar(me, c) {
   ufSet(me, 'pw', pt + ':' + pv + '/' + pm, () => { me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv; });
   const cpn = r.cpTgt && r.cpTgt.st !== 'dead' ? r.cp || 0 : 0;
   ufSet(me, 'cp', cpn, (v) => { me._cp = me._cp || (() => { const d = document.createElement('div'); d.className = 'ufcp'; me.appendChild(d); return d; })(); me._cp.innerHTML = '<i class="on"></i>'.repeat(v) + (c.cls === 4 || c.form === 'cat' ? '<i></i>'.repeat(5 - v) : ''); });
-  ufSet(me, 'cast', r.cast ? r.cast.name + Math.round(10 * r.cast.t / r.cast.total) : '', () => {
-    me._cb = me._cb || (() => { const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); return d; })();
-    me._cb.hidden = !r.cast; if (r.cast) { me._cb.firstChild.style.width = Math.min(100, 100 * r.cast.t / Math.max(0.01, r.cast.total)) + '%'; me._cb.lastChild.textContent = r.cast.name; }
-  });
+  ufCastBar(me, r.cast || null);
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufAuras(me, ufPlayerAuras(c, r));
 }
-/* a dungeon companion's frame: its class icon, name, health and role */
+/* a mercenary's frame: class icon, name (coloured by role), health, mana / rage / energy, cast bar, buffs */
 function ufFillComp(me, u, lvl) {
   ufSet(me, 'img', 'cls' + u.cls, () => { me._img.src = 'img/class/' + u.cls + '.png'; });
   ufSet(me, 'name', u.name, (v) => { me._name.textContent = v; });
   ufSet(me, 'lv', lvl, (v) => { me._lv.textContent = v; });
-  ufSet(me, 'bg', 1, () => { ufBgImg(me, 'url(' + ufFrameTexture(0) + ')'); me._namebg.style.background = 'rgba(0,0,0,.35)'; });
+  ufSet(me, 'bg', u.role, (v) => { ufBgImg(me, 'url(' + ufFrameTexture(0) + ')'); me._namebg.style.background = v === 'tank' ? 'rgba(40,90,190,.55)' : v === 'healer' ? 'rgba(30,150,60,.55)' : 'rgba(170,40,30,.5)'; });
   const hp = Math.max(0, Math.round(u.hp));
   ufSet(me, 'hp', hp + '/' + u.maxhp + u.dead, () => { me._hpi.style.width = (u.dead ? 0 : 100 * hp / u.maxhp) + '%'; me._hpt.textContent = u.dead ? 'Dead' : hp + ' / ' + u.maxhp; });
-  ufSet(me, 'pw', u.role, (v) => { me._pwi.style.width = '0%'; me._pwt.textContent = v === 'tank' ? 'Tank' : v === 'healer' ? 'Healer' : 'Damage'; });
-  ufAuras(me, []);
+  const pt = u.pt || 0; const pm = Math.max(1, Math.round(pt === 0 ? u.maxmana || 0 : 100)); const pv = u.dead ? 0 : Math.round(pt === 1 ? u.rage || 0 : pt === 3 ? u.energy || 0 : u.mana || 0);
+  ufSet(me, 'pw', pt + ':' + pv + '/' + pm + (pt === 0 && !u.maxmana), () => {
+    if (pt === 0 && !u.maxmana) { me._pwi.style.width = '0%'; me._pwt.textContent = ''; return; }
+    me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv;
+  });
+  ufCastBar(me, u.cb && !u.dead ? u.cb : null);
+  const now = G.gameTime; const au = [];
+  for (const b of u.buffs || []) if (b.until > now) au.push({ n: b.name, ic: b.ic, left: b.until - now, k: 'buff' });
+  if (u.drinking) au.push({ n: 'Drink', ic: 'inv_drink_07', left: null, k: 'buff' });
+  ufAuras(me, u.dead ? [] : au);
+}
+/* the cast bar: under the player's frame; on the small frames of the group over the name */
+function ufCastBar(me, cb) {
+  ufSet(me, 'cast', cb ? cb.name + Math.round(20 * cb.t / cb.total) : '', () => {
+    if (!me._cb) {
+      const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); me._cb = d;
+      if (me.classList.contains('ufmate')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
+    }
+    me._cb.hidden = !cb; if (cb) { me._cb.firstChild.style.width = Math.min(100, 100 * cb.t / Math.max(0.01, cb.total)) + '%'; me._cb.lastChild.textContent = cb.name; }
+  });
 }
 /* a creature's frame, as seen by the character c */
 function ufFillMob(e, m, c, isTgt, noAuras) {
@@ -167,7 +182,7 @@ function renderUnitFrames() {
   box._mf.forEach((f, i) => {
     const o = mates[i]; f._o = o || null; f.style.display = o ? '' : 'none'; if (!o) return;
     f.style.top = Math.round(yl) + 'px';
-    if (o.c) { ufFillChar(f, o.c); f.title = 'Play ' + o.c.name; } else { ufFillComp(f, o.u, c.level); f.title = o.u.name + ' (companion)'; }
+    if (o.c) { ufFillChar(f, o.c); f.title = 'Play ' + o.c.name; } else { ufFillComp(f, o.u, c.level); f.title = o.u.name + ' (mercenary, ' + (o.u.role === 'healer' ? 'healer' : o.u.role === 'tank' ? 'tank' : 'damage') + ')'; }
     f.classList.toggle('dead', !!(o.u ? o.u.dead : rt(o.c).ghost));
     yl += ufSlot(f) * sm + 3;
   });
