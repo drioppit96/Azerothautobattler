@@ -48,7 +48,7 @@ function bagsHtml(c) {
     const b = c.bagSlots[i];
     h += b ? '<div class="slot bag" data-bag="' + i + '" title="' + esc(itemName(b.id)) + '">' + iconHtml(b) + '</div>' : '<div class="slot empty bag" data-bag="' + i + '"><span>Bag</span></div>';
   }
-  h += '<div class="bagcap">' + c.bags.length + ' / ' + bagCapacity(c) + '</div></div><div class="grid">';
+  h += '<div class="bagcap">' + c.bags.length + ' / ' + bagCapacity(c) + ' <button class="mini" data-bsort="1" title="Sort the bags: gear, consumables, trade goods, recipes, quest items, junk last; stacks merged">Sort</button></div></div><div class="grid">';
   const cap = bagCapacity(c);
   for (let i = 0; i < cap; i++) {
     const s = c.bags[i];
@@ -88,7 +88,7 @@ function closeSheet() { SH.open = false; $('sheet').hidden = true; hideItemTip()
 function renderSheet() {
   if (!SH.open) return; const c = active();
   $('sheetTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === SH.tab));
-  $('sheetTitle').textContent = c.name + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
+  $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
   $('sheet').classList.toggle('wide', SH.tab === 'talents');
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') {
@@ -97,7 +97,7 @@ function renderSheet() {
     if (f) { const i = $('profSearch'); if (i) { i.focus(); try { i.setSelectionRange(f[0], f[1]); } catch (e) { /* */ } } }
     return;
   }
-  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
+  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) : SH.tab === 'guild' ? guildHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
@@ -183,6 +183,8 @@ function bindSheet() {
     if (SH.tab === 'ah' && ahClick(e)) return;
     if (SH.tab === 'bank' && bankClick(e)) return;
     if (SH.tab === 'trade' && tradeClick(e)) return;
+    if (SH.tab === 'guild' && guildClick(e)) return;
+    if (e.target.closest('[data-bsort]')) { sortBags(c); return; }
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
     if (typeof rotationClick === 'function' && rotationClick(e)) return;
@@ -196,7 +198,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if (SH.tab === 'guild' && guildChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); });
   sh.addEventListener('dblclick', (e) => {

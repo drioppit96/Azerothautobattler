@@ -405,3 +405,18 @@ label.chk.dim{opacity:.55}
 .qsec{cursor:pointer;user-select:none}.qsec:hover{color:#ffe9a8}
 .q.qfold{padding:2px 0}.q.qfold .qt{cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .q.qfold .qt .carr{width:11px;font-size:10px}.q.qfold.open{padding-bottom:5px}
+
+/* guild */
+.guild .gnew{display:flex;gap:16px;align-items:flex-start}
+.guild .gprev{text-align:center;min-width:120px}
+.guild .gname{font:600 16px Georgia,serif;color:#40ff40}
+.guild .gform{flex:1}
+.guild .gform input[type=text]{background:#0f0c08;color:#f0e6cc;border:1px solid var(--line);border-radius:3px;padding:4px 6px;width:220px;margin:0 0 6px 6px}
+.guild .gemb{display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 6px}.guild .gemb .mini{font-size:16px;min-width:30px}.guild .gemb .on{background:#c9a646;color:#1a1409}
+.guild .gsw{display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 6px}.guild .gsw i{width:20px;height:20px;border:1px solid #000;border-radius:3px;cursor:pointer}.guild .gsw i.on{outline:2px solid #ffd76a}
+.guild .ghead{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.guild .gtabs{display:flex;gap:4px;margin-bottom:6px}.guild .gtabs .on{background:#c9a646;color:#1a1409}
+.guild .gmem{width:100%;border-collapse:collapse;font-size:13px}.guild .gmem th{text-align:left;color:var(--gold2);font:600 11px "Segoe UI";text-transform:uppercase}.guild .gmem td{padding:3px 4px;border-bottom:1px solid #2a2418}
+.guild .ginv{margin:8px 0}
+.guild .gbgrid{display:grid;grid-template-columns:repeat(auto-fill,40px);gap:3px;max-height:430px;overflow:auto}.guild .gbgrid .slot{width:40px;height:40px}
+.guild .glog{max-height:420px;overflow:auto}

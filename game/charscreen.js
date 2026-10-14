@@ -71,6 +71,7 @@ function charScreen(first) {
       else if (d.del) {
         const c = G.state.characters.find((x) => x.id === d.del); if (!c) return;
         if (!confirm('Delete ' + c.name + ' (level ' + c.level + ' ' + CLASS_NAMES[c.cls] + ') for good?')) return;
+        { const gc = charById(d.del); const gg = gc && typeof guildOf === 'function' && guildOf(gc); if (gg) { gg.members = gg.members.filter((m) => m.id !== d.del); if (!gg.members.length) G.state.guilds = guilds().filter((x) => x !== gg); else if (!gg.members.some((m) => m.rank === 0)) gg.members[0].rank = 0; } }
         G.state.characters = G.state.characters.filter((x) => x.id !== d.del);
         if (!G.state.characters.length) { G.state.activeId = null; save(); location.reload(); return; }
         if (G.state.activeId === d.del) { G.state.activeId = G.state.characters[0].id; save(); location.reload(); return; }

@@ -443,7 +443,7 @@ function bankHtml(c) {
   const v = bankerNear(c); const b = bankOf(c);
   if (!v) return '<div class="muted">No banker in reach.</div><p><button class="act" data-bkgo="1">Go to the nearest banker</button></p>' + (b.items.length ? '<div class="small muted">In the bank: ' + b.items.length + ' / ' + bankCapacity(c) + ' slots used.</div>' : '');
   let h = '<div class="vhead"><b>' + esc(v.name) + '</b> <span class="muted">(banker)</span></div>' +
-    '<div class="vbtns"><button class="mini" data-bkmats="1">Put away trade goods</button> <span class="muted small">Click an item in your bags to put it in, click one here to take it out.</span></div>';
+    '<div class="vbtns"><button class="mini" data-bksort="1">Sort</button> <button class="mini" data-bkmats="1">Put away trade goods</button> <span class="muted small">Click an item in your bags to put it in, click one here to take it out.</span></div>';
   h += '<div class="bagslots">';
   for (let i = 0; i < 6; i++) { const x = b.bags[i];
     h += i >= b.slots ? '<div class="slot empty bag locked" data-bkbuy="' + i + '" title="' + (i === b.slots ? 'Buy this bank bag slot: ' + money(BANK_BAG_COST[i]) : 'Locked') + '"><span>' + (i === b.slots ? money(BANK_BAG_COST[i]) : '&#128274;') + '</span></div>' :
@@ -457,6 +457,7 @@ function bankClick(e) {
   if ((b = t.closest('[data-bkgo]'))) { orderNpc(c, 'bank'); closeSheet(); return true; }
   if (!bankerNear(c)) return false;
   if ((b = t.closest('[data-bkmats]'))) { bankDepositMats(c); return true; }
+  if ((b = t.closest('[data-bksort]'))) { sortBank(c); return true; }
   if ((b = t.closest('[data-bkbuy]'))) { if (+b.dataset.bkbuy === bankOf(c).slots && confirm('Buy a bank bag slot for ' + money(BANK_BAG_COST[bankOf(c).slots]) + '?')) bankBuySlot(c); return true; }
   if ((b = t.closest('[data-bkbag]'))) { bankTakeBag(c, +b.dataset.bkbag); return true; }
   if ((b = t.closest('[data-bk]'))) { bankTake(c, +b.dataset.bk); return true; }
