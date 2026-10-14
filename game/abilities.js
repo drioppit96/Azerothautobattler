@@ -171,7 +171,19 @@ function mobAuraTick(W, m, dt) {
   if (m.auras.length > 6) m.auras = m.auras.filter((x) => x.until > G.gameTime);
 }
 /* damage on a creature breaks fear (not stuns) */
-function onMobDamaged(m) { if (m.auras) for (const a of m.auras) if (a.au === 7 && G.gameTime > a.brk) a.until = 0; }
+/* a hit on a creature (dmg: its size; none for damage over time): it breaks fear, and it can break a root early like in
+   the game (Frost Nova, Entangling Roots): chance = damage / (30 x level - 100), 50 below level 9 */
+function onMobDamaged(m, dmg) {
+  if (!m.auras) return; const now = G.gameTime;
+  for (const a of m.auras) {
+    if (a.until <= now) continue;
+    if (a.au === 7 && now > a.brk) a.until = 0;
+    else if (a.au === 26 && dmg > 0) {
+      const cap = m.lvl > 8 ? 30 * m.lvl - 100 : 50;
+      if (Math.random() < dmg / cap) { a.until = 0; fx(m.x, m.y, 'breaks free', '#9fe0ff'); }
+    }
+  }
+}
 
 /* ------------------------------------------------------------- casting */
 function abilityReady(c, name, sp) {
@@ -271,7 +283,7 @@ function applySpell(c, sp, tgt, ctx) {
           const lo = e.lo, hi = Math.max(e.lo, e.hi || e.lo);
           let v = Math.round((lo + Math.random() * (hi - lo)) * s.dmgDone);
           if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level)) { fx(m.x, m.y, 'resist', '#cfc6b0'); continue; }
-          m.hp -= v; onMobDamaged(m); fx(m.x, m.y, v + '', '#ffd23a'); meterDmg(c, v, sp.n);
+          m.hp -= v; onMobDamaged(m, v); fx(m.x, m.y, v + '', '#ffd23a'); meterDmg(c, v, sp.n);
           if (m.st === 'alive') engage(m, c);
           if (m.hp <= 0) killMob(c, m);
         }
@@ -281,7 +293,7 @@ function applySpell(c, sp, tgt, ctx) {
         if (sp.n === 'Execute' && tgt) {
           const rank = +((sp.r || '').replace(/\D/g, '') || 1); const extra = c.rage; c.rage = 0;
           const v = Math.round((e.lo + extra * rank * 3) * s.dmgDone * (1 - clamp((tgt.armor + mobMods(tgt).armor) / ((tgt.armor + mobMods(tgt).armor) + 400 + 85 * c.level), 0, 0.75)));
-          tgt.hp -= v; onMobDamaged(tgt); fx(tgt.x, tgt.y, v + ' Execute', '#ffd23a'); meterDmg(c, v, 'Execute'); if (tgt.hp <= 0) killMob(c, tgt); did = true;
+          tgt.hp -= v; onMobDamaged(tgt, v); fx(tgt.x, tgt.y, v + ' Execute', '#ffd23a'); meterDmg(c, v, 'Execute'); if (tgt.hp <= 0) killMob(c, tgt); did = true;
         }
         break;
       case 6: case 35:

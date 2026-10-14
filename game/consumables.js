@@ -102,7 +102,7 @@ function useConsumable(c, idx, why) {
     const m = r.tgt; if (!m || m.st === 'dead' || !fight) { if (!why) log('Nothing to throw it at.'); return false; }
     if (Math.hypot(m.x - c.pos.x, m.y - c.pos.y) > 30) return false;
     const hit = u.area ? (r.threats || []).filter((x) => Math.hypot(x.x - m.x, x.y - m.y) < 8) : [m];
-    for (const x of hit) { const v = irnd(u.lo, u.hi); x.hp -= v; onMobDamaged(x); meterDmg(c, v, itemName(inst.id)); addThreat(x, c, v); fx(x.x, x.y, v + '', '#ff9a3c'); if (x.st === 'alive') engage(x, c); if (x.hp <= 0) killMob(c, x); }
+    for (const x of hit) { const v = irnd(u.lo, u.hi); x.hp -= v; onMobDamaged(x, v); meterDmg(c, v, itemName(inst.id)); addThreat(x, c, v); fx(x.x, x.y, v + '', '#ff9a3c'); if (x.st === 'alive') engage(x, c); if (x.hp <= 0) killMob(c, x); }
     log('Threw ' + itemName(inst.id) + '.');
   } else if (u.kind === 'buff') {
     for (const e of u.sp.ef || []) if ((e.t === 6 || e.t === 35) && (e.k === 'self' || e.k === 'friend')) addBuff(c, u.sp, Object.assign({}, e, { mi: e.au === 29 && e.mi == null ? 0 : e.mi }));

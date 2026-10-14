@@ -489,7 +489,7 @@ function playerSwing(c, m, s, w, opts) {
   let critCh = s.crit - Math.max(0, diff) * 0.2; if (opts.name === 'Overpower') critCh += 25 * talentRank(c, 'Improved Overpower');
   let crit = false; if (Math.random() * 100 < critCh) { d *= opts.yellow ? 2 + 0.1 * talentRank(c, 'Impale') : 2; crit = true; }
   d = Math.max(1, Math.round(d));
-  m.hp -= d; onMobDamaged(m); if (c.cls !== 1) addThreat(m, c, d); meterDmg(c, d, opts.name || (opts.off ? 'Off hand' : 'Melee'));
+  m.hp -= d; onMobDamaged(m, d); if (c.cls !== 1) addThreat(m, c, d); meterDmg(c, d, opts.name || (opts.off ? 'Off hand' : 'Melee'));
   fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
   if (c.cls !== 1 && !opts.yellow) classMeleeHit(c, m, s, w, d, crit, opts);
   if (c.cls === 11 && c.form === 'bear' && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
@@ -516,7 +516,7 @@ function meleeTalentProcs(c, m, s, w, d, crit, opts) {
   const sw = (r.buffs || []).find((b) => b.sweep > 0 && b.until > G.gameTime);
   if (sw && !opts.sweep) {
     const other = attackersOf(c).find((x) => x !== m && x.hp > 0 && inMelee(c, x));
-    if (other) { sw.sweep--; other.hp -= d; onMobDamaged(other); meterDmg(c, d, 'Sweeping Strikes'); fx(other.x, other.y, '' + d, '#ffd23a'); if (other.hp <= 0) killMob(c, other); if (sw.sweep <= 0) sw.until = 0; }
+    if (other) { sw.sweep--; other.hp -= d; onMobDamaged(other, d); meterDmg(c, d, 'Sweeping Strikes'); fx(other.x, other.y, '' + d, '#ffd23a'); if (other.hp <= 0) killMob(c, other); if (sw.sweep <= 0) sw.until = 0; }
   }
 }
 /* talents that react to the character being hit */
