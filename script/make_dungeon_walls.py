@@ -302,6 +302,135 @@ def assign_floors(d, pts, inside):
     return res, zc
 
 
+EDITS = os.path.join(ROOT, "gamedata", "wall_edits")
+
+
+def comps(free):
+    """4-connected components of a bool picture; -> labels, count, labels touching the picture border (outside)"""
+    n, lab = cv2.connectedComponents(free.astype(np.uint8), connectivity=4)
+    border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
+    return lab, n, border
+
+
+def read_edits(mp, fn):
+    """the corrections drawn on the test window (gamedata/wall_edits/<map>_<floor>.png, picture pixels):
+    blue = walls, white = no wall here (opened), small blue circles = the way in"""
+    path = os.path.join(EDITS, "%s_%s.png" % (mp, fn))
+    if not os.path.exists(path):
+        return None
+    e = np.asarray(Image.open(path).convert("RGB"))
+    blue = e[..., 2] > 127
+    white = e[..., 0] > 127
+    # entrance circles: small round rooms closed by blue
+    lab, n, border = comps(~cv2.dilate(blue.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool))
+    ents = []
+    for k in range(1, n):
+        if k in border:
+            continue
+        ys, xs = np.nonzero(lab == k)
+        area = len(xs)
+        if not 20 <= area <= 700:
+            continue
+        w, h = xs.max() - xs.min() + 1, ys.max() - ys.min() + 1
+        if max(w, h) > 2.2 * min(w, h) or area < 0.45 * math.pi * (max(w, h) / 2) ** 2:
+            continue
+        ring = cv2.dilate((lab == k).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+        # a ring drawn on its own (not a room of the drawing): the blue line around it goes nowhere else
+        nb, bl = cv2.connectedComponents(blue.astype(np.uint8), connectivity=8)
+        ids = set(np.unique(bl[ring & blue])) - {0}
+        if not ids:
+            continue
+        line = np.isin(bl, list(ids))
+        ly, lx = np.nonzero(line)
+        if lx.max() - lx.min() > w + 24 or ly.max() - ly.min() > h + 24:
+            continue
+        ents.append((float(xs.mean()), float(ys.mean()), ring))
+    for x, y, ring in ents:
+        blue &= ~ring
+    try:
+        modes = json.load(open(os.path.join(EDITS, "modes.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        modes = {}
+    return {"blue": blue, "white": white, "ents": [(x, y) for x, y, _ in ents], "ent_rings": [r for _, _, r in ents],
+            "mode": modes.get("%s_%s" % (mp, fn))}
+
+
+def apply_edits(mask, ed, seeds):
+    """corrections on the calculated floor. When the blue lines enclose most of the floor they are the whole drawing
+    (the rooms they close that hold creatures are the floor); otherwise they add walls, the white opens walls, and a room
+    closed mostly by blue that was not floor before becomes floor"""
+    H, W = mask.shape
+    bd = cv2.dilate(ed["blue"].astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    white = cv2.dilate(ed["white"].astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    lab, n, border = comps(~bd)
+    enclosed = (lab > 0) & ~np.isin(lab, list(border))
+    inside_frac = (mask & enclosed).sum() / max(1, mask.sum())
+    seed_frac = sum(1 for u, v in seeds if enclosed[v, u]) / max(1, len(seeds))
+    pts = [(u, v) for u, v in seeds] + [(int(x), int(y)) for x, y in ed["ents"]]
+    if ed.get("mode") == "drawn" or (ed.get("mode") is None and (inside_frac >= 0.6 or (seed_frac >= 0.6 and ed["white"].sum() < 300))):
+        # gaps in the drawn lines let the floor run out to the parchment: thicker lines close them (the thinnest that
+        # keeps the most floor), then the floor is grown back to the drawn line
+        best = None
+        for k in (3, 5, 7, 9, 11, 15):
+            bk = cv2.dilate(ed["blue"].astype(np.uint8), np.ones((k, k), np.uint8)) > 0
+            lk, nk, brk = comps(~bk)
+            keep = {lk[v, u] for u, v in pts if 0 <= v < H and 0 <= u < W} - {0} - brk
+            area = np.isin(lk, list(keep)).sum() if keep else 0
+            if best is None or area > best[0] * 1.15:
+                best = (area, k, np.isin(lk, list(keep)) if keep else np.zeros((H, W), bool))
+        new = best[2]
+        if best[1] > 3:
+            new = cv2.dilate(new.astype(np.uint8), np.ones((best[1] - 2, best[1] - 2), np.uint8)) > 0
+        mode = "drawn"
+    else:
+        new = mask | white
+        ring = (cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & ~mask
+        lab2, n2, border2 = comps(~(bd | ring) | white)
+        for k in range(1, n2):
+            if k in border2:
+                continue
+            c = lab2 == k
+            area = c.sum()
+            if area > 0.15 * W * H or mask[c].mean() >= 0.6:
+                continue
+            edge = (cv2.dilate(c.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0) & ~c
+            if bd[edge].mean() >= 0.25:
+                new |= c
+        new = cv2.morphologyEx(new.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8)) > 0
+        mode = "edited"
+    for r in ed["ent_rings"]:
+        new |= r & ~bd
+    new &= ~bd
+    return new, mode
+
+
+def prune(mask, keep_pts, spot_pts, bosses):
+    """only what can be walked to: the parts holding the way in or a way to another floor; without those (or for big
+    parts) the ones with a boss or at least 5 creature spots"""
+    lab, n, _ = comps(mask)
+    H, W = mask.shape
+    cnt = np.zeros(n, int)
+    for u, v in spot_pts:
+        if 0 <= v < H and 0 <= u < W:
+            cnt[lab[v, u]] += 1
+    keep = set()
+    for u, v in keep_pts:
+        if 0 <= v < H and 0 <= u < W and lab[v, u]:
+            keep.add(lab[v, u])
+        else:      # just off the floor: the nearest part within a few pixels
+            y0, y1, x0, x1 = max(0, v - 6), min(H, v + 7), max(0, u - 6), min(W, u + 7)
+            win = lab[y0:y1, x0:x1]
+            if win.any():
+                keep.add(int(np.bincount(win[win > 0]).argmax()))
+    for u, v in bosses:
+        if 0 <= v < H and 0 <= u < W and lab[v, u]:
+            keep.add(lab[v, u])
+    for k in range(1, n):
+        if cnt[k] >= 5:
+            keep.add(k)
+    return np.isin(lab, list(keep)) & (lab > 0)
+
+
 def main():
     dg = json.load(open(os.path.join(ROOT, "gamedata", "dungeons.json"), encoding="utf-8"))["dungeons"]
     spawns = json.load(open(os.path.join(ROOT, "gamedata", "spawns.json"), encoding="utf-8"))["spawns"]
@@ -312,7 +441,7 @@ def main():
     for d in dg:
         pts = spots_of(d, spawns, objects)
         res = {"name": d["name"], "floors": {}, "links": []}
-        floors_pts = {}
+        floors_pts, masks = {}, {}
         imgs, inside, outs = {}, {}, {}
         for f in d["floors"]:
             path = os.path.join(ROOT, f["file"].replace("/", os.sep))
@@ -348,19 +477,45 @@ def main():
                 mask = segment(img, seeds, ~cv2.dilate(outs[f["n"]].astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool))
                 if mask.mean() > 0.42 and seeds:      # the outline was not found (the floor ran over the parchment)
                     mask = segment_ws(img, seeds)
-            # spots of this floor that lie on its floor (the ways between floors start there)
-            floors_pts[f["n"]] = [p for p in fp if mask[int(p[4]), int(p[3])]] or fp
-            h2, w2 = H // CELL, W // CELL
-            cells = mask[:h2 * CELL, :w2 * CELL].reshape(h2, CELL, w2, CELL).mean(axis=(1, 3)) >= 0.5
-            res["floors"][str(f["n"])] = {"w": int(w2), "h": int(h2), "cell": CELL, "drawn": drawn is not None,
-                                          "bits": base64.b64encode(np.packbits(cells.astype(np.uint8).ravel()).tobytes()).decode(),
-                                          "walls": walls_of(mask), "spots": len(seeds), "pct": round(float(mask.mean()) * 100, 2),
-                                          "zc": round(zc[f["n"]], 1) if zc.get(f["n"]) is not None else None}
+            ed = read_edits(d["map"], f["n"])
+            mode = "drawn" if drawn is not None else "auto"
+            ents = []
+            if ed is not None:
+                mask, mode = apply_edits(mask, ed, seeds)
+                ents = ed["ents"]
+            masks[f["n"]] = (mask, mode, ents, seeds, fp)
+        # the ways in: drawn circles, else the entrance of the dungeon data on its floor
+        for e in d.get("enter", []):
+            ef = floor_at(d, e["x"], e["y"], e.get("z"))
+            if ef is not None and ef["n"] in masks and not masks[ef["n"]][2]:
+                u, v = to_px(ef, e["x"], e["y"])
+                masks[ef["n"]][2].append((u, v))
+        for n_, (mask, mode, ents, seeds, fp) in masks.items():
+            floors_pts[n_] = [p for p in fp if mask[int(p[4]), int(p[3])]] or fp
         if len(floors_pts) > 1:
             res["links"] = links_of(d, floors_pts)
+        for f in d["floors"]:
+            if f["n"] not in masks:
+                continue
+            mask, mode, ents, seeds, fp = masks[f["n"]]
+            keep_pts = [(int(u), int(v)) for u, v in ents]
+            for L in res["links"]:
+                for side in ("a", "b"):
+                    if L[side]["f"] == f["n"]:
+                        keep_pts.append((int(L[side]["x"]), int(L[side]["y"])))
+            bosses = [tuple(int(t) for t in to_px(f, b["x"], b["y"])) for b in d.get("bosses", []) if floor_at(d, b["x"], b["y"], b.get("z")) is f]
+            mask = prune(mask, keep_pts, seeds, bosses)
+            H, W = mask.shape
+            h2, w2 = H // CELL, W // CELL
+            cells = mask[:h2 * CELL, :w2 * CELL].reshape(h2, CELL, w2, CELL).mean(axis=(1, 3)) >= 0.5
+            res["floors"][str(f["n"])] = {"w": int(w2), "h": int(h2), "cell": CELL, "drawn": mode != "auto", "mode": mode,
+                                          "bits": base64.b64encode(np.packbits(cells.astype(np.uint8).ravel()).tobytes()).decode(),
+                                          "walls": walls_of(mask), "spots": len(seeds), "pct": round(float(mask.mean()) * 100, 2),
+                                          "entrances": [[round(u, 1), round(v, 1)] for u, v in ents],
+                                          "zc": round(zc[f["n"]], 1) if zc.get(f["n"]) is not None else None}
         out[str(d["map"])] = res
         print("%-28s floors %d  links %d  %s" % (d["name"], len(res["floors"]), len(res["links"]),
-                                                ", ".join("%s:%s%%%s" % (k, v["pct"], "*" if v["drawn"] else "") for k, v in res["floors"].items())))
+                                                ", ".join("%s:%s%%%s" % (k, v["pct"], {"auto": "", "drawn": "*", "edited": "+"}[v["mode"]]) for k, v in res["floors"].items())))
     with open(os.path.join(ROOT, "gamedata", "dungeon_walls.json"), "w", encoding="utf-8") as fh:
         json.dump(out, fh, separators=(",", ":"))
     print("gamedata/dungeon_walls.json written")
