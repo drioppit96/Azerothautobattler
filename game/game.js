@@ -72,6 +72,22 @@ async function listDir(url, ext) {
     return out;
   } catch (e) { return []; }
 }
+/* class icons (game/img/class/<class>.png) and the dragon borders of elite and rare creatures, drawn on the map */
+const MAP_SPR = {};
+function mapSprite(src) { if (!(src in MAP_SPR)) { MAP_SPR[src] = null; const im = new Image(); im.onload = () => { MAP_SPR[src] = im; }; im.src = src; } return MAP_SPR[src]; }
+function drawClassIcon(ctx, cls, x, y, rad) {
+  const im = mapSprite('img/class/' + cls + '.png'); if (!im) return false;
+  ctx.drawImage(im, x - rad, y - rad, rad * 2, rad * 2); return true;
+}
+/* rank 1 elite, 2 rare elite, 3 boss, 4 rare (not friendly ones): a gold / silver ring around the dot, and the dragon of
+   the target frame around it when the map is zoomed in enough to see it */
+function drawRankRing(ctx, rank, x, y, r) {
+  const silver = rank === 2 || rank === 4; const col = silver ? '#e4e8f0' : '#ffc93a';
+  const im = r >= 3.5 ? mapSprite('img/' + (silver ? 'rare' : 'elite') + '_ring.png') : null;
+  if (im) { const k = (r + 2.5) / 24; ctx.drawImage(im, x - 51 * k, y - 44.5 * k, im.width * k, im.height * k); }
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 6.3); ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 6.3); ctx.stroke();
+}
 function loadImage(src) {
   return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 }
@@ -511,6 +527,7 @@ function draw() {
       }
       ctx.fillStyle = BEH_COLORS[mob.beh] || '#888'; ctx.globalAlpha = mob.st === 'chase' ? 1 : .85;
       ctx.beginPath(); ctx.arc(x, y, mob.st === 'chase' ? r + 1.5 : r, 0, 6.3); ctx.fill();
+      if (mob.rank && mob.beh !== 'F') { ctx.globalAlpha = 1; drawRankRing(ctx, mob.rank, x, y, mob.st === 'chase' ? r + 1.5 : r); }
       if (mob.st === 'chase' || (mob.hp < mob.maxhp && mob.st !== 'alive')) {
         ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(x - 10, y - r - 7, 20, 4); ctx.fillStyle = '#e0453a'; ctx.fillRect(x - 10, y - r - 7, 20 * Math.max(0, mob.hp / mob.maxhp), 4);
         if (mob.auras) { let k = 0; for (const a of mob.auras) if (a.until > G.gameTime) { ctx.fillStyle = a.au === 3 ? '#ff9a3c' : a.au === 12 || a.au === 7 ? '#ffffff' : '#a07cff'; ctx.fillRect(x - 10 + k * 5, y - r - 12, 4, 4); k++; } }
@@ -568,24 +585,21 @@ function draw() {
     const [x, y] = w2s(c.pos.x, c.pos.y);
     ctx.save(); ctx.translate(x, y);
     if (rt(c).ghost) ctx.globalAlpha = .55;
-    ctx.fillStyle = rt(c).ghost ? '#8fd0ff' : '#c0662a'; ctx.strokeStyle = '#fff3d0'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(0, 0, 8, 0, 6.3); ctx.fill(); ctx.stroke();
+    if (!drawClassIcon(ctx, c.cls, 0, 0, 10)) { ctx.fillStyle = rt(c).ghost ? '#8fd0ff' : '#c0662a'; ctx.strokeStyle = '#fff3d0'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 6.3); ctx.fill(); ctx.stroke(); }
     // facing arrow: o is the angle from north (x axis) towards west (y axis); screen east = -y
     const ang = Math.atan2(-Math.sin(c.pos.o), -Math.cos(c.pos.o));
     const dx = -Math.sin(c.pos.o), dy = -Math.cos(c.pos.o);
-    ctx.fillStyle = '#fff3d0'; ctx.beginPath(); ctx.moveTo(dx * 14, dy * 14); ctx.lineTo(dx * 7 - dy * 4, dy * 7 + dx * 4); ctx.lineTo(dx * 7 + dy * 4, dy * 7 - dx * 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff3d0'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(dx * 17, dy * 17); ctx.lineTo(dx * 10 - dy * 5, dy * 10 + dx * 5); ctx.lineTo(dx * 10 + dy * 5, dy * 10 - dx * 5); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();
-    ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#ffe9a8';
-    ctx.strokeText(c.name, x, y - 22); ctx.fillText(c.name, x, y - 22); ctx.textAlign = 'start';
-    const hm = charStats(c).maxHp; ctx.fillStyle = '#000'; ctx.fillRect(x - 14, y - 18, 28, 5); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 14, y - 18, 28 * Math.max(0, c.hp / hm), 5);
+    const hm = charStats(c).maxHp; ctx.fillStyle = '#000'; ctx.fillRect(x - 14, y - 19, 28, 5); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 14, y - 19, 28 * Math.max(0, c.hp / hm), 5);
   }
   // the other characters (running in the background, or waiting where they were left)
   for (const o of G.state.characters) {
     if (o === c || o.pos.map !== m.map || !inMap(m, o.pos.x, o.pos.y)) continue;
     const live = o.bg || (typeof sameGroup === 'function' && sameGroup(c, o)); const [x, y] = w2s(o.pos.x, o.pos.y); ctx.globalAlpha = live ? 1 : 0.6;
-    ctx.fillStyle = CLASS_COLOR[o.cls] || '#9fc7ff'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke();
-    ctx.font = 'bold 11px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#cfe3ff';
-    const t = o.name + (live ? '' : ' (paused)'); ctx.strokeText(t, x, y - 11); ctx.fillText(t, x, y - 11); ctx.textAlign = 'start'; ctx.globalAlpha = 1;
+    if (!drawClassIcon(ctx, o.cls, x, y, 8)) { ctx.fillStyle = CLASS_COLOR[o.cls] || '#9fc7ff'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke(); }
+    if (!live) { ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#cfe3ff'; ctx.strokeText('paused', x, y - 11); ctx.fillText('paused', x, y - 11); ctx.textAlign = 'start'; }
+    ctx.globalAlpha = 1;
   }
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
     const [x, y] = w2s(c.pos.x, c.pos.y); const r = rt(c);

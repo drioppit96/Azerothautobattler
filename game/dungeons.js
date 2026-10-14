@@ -363,9 +363,8 @@ function drawParty(ctx, m) {
   for (const u of p) {
     if (m.dmap && dungeonFloorAt(m.dungeon, u.x, u.y, c.pos.z) !== m.floor) continue;
     const [x, y] = w2s(u.x, u.y); ctx.globalAlpha = u.dead ? 0.35 : 1;
-    ctx.fillStyle = DG_ROLE_COLOR[u.role]; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke();
+    if (!(u.cls && drawClassIcon(ctx, u.cls, x, y, 7))) { ctx.fillStyle = DG_ROLE_COLOR[u.role]; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke(); }
     ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 11, 18, 3); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 9, y - 11, 18 * u.hp / u.maxhp, 3);
-    if (G.scale > 1.2 && p.length <= 6) { ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#e8dcc0'; ctx.strokeText(u.name, x, y + 15); ctx.fillText(u.name, x, y + 15); }
   }
   ctx.restore();
 }

@@ -91,7 +91,12 @@ function renderSheet() {
   $('sheetTitle').textContent = c.name + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
   $('sheet').classList.toggle('wide', SH.tab === 'talents');
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
-  if (SH.tab === 'prof') { $('sheetLeft').innerHTML = professionsHtml(c); $('sheetBags').innerHTML = bagsHtml(c); return; }
+  if (SH.tab === 'prof') {
+    const f = document.activeElement && document.activeElement.id === 'profSearch' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+    $('sheetLeft').innerHTML = professionsHtml(c); $('sheetBags').innerHTML = bagsHtml(c);
+    if (f) { const i = $('profSearch'); if (i) { i.focus(); try { i.setSelectionRange(f[0], f[1]); } catch (e) { /* */ } } }
+    return;
+  }
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
@@ -190,6 +195,7 @@ function bindSheet() {
   });
   sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
+  sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); });
   sh.addEventListener('dblclick', (e) => {
     const el = e.target.closest('[data-idx],[data-slot]'); if (!el) return; const c = active();
     if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id); if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }

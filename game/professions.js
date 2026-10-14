@@ -417,55 +417,89 @@ function drawProfOverlay(ctx, m) {
 /* ------------------------------------------------------------------ the professions window */
 function profBar(c, id) { const s = profState(c).skills[id]; return '<div class="bar xp pbar"><i style="width:' + (100 * s.v / Math.max(1, s.max)) + '%"></i><span>' + s.v + ' / ' + s.max + '</span></div>'; }
 function reagHtml(c, r) { return (r.re || []).map(([it, n]) => { const have = bagCount(c, it); return '<span class="reag' + (have >= n ? '' : ' miss') + '" data-iid="' + it + '">' + esc(itemName(it)) + ' ' + Math.min(have, 999) + '/' + n + '</span>'; }).join(' '); }
+/* the professions window: every part is a drop-down section (click its title), a search over all recipes
+   (recipe, item and reagent names) and a "can craft now" filter */
+const PROFUI = { q: '', can: false };
+function profOpen(key, def) { const o = G.state.settings.profOpen || {}; return key in o ? o[key] : def; }
+function profSection(key, title, body, def, force) {
+  const open = force || profOpen(key, def);
+  return '<div class="sgroup psec' + (open ? ' open' : '') + '"><h5 data-psec="' + key + '"><span class="parr">' + (open ? '&#9662;' : '&#9656;') + '</span> ' + title + '</h5>' + (open ? '<div class="pbody">' + body + '</div>' : '') + '</div>';
+}
+function recipeMatches(r, q) {
+  if (!q) return true; if (r.n.toLowerCase().indexOf(q) >= 0) return true;
+  if (r.cr && itemName(r.cr[0]).toLowerCase().indexOf(q) >= 0) return true;
+  return (r.re || []).some(([it]) => itemName(it).toLowerCase().indexOf(q) >= 0);
+}
 function professionsHtml(c) {
   if (!PD()) return '<div class="muted">professions.json is missing (run script\\wow_professions_json.py).</div>';
-  const P = profState(c); let h = '<div class="prof">';
+  const P = profState(c); const q = PROFUI.q.trim().toLowerCase(); const filtering = !!q || PROFUI.can;
+  let h = '<div class="prof"><div class="psearch"><input id="profSearch" type="search" placeholder="Search recipes, items, reagents..." value="' + esc(PROFUI.q) + '">' +
+    '<label class="chk"><input type="checkbox" data-pcan="1"' + (PROFUI.can ? ' checked' : '') + '> Can craft now</label>' +
+    '<button class="mini" data-pall="1" title="Open every section">Open all</button><button class="mini" data-pall="0" title="Close every section">Close all</button></div>';
   const mine = Object.keys(P.skills).map(Number);
-  h += '<div class="sgroup"><h5>Your professions</h5>';
-  if (!mine.length) h += '<div class="muted small">None yet. Pick up to two main professions and any of the secondary ones below.</div>';
+  let b = '';
+  if (!mine.length) b += '<div class="muted small">None yet. Pick up to two main professions and any of the secondary ones below.</div>';
   for (const id of mine) {
     const nx = profNextRank(c, id); const ri = profRankIdx(c, id);
-    h += '<div class="prow"><b>' + esc(profName(id)) + '</b> <span class="muted small">' + (PROF_RANK_NAMES[ri] || '') + '</span>' + profBar(c, id) +
+    b += '<div class="prow"><b>' + esc(profName(id)) + '</b> <span class="muted small">' + (PROF_RANK_NAMES[ri] || '') + '</span>' + profBar(c, id) +
       '<button class="mini" data-ptrain="' + id + '" title="Walks to the nearest trainer and learns new ranks and recipes">Find trainer</button>' +
       '<button class="mini red" data-punlearn="' + id + '" title="Forget this profession">&#10005;</button>' +
       (nx ? '<div class="small muted">Next: ' + PROF_RANK_NAMES[nx.idx] + ' (up to ' + nx.max + ') at level ' + nx.lvl + ', skill ' + (PD().skills[id].ranks[ri][1] - 25) + ', ' + money(nx.cost) + (nx.ready ? ' - <span class="up">ready, visit a trainer</span>' : '') + '</div>' : '') + '</div>';
   }
-  h += '</div><div class="sgroup"><h5>Learn a profession</h5><div class="plearn">';
+  h += profSection('mine', 'Your professions', b, true);
+  b = '<div class="plearn">';
   for (const id of Object.keys(PD().skills).map(Number).filter((x) => !P.skills[x])) {
     const prim = profKind(id) !== 'secondary'; const block = prim && primaryCount(c) >= PROF_PRIMARY_MAX;
-    h += '<button class="mini" data-ptrain="' + id + '"' + (block ? ' disabled title="You already have two main professions"' : '') + '>' + esc(profName(id)) + (prim ? '' : ' <span class="muted">(secondary)</span>') + '</button>';
+    b += '<button class="mini" data-ptrain="' + id + '"' + (block ? ' disabled title="You already have two main professions"' : '') + '>' + esc(profName(id)) + (prim ? '' : ' <span class="muted">(secondary)</span>') + '</button>';
   }
-  h += '</div><div class="small muted">The button walks to the nearest trainer of your faction (by flight path and ship if needed) and learns it there.</div></div>';
+  b += '</div><div class="small muted">The button walks to the nearest trainer of your faction (by flight path and ship if needed) and learns it there.</div>';
+  h += profSection('learn', 'Learn a profession', b, false);
   // crafting
+  let hits = 0;
   for (const id of mine) {
-    const list = Object.keys(P.recipes).filter((sid) => PD().recipes[sid] && PD().recipes[sid].skill === id).sort((a, b) => PD().recipes[b].learn - PD().recipes[a].learn);
-    if (id === FISHING) { h += fishingHtml(c); continue; }
-    if (profKind(id) === 'gather' && !list.length) continue;
-    h += '<div class="sgroup"><h5>' + esc(profName(id)) + ' - recipes (' + list.length + ')</h5>';
-    if (!list.length) h += '<div class="muted small">No recipes yet - visit a trainer.</div>';
+    if (id === FISHING) { if (!filtering) h += profSection('fish', 'Fishing', fishingHtml(c), true); continue; }
+    const all = Object.keys(P.recipes).filter((sid) => PD().recipes[sid] && PD().recipes[sid].skill === id).sort((a, b) => PD().recipes[b].learn - PD().recipes[a].learn);
+    if (profKind(id) === 'gather' && !all.length) continue;
+    const list = all.filter((sid) => recipeMatches(PD().recipes[sid], q) && (!PROFUI.can || craftCount(c, sid) > 0));
+    if (filtering && !list.length) continue;
+    hits += list.length;
+    b = '';
+    if (!all.length) b += '<div class="muted small">No recipes yet - visit a trainer.</div>';
     for (const sid of list) {
       const r = PD().recipes[sid]; const col = recipeColor(c, r); const n = craftCount(c, sid);
       const it = r.cr ? itemRow(r.cr[0]) : null;
-      h += '<div class="rrow">' + (it && it.ic ? '<img class="sic" src="../icons/' + it.ic.toLowerCase() + '.jpg" alt="">' : '<span class="sic"></span>') +
+      b += '<div class="rrow">' + (it && it.ic ? '<img class="sic" src="../icons/' + it.ic.toLowerCase() + '.jpg" alt="">' : '<span class="sic"></span>') +
         '<div class="rname"><b class="rc-' + col + '"' + (r.cr ? ' data-iid="' + r.cr[0] + '"' : '') + '>' + esc(r.n) + '</b>' + (n ? ' <span class="muted">[' + n + ']</span>' : '') + '<div class="small">' + reagHtml(c, r) + '</div></div>' +
         '<button class="mini" data-pcraft="' + sid + '"' + (n ? '' : ' disabled') + '>' + (r.ench ? 'Enchant' : 'Craft') + '</button>' +
         (r.ench ? '' : '<button class="mini" data-pcraftall="' + sid + '"' + (n > 1 ? '' : ' disabled') + '>All</button>') + '</div>';
     }
-    h += '<div class="small muted">Colors: <span class="rc-orange">orange</span> always raises the skill, <span class="rc-yellow">yellow</span> usually, <span class="rc-green">green</span> rarely, <span class="rc-grey">grey</span> never.</div></div>';
+    b += '<div class="small muted">Colors: <span class="rc-orange">orange</span> always raises the skill, <span class="rc-yellow">yellow</span> usually, <span class="rc-green">green</span> rarely, <span class="rc-grey">grey</span> never.</div>';
+    const craftable = all.filter((sid) => craftCount(c, sid) > 0).length;
+    h += profSection('r' + id, esc(profName(id)) + ' - recipes <span class="pcount">' + (filtering ? list.length + ' of ' + all.length : all.length) + (craftable ? ', ' + craftable + ' craftable' : '') + '</span>', b, false, filtering);
   }
+  if (filtering && !hits) h += '<div class="sgroup muted small">No recipe matches' + (q ? ' "' + esc(PROFUI.q) + '"' : '') + (PROFUI.can ? ' that you can craft now' : '') + '.</div>';
+  if (filtering) return h + '</div>';
   // gathering
   const R = routeOf(c, 'gather'); const nf = Object.keys(P.found).length;
-  h += '<div class="sgroup"><h5>Gathering route</h5><div class="small">' + (R && R.pts.length ? R.pts.length + ' checkpoints on ' + (R.map === 0 ? 'Eastern Kingdoms' : 'Kalimdor') + (R.open ? ', walked back and forth' : ', walked in a loop') : 'No route yet.') + '</div>' +
+  b = '<div class="small">' + (R && R.pts.length ? R.pts.length + ' checkpoints on ' + (R.map === 0 ? 'Eastern Kingdoms' : 'Kalimdor') + (R.open ? ', walked back and forth' : ', walked in a loop') : 'No route yet.') + '</div>' +
     '<div class="pbtns"><button class="mini" data-proute="edit">Edit route on the map</button><button class="mini" data-proute="clear"' + (R && R.pts.length ? '' : ' disabled') + '>Clear route</button><button class="act" data-proute="start"' + (R && R.pts.length >= 2 ? '' : ' disabled') + '>Start route</button></div>' +
     '<div class="small muted">The character walks from checkpoint to checkpoint and gathers every herb or ore it can (within ' + NODE_SEE + ' yards), fights what attacks it, skins its kills (Skinning) and sells junk when the bags are full. Nodes are hidden on the map until gathered once (' + nf + ' found so far).</div>' +
     '<label class="chk"><input type="checkbox" data-pset="gatherWhileLeveling"' + (G.state.settings.gatherWhileLeveling !== false ? ' checked' : '') + '> Gather nodes near the way while leveling and questing</label>' +
     '<label class="chk"><input type="checkbox" data-pset="autoTrainProf"' + (G.state.settings.autoTrainProf !== false ? ' checked' : '') + '> Visit a trainer for the next rank by itself while leveling</label>' +
-    '<label class="chk"><input type="checkbox" data-pset="showNodes"' + (G.state.settings.showNodes !== false ? ' checked' : '') + '> Show found nodes on the map</label></div>';
+    '<label class="chk"><input type="checkbox" data-pset="showNodes"' + (G.state.settings.showNodes !== false ? ' checked' : '') + '> Show found nodes on the map</label>';
+  h += profSection('route', 'Gathering route', b, false);
   return h + '</div>';
 }
+/* typing in the search box: the list follows at once, the box keeps the focus */
+function professionsInput(e) {
+  if (e.target.id !== 'profSearch') return false;
+  PROFUI.q = e.target.value; renderSheet(); return true;
+}
 function professionsClick(e) {
-  const c = active(); const b = e.target.closest('[data-ptrain],[data-punlearn],[data-pcraft],[data-pcraftall],[data-proute]'); if (!b) return false;
+  const c = active(); const b = e.target.closest('[data-ptrain],[data-punlearn],[data-pcraft],[data-pcraftall],[data-proute],[data-psec],[data-pall]'); if (!b) return false;
   const d = b.dataset;
+  if (d.psec) { const o = G.state.settings.profOpen = G.state.settings.profOpen || {}; const def = d.psec === 'mine' || d.psec === 'fish'; o[d.psec] = !profOpen(d.psec, def); save(); renderSheet(); return true; }
+  if (d.pall) { const o = G.state.settings.profOpen = {}; for (const k of ['mine', 'learn', 'fish', 'route'].concat(Object.keys(profState(c).skills).map((x) => 'r' + x))) o[k] = d.pall === '1'; save(); renderSheet(); return true; }
   if (d.ptrain) { orderTrainer(c, +d.ptrain); closeSheet(); return true; }
   if (d.punlearn) { if (confirm('Forget ' + profName(+d.punlearn) + ' and all its recipes?')) unlearnProfession(c, +d.punlearn); renderSheet(); return true; }
   if (d.pcraft) { craft(c, d.pcraft, 1); renderSheet(); return true; }
@@ -476,7 +510,8 @@ function professionsClick(e) {
   return false;
 }
 function professionsChange(e) {
-  const t = e.target; if (!t.dataset || t.dataset.pset == null) return false;
+  const t = e.target; if (t.dataset && t.dataset.pcan) { PROFUI.can = t.checked; renderSheet(); return true; }
+  if (!t.dataset || t.dataset.pset == null) return false;
   G.state.settings[t.dataset.pset] = t.checked; save(); syncNodeToggle(); return true;
 }
 function syncNodeToggle() { const n = $('shownodes'); if (n) n.checked = G.state.settings.showNodes !== false; }

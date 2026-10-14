@@ -263,6 +263,15 @@ code{background:#000;padding:0 4px;border-radius:3px}
 
 /* professions */
 .prof .prow{padding:5px 0;border-bottom:1px solid #2a2418}
+.prof .psearch{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.prof .psearch input[type=search]{flex:1;min-width:0;background:#0f0c08;border:1px solid var(--line);border-radius:4px;color:#f0e6cc;padding:5px 8px;font:13px "Segoe UI"}
+.prof .psearch input[type=search]:focus{outline:none;border-color:var(--gold2)}
+.prof .psearch .chk{margin:0;white-space:nowrap}
+.prof .psec>h5{cursor:pointer;user-select:none;margin:0;padding:2px 0}
+.prof .psec>h5:hover{color:#ffe9a8}
+.prof .psec.open>h5{margin-bottom:4px}
+.prof .parr{display:inline-block;width:12px;color:#c9a64a}
+.prof .pcount{text-transform:none;letter-spacing:0;color:#9a8f77;font-weight:400}
 .prof .prow .pbar{display:inline-block;width:160px;height:14px;vertical-align:middle;margin:0 8px}
 .prof .plearn{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
 .prof .rrow{display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #221d13}

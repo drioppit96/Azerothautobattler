@@ -122,11 +122,11 @@ function fishingHtml(c) {
   if (!hasProf(c, FISHING)) return '';
   const p = fishPole(c); const l = fishLure(c); const z = zoneAt(c.pos.map, c.pos.x, c.pos.y); const req = fishZoneReq(z);
   const fishing = c.order && c.order.type === 'fish';
-  return '<div class="sgroup"><h5>Fishing</h5><div class="small">Skill ' + profSkill(c, FISHING) + (p && p.bonus ? ' + ' + p.bonus + ' (pole)' : '') + (l ? ' + ' + l.bonus + ' (' + esc(l.name) + ', ' + fmtTime(l.until - G.gameTime) + ')' : '') + ' = <b>' + fishSkill(c) + '</b>' +
+  return '<div class="small">Skill ' + profSkill(c, FISHING) + (p && p.bonus ? ' + ' + p.bonus + ' (pole)' : '') + (l ? ' + ' + l.bonus + ' (' + esc(l.name) + ', ' + fmtTime(l.until - G.gameTime) + ')' : '') + ' = <b>' + fishSkill(c) + '</b>' +
     (z ? ' &middot; ' + esc(z.name) + ' needs about ' + Math.max(0, req) + (fishSkill(c) < req ? ' <span style="color:#ff9a8a">(many fish get away)</span>' : '') : '') + '</div>' +
     '<div class="small">' + (p ? 'Pole: ' + esc(itemName(p.id)) : '<span style="color:#ff9a8a">No fishing pole - buy one from a fishing supplier.</span>') + ' &middot; lures in the bags: ' + c.bags.filter((x) => FISH_LURES[x.id]).reduce((s, x) => s + x.n, 0) + '</div>' +
     '<p>' + (fishing ? '<button class="act red" data-fish="stop">Stop fishing</button>' : '<button class="act" data-fish="go"' + (p ? '' : ' disabled') + '>Go fishing (nearest water)</button> <button class="mini" data-fish="here"' + (p ? '' : ' disabled') + '>Fish right here</button>') + '</p>' +
-    '<div class="small muted">Schools of fish (pools) in the water give better catches. A lure in the bags goes on the pole by itself.</div></div>';
+    '<div class="small muted">Schools of fish (pools) in the water give better catches. A lure in the bags goes on the pole by itself.</div>';
 }
 function fishingClick(e) {
   const b = e.target.closest('[data-fish]'); if (!b) return false; const c = active();
