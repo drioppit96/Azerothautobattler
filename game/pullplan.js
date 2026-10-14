@@ -15,8 +15,9 @@ const CC_SPELLS = [
 const CREATURE_TYPE = { 1: 'beast', 2: 'dragonkin', 3: 'demon', 4: 'elemental', 5: 'giant', 6: 'undead', 7: 'humanoid', 8: 'critter', 9: 'mechanical', 10: 'not specified', 11: 'totem' };
 const PACK_COLOR = { boss: '#c77dff', pull: '#ff5a4a', careful: '#ffb03a', skip: '#8a8a8a' };
 
-function dungeonPullPlan(d) {
-  G.pullPlans = G.pullPlans || {}; if (G.pullPlans[d.map]) return G.pullPlans[d.map];
+function dungeonPullPlan(d, tier) {
+  G.pullPlans = G.pullPlans || {}; if (tier === undefined) tier = dungeonTier(active(), d);
+  const key = d.map + (tier ? ':' + tier : ''); if (G.pullPlans[key]) return G.pullPlans[key];
   const W = ensureWorld(d.map); const L = d.lmin || 1; const bossE = new Set(d.bosses.map((b) => b.e));
   const mobs = W.list.filter((m) => m.info && !m.civ && m.info[5] !== 8 && m.info[5] !== 11 && G.d.hostility.creatures[m.e] && G.d.hostility.creatures[m.e][1].indexOf('A') >= 0);
   // packs: union of creatures within 10 yards (and about the same height)
@@ -37,8 +38,8 @@ function dungeonPullPlan(d) {
   }
   // the route: the guide route of the dungeon (dungeon_routes.json) when there is one, else from the way in to the nearest
   // boss left, and on (by the walking paths)
-  const gr = dungeonRoutes(d);
-  if (gr) return (G.pullPlans[d.map] = pullPlanFrom(d, packs, gr));
+  const gr = dungeonRoutes(d, tier);
+  if (gr) return (G.pullPlans[key] = Object.assign(pullPlanFrom(d, packs, gr, tier), { tier }));
   const e0 = d.enter[0]; const walker = { pos: { map: d.map, x: e0.x, y: e0.y, z: e0.z }, rt: {} };
   const route = [{ x: e0.x, y: e0.y, z: e0.z }]; const left = packs.filter((p) => p.boss); const order = [];
   while (left.length) {
@@ -64,12 +65,43 @@ function dungeonPullPlan(d) {
   packs.sort((a, b) => a.along - b.along); let k = 0; for (const p of packs) if (p.kind !== 'skip') p.no = ++k;
   const plan = { packs, route, bosses: order.length, pulls: packs.filter((p) => p.kind === 'pull').length, careful: packs.filter((p) => p.kind === 'careful').length, skip: packs.filter((p) => p.kind === 'skip').length,
     ccPacks: packs.filter((p) => p.kind !== 'skip' && p.kind !== 'boss' && p.n >= 3 && p.cc.length).length, length: Math.round(cum[cum.length - 1] || 0) };
-  return (G.pullPlans[d.map] = plan);
+  return (G.pullPlans[key] = plan);
 }
 /* the guide routes of a dungeon (make_dungeon_routes.py): [{name, path: [[x, y, z]], stops: [[boss, i]], jumps: [i]}] */
-function dungeonRoutes(d) { const r = G.dgRoutes && G.dgRoutes[String(d.map)]; return r && r.length ? r : null; }
+function dungeonRoutes(d, tier) {
+  const r = G.dgRoutes && G.dgRoutes[String(d.map)]; if (!r || !r.length) return null;
+  if (!r.some((x) => x.tier)) return r;
+  const t = tier || 'mid'; const out = r.filter((x) => !x.tier || x.tier === t);
+  return out.length ? out : r.filter((x) => !x.tier || x.tier === r.find((y) => y.tier).tier);
+}
+/* hand-drawn dungeons have a way for each level of the tank's knowledge of the place: the one who leads the pulls
+   decides how the group goes - the short way (knows it well), around (more or less), room by room (first times) */
+const ROUTE_TIERS = { fast: 'the short way (the tank knows the place)', mid: 'the longer way round (the tank half knows it)', slow: 'room by room (the tank does not know the place)' };
+function dungeonHasTiers(d) { const r = G.dgRoutes && G.dgRoutes[String(d.map)]; return !!(r && r.some((x) => x.tier)); }
+function tierOfKnowledge(k) { return k >= 6 ? 'fast' : k >= 3 ? 'mid' : 'slow'; }
+/* the tank of the run (or of the group about to go): {name, k: knowledge of the place 0-10} */
+function dungeonTank(c, d) {
+  if (!c) return null;
+  const p = partyOf(c); const u = p && p.find((x) => x.role === 'tank');
+  if (u) { const m = rosterById(u.rid); return { name: u.name, k: m ? awareLevel(m, d.map) : u.aw || 0 }; }
+  const g = typeof groupOf === 'function' ? groupOf(c) : null;
+  if (g) { const t = g.members.find((m) => m.role === 'tank'); const o = t && charById(t.id); if (o) return { name: o.name, k: awareLevel(o, d.map) }; }
+  if (p) return { name: c.name, k: awareLevel(c, d.map) };            // a group with no hired tank: the character leads
+  const pl = G.dgPlan && G.dgPlan.map === d.map && G.dgPlan.cid === c.id ? G.dgPlan.p : null; const x = pl && pl.members.find((m) => m.role === 'tank');
+  if (x) return { name: x.m.name, k: awareLevel(x.m, d.map) };
+  if (c.order && c.order.type === 'dungeon' && c.order.map === d.map && !c.order.group) return { name: c.name, k: awareLevel(c, d.map) };     // alone
+  return null;
+}
+/* the way this character's run takes (set when the group goes in), or the one it would take */
+function dungeonTier(c, d) {
+  if (!dungeonHasTiers(d)) return null;
+  const o = c && c.order; if (o && o.type === 'dungeon' && o.map === d.map && o.tier) return o.tier;
+  const t = dungeonTank(c, d); return t ? tierOfKnowledge(t.k) : 'mid';
+}
 /* the plan along the guide routes: every pack is placed along the way (how far along, how close to it) */
-function pullPlanFrom(d, packs, routes) {
+/* tier: how much the group clears besides what stands in the way - a tank who knows the place walks past the packs
+   close to the way, one who half knows it pulls them too, a first-timer clears the rooms (everything within 45 yd) */
+function pullPlanFrom(d, packs, routes, tier) {
   const route = []; const order = [];
   for (const r of routes) {
     r.path.forEach((p, i) => route.push({ x: p[0], y: p[1], z: p[2], cut: (i === 0 && route.length > 0) || (r.jumps || []).includes(i), ri: route.length ? route[route.length - 1].ri + (i === 0 ? 1 : 0) : 0 }));
@@ -87,6 +119,7 @@ function pullPlanFrom(d, packs, routes) {
     }
     p.dist = best; p.along = along;
     p.kind = p.boss ? (order.includes(p) ? 'boss' : 'skip') : best < p.aggro + 4 ? 'pull' : best < p.aggro + 14 ? 'careful' : 'skip';
+    if ((tier === 'mid' && p.kind === 'careful') || (tier === 'slow' && !p.boss && p.kind !== 'pull' && best < 45)) p.kind = 'pull';
   }
   packs.sort((a, b) => a.along - b.along); let k = 0; for (const p of packs) if (p.kind !== 'skip') p.no = ++k;
   return { packs, route, cum, guide: routes.map((r) => r.name), bosses: order.length, pulls: packs.filter((p) => p.kind === 'pull').length, careful: packs.filter((p) => p.kind === 'careful').length, skip: packs.filter((p) => p.kind === 'skip').length,
@@ -101,7 +134,7 @@ function packCcFor(p, classes) {
 function drawPullPlan(ctx, map) {
   if (!map.dmap) return; const c = active(); const running = c.pos.map === map.map && c.order && c.order.type === 'dungeon';
   if (!G.state.settings.showPullPlan && !(running && dungeonRoutes(map.dungeon))) return;
-  const plan = dungeonPullPlan(map.dungeon); const f = map.floor; const packsToo = G.state.settings.showPullPlan;
+  const plan = dungeonPullPlan(map.dungeon, dungeonTier(c, map.dungeon)); const f = map.floor; const packsToo = G.state.settings.showPullPlan;
   ctx.save();
   // the route
   ctx.strokeStyle = 'rgba(255,210,90,.75)'; ctx.lineWidth = 2.5; ctx.setLineDash([7, 5]); ctx.beginPath(); let on = false;
@@ -120,7 +153,7 @@ function drawPullPlan(ctx, map) {
   ctx.restore();
 }
 function pullPlanHtml(d) {
-  const p = dungeonPullPlan(d);
-  return '<div class="sgroup"><h5>Pull plan</h5><div class="small">' + (p.guide ? 'Route from the guides: ' + esc(p.guide.join(', ')) + '. ' : '') + (p.pulls + p.bosses) + ' fights on the way (' + p.bosses + ' bosses), ' + p.careful + ' packs close to the way (a careless group pulls them), ' + p.skip + ' off the way. ' + p.ccPacks + ' big packs where crowd control helps.</div>' +
+  const c = active(); const tier = dungeonTier(c, d); const p = dungeonPullPlan(d, tier); const tk = tier && dungeonTank(c, d);
+  return '<div class="sgroup"><h5>Pull plan</h5><div class="small">' + (tier ? 'Route: <b>' + ROUTE_TIERS[tier] + '</b>' + (tk ? ' - ' + esc(tk.name) + ' knows it ' + stars(tk.k) + '/10' : ' - depends on who tanks') + ' (' + p.length + ' yd). ' : p.guide ? 'Route from the guides: ' + esc(p.guide.join(', ')) + '. ' : '') + (p.pulls + p.bosses) + ' fights on the way (' + p.bosses + ' bosses), ' + p.careful + ' packs close to the way (a careless group pulls them), ' + p.skip + ' off the way. ' + p.ccPacks + ' big packs where crowd control helps.</div>' +
     '<label class="chk"><input type="checkbox" data-dgset="showPullPlan"' + (G.state.settings.showPullPlan ? ' checked' : '') + '> Show it on the dungeon map <span class="small" style="color:' + PACK_COLOR.pull + '">on the way</span> <span class="small" style="color:' + PACK_COLOR.careful + '">careful</span> <span class="small" style="color:' + PACK_COLOR.skip + '">off the way</span></label></div>';
 }

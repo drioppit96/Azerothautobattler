@@ -4,6 +4,7 @@ creatures and objects stand (stairs and ramps included). Runs follow these lines
 no walls.
 
 Writes gamedata/dungeon_routes.json: {"<map>": [{"name", "path": [[x, y, z], ...], "stops": [[boss, index], ...]}]}
+(hand-drawn dungeons: one route per "tier" - the tank's knowledge of the place decides which one a run takes)
 
     py make_dungeon_routes.py          (numpy, scipy)
 """
@@ -72,6 +73,73 @@ ROUTES = {
                                                                      "Instructor Razuvious", "Gothik the Harvester", "Patchwerk", "Grobbulus", "Gluth", "Thaddius", "Kel'Thuzad"]}],
 }
 ROUTE_WIDTH = 14          # yards on each side of the route that stay walkable
+
+
+# hand-drawn routes (waypoints clicked on the map in the game): the start everyone takes, then one way on for each
+# level of the tank's knowledge of the place - "fast" (knows it: the short way), "mid" (more or less: around the
+# loop, more packs), "slow" (does not: room by room, everything, walking back where it is a dead end). The run picks
+# the way by the tank's knowledge when it goes in (pullplan.js), and only that one is drawn.
+# Points are [x, y] (the height comes from the creatures standing near) or [x, y, z].
+RFC_JERGOSH_ON = [[-373.4, 207.2], [-388.1, 259.8, -4.8], [-388.6, 241.9, -4.8], [-400.4, 216.2, -1.0], [-408.6, 179.4, 6.7], [-396.3, 150.8, 7.8], [-384.9, 146.0, 7.8]]
+HAND_ROUTES = {
+    389: {
+        "name": "Ragefire Chasm",
+        "bosses": ["Oggleflint", "Taragaman the Hungerer", "Jergosh the Invoker", "Bazzalan"],
+        # waypoints 1-15: down the troggs' corridor to its end, back up the other one past Oggleflint, through the
+        # elementals' cave to the Searing Blade loop
+        "common": [[0.8, -8.2, -15.5], [0.6, -24.7], [-16.5, -53.0], [-74.4, -38.5], [-130.6, -34.5], [-220.9, -37.0], [-275.6, -56.3], [-296.5, -50.9],
+                   [-304.0, -12.0], [-284.3, 9.5], [-222.0, 10.1], [-156.9, 12.8, -40.0], [-122.7, 8.1, -30.0], [-98.8, 36.5], [-118.7, 70.1], [-199.4, 77.0]],
+        "tiers": {
+            # waypoints 15-21: through the middle of the loop past Taragaman, straight on to Jergosh
+            "fast": [[-231.7, 91.9], [-271.9, 99.3], [-245.7, 159.0], [-293.1, 143.8], [-298.1, 215.3], [-354.5, 206.1]] + RFC_JERGOSH_ON,
+            # around the right side of the loop, up the middle road to Taragaman, out along the left road and down
+            "mid": [[-231.7, 91.9], [-271.9, 99.3], [-293.1, 143.8], [-283.7, 148.2], [-263.5, 150.5], [-245.7, 159.0], [-233.8, 192.0], [-228.3, 210.6],
+                    [-280.1, 215.4], [-298.1, 215.3], [-312.9, 223.4], [-333.5, 217.0], [-354.5, 206.1]] + RFC_JERGOSH_ON,
+            # every room: the right side, the middle road up to the top, the left side, the whole lake to Jergosh and
+            # back, then the high ledge all the way round to Bazzalan
+            "slow": [[-202.5, 99.0], [-231.7, 91.9], [-263.4, 98.4], [-271.9, 99.3], [-293.1, 143.8], [-283.7, 148.2], [-263.5, 150.5], [-245.7, 159.0],
+                     [-220.0, 157.0], [-199.1, 155.1], [-185.6, 156.7], [-233.8, 192.0], [-228.3, 210.6], [-280.1, 215.4], [-298.0, 200.3], [-298.1, 215.3],
+                     [-312.9, 223.4], [-333.5, 217.0], [-343.4, 210.8], [-354.5, 206.1], [-365.1, 177.7], [-373.4, 207.2], [-343.4, 210.8], [-312.9, 223.4],
+                     [-298.1, 215.3], [-301.0, 251.0, -13.0], [-297.3, 253.9, -13.9], [-320.4, 252.1, -11.5], [-342.3, 256.4, -8.0], [-371.3, 256.4, -4.9],
+                     [-388.1, 259.8, -4.8], [-388.6, 241.9, -4.8], [-400.4, 216.2, -1.0], [-408.6, 179.4, 6.7], [-396.3, 150.8, 7.8], [-384.9, 146.0, 7.8]],
+        },
+    },
+}
+
+
+def hand_routes(d, P):
+    """the hand-drawn routes of a dungeon, one per tier: [{name, tier, path, stops, jumps}]"""
+    h = HAND_ROUTES.get(d["map"])
+    if not h:
+        return []
+    A = np.array(P, float)
+
+    def with_z(pts):
+        out = []
+        prev = None
+        for q in pts:
+            if len(q) > 2:
+                out.append([q[0], q[1], q[2]]); prev = q[2]; continue
+            dd = np.hypot(A[:, 0] - q[0], A[:, 1] - q[1])
+            near = np.nonzero(dd < 25)[0]
+            if not len(near):
+                near = np.array([int(np.argmin(dd))])
+            score = dd[near] * 0.5 + (np.abs(A[near, 2] - prev) if prev is not None else 0)
+            z = float(A[near[int(np.argmin(score))], 2])
+            out.append([q[0], q[1], z]); prev = z
+        return out
+    rs = []
+    for tier, tail in h["tiers"].items():
+        path = with_z(h["common"] + tail)
+        stops = []
+        for bn in h["bosses"]:
+            b = next((x for x in d["bosses"] if x["n"] == bn), None)
+            if not b:
+                continue
+            k = min(range(len(path)), key=lambda i: math.hypot(path[i][0] - b["x"], path[i][1] - b["y"]) + abs(path[i][2] - (b.get("z") or 0)))
+            stops.append([bn, k])
+        rs.append({"name": h["name"], "tier": tier, "path": [[round(p[0], 1), round(p[1], 1), round(p[2], 1)] for p in path], "stops": stops, "jumps": []})
+    return rs
 
 
 def spot_graph(pts):
@@ -182,10 +250,11 @@ def main():
     objects = ob.get("objects", ob)
     out = {}
     for d in dg:
-        rs = make_routes(d, spots_of(d, spawns, objects))
+        P = spots_of(d, spawns, objects)
+        rs = hand_routes(d, P) or make_routes(d, P)
         if rs:
             out[str(d["map"])] = rs
-        print("%-28s %s" % (d["name"], ", ".join("%s: %d bosses, %d yd" % (r["name"], len(r["stops"]),
+        print("%-28s %s" % (d["name"], ", ".join("%s%s: %d bosses, %d yd" % (r["name"], " (" + r["tier"] + ")" if r.get("tier") else "", len(r["stops"]),
               sum(math.hypot(a[0] - b[0], a[1] - b[1]) for a, b in zip(r["path"], r["path"][1:]))) for r in rs)))
     with open(os.path.join(ROOT, "gamedata", "dungeon_routes.json"), "w", encoding="utf-8") as fh:
         json.dump(out, fh, separators=(",", ":"))

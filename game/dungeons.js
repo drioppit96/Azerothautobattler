@@ -377,6 +377,9 @@ function enterDungeon(c, d, o) {
   c.pos = { map: d.map, x: e.x, y: e.y, z: e.z, o: c.pos.o };
   r.mv = null; r.tgt = null; r.threats = []; r.danger = []; r.resting = false; r.interact = null;
   if (o.group) makeParty(c, d); else r.party = null;
+  // hand-drawn dungeons: the tank's knowledge of the place decides the way
+  o.tier = dungeonHasTiers(d) ? tierOfKnowledge((dungeonTank(c, d) || { k: awareLevel(c, d.map) }).k) : null; o.gi = null; o.routeBegun = false;
+  if (o.tier) { const tk = dungeonTank(c, d) || { name: c.name, k: awareLevel(c, d.map) }; log((tk.name === c.name ? 'You lead' : tk.name + ' tanks') + ' (knows ' + d.name + ' ' + stars(tk.k) + '/10): ' + ROUTE_TIERS[o.tier] + '.'); }
   if (c.pet && rt(c).pet) { rt(c).pet.x = c.pos.x + 2; rt(c).pet.y = c.pos.y + 1; }
   o.phase = 'inside'; o.entered = G.gameTime; o.lastProgress = G.gameTime;
   log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' mercenaries' : '') + '.');
@@ -448,7 +451,7 @@ function dungeonText(c, o) {
   if (o.phase === 'leaving') return { t: 'Dungeon: ' + o.label, d: 'walking to the exit' + (o.exit ? ' (' + Math.round(Math.hypot(o.exit.x - c.pos.x, o.exit.y - c.pos.y)) + ' yd)' : '') };
   if (o.phase === 'travel') return { t: (o.onlyTravel ? 'Travel to ' : 'Dungeon: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'to the entrance' };
   const left = d ? dungeonBossesLeft(c, d).length : 0;
-  const pl = d && o.gi != null && G.pullPlans && G.pullPlans[d.map]; const rp = pl && pl.cum ? ' - route ' + Math.round(100 * (pl.cum[Math.min(o.gi, pl.cum.length - 1)] || 0) / Math.max(1, pl.length)) + '%' : '';
+  const pl = d && o.gi != null && G.pullPlans && G.pullPlans[d.map + (o.tier ? ':' + o.tier : '')]; const rp = pl && pl.cum ? ' - route ' + Math.round(100 * (pl.cum[Math.min(o.gi, pl.cum.length - 1)] || 0) / Math.max(1, pl.length)) + '%' : '';
   return { t: 'Dungeon: ' + o.label + rp, d: (o.target && o.target.wp ? 'following the route, ' : o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
 }
 function dungeonBossesLeft(c, d) {
@@ -509,7 +512,7 @@ function routeJump(c, d, q, say) {
   const gr = (G.dgRoutes[String(d.map)] || [])[q.ri]; if (say) log('On to ' + (gr ? gr.name : 'the next part of ' + d.name) + '.');
 }
 function routeNext(c, d, o) {
-  const plan = dungeonPullPlan(d); if (!plan.cum) return undefined;          // no guide route for this dungeon
+  const plan = dungeonPullPlan(d, o.tier || null); if (!plan.cum) return undefined;          // no guide route for this dungeon
   const R = plan.route; if (o.gi == null) o.gi = 0;
   if (!o.routeBegun) { o.routeBegun = true; if (Math.hypot(R[0].x - c.pos.x, R[0].y - c.pos.y) > 60) routeJump(c, d, R[0], false); }
   // the packs on the way up to here (and the guide's bosses): the nearest one not crowd-controlled first
@@ -527,15 +530,16 @@ function routeNext(c, d, o) {
   if (o.gi > 0 && o.gi < R.length && !R[o.gi].cut) {
     let bi = -1, bd = Infinity, bp = null;
     for (let i = o.gi; i < Math.min(R.length, o.gi + 12); i++) {
-      if (R[i].cut) break; const a = R[i - 1], b = R[i];
+      if (R[i].cut || plan.cum[i - 1] - plan.cum[o.gi - 1] > 60) break;          // not past a dead end the route walks into and back out of
+      const a = R[i - 1], b = R[i];
       const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy || 1;
       const t = clamp(((c.pos.x - a.x) * vx + (c.pos.y - a.y) * vy) / L2, 0, 1);
       const px = a.x + vx * t, py = a.y + vy * t, pz = (a.z || 0) + ((b.z || 0) - (a.z || 0)) * t;
       const dd = Math.hypot(px - c.pos.x, py - c.pos.y) + Math.abs(pz - (c.pos.z || pz)) * 2;
-      if (dd <= bd + 0.5) { bd = dd; bi = i; bp = { x: px, y: py, z: pz, t }; }
+      if (dd <= bd + 0.5) { bd = dd; bi = i; bp = { x: px, y: py, z: pz, t, d2: Math.hypot(px - c.pos.x, py - c.pos.y) }; }
     }
     if (bi > o.gi) { o.gi = bi; }
-    if (bp && bd > 8 && bp.t < 0.9) {       // well off the line: straight back to it, a little ahead
+    if (bp && bp.d2 > 8 && bp.t < 0.9) {       // well off the line: straight back to it, a little ahead
       const a = R[bi - 1], b = R[bi], s = Math.min(1, bp.t + 4 / Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)));
       return { wp: true, gi: bi - 1, x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s, z: (a.z || 0) + ((b.z || 0) - (a.z || 0)) * s, st: 'alive', info: [0, 'the way on'] };
     }
