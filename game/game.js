@@ -343,6 +343,7 @@ function orderText(c) {
   if (o.type === 'dungeon') return dungeonText(c, o);
   if (o.type === 'npc') return npcOrderText(c, o);
   if (o.type === 'follow') return followText(c, o);
+  if (o.type === 'fish') return fishText(c, o);
   if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
   if (o.type === 'questing') { const q = o.fq && G.q.byId[o.fq]; return { t: 'Questing: ' + (o.zones[o.zi] || 'done'), d: (q ? (o.phase && o.phase.indexOf(q.title) >= 0 ? o.phase : q.title) : (o.phase || 'looking for quests')) + (o.where ? ' - ' + o.where : '') }; }
   if (o.type === 'sell' || o.type === 'vendor') return { t: 'Vendor: ' + o.label, d: o.resume ? 'Selling junk, then back to work' : 'Walking to the vendor' };
@@ -446,6 +447,7 @@ function showMenu(sx, sy, sel) {
   m.innerHTML = '<h4>' + esc(title) + '</h4>' +
     '<button data-a="travel">Travel here' + (away ? (isDungeonMap(c.pos.map) ? ' (out of the dungeon first)' : ' (ships and flights)') : '') + '</button>' +
     (away ? '' : '<button data-a="grind">Grind around here</button>' + extra) +
+    (typeof hasProf === 'function' && hasProf(c, 356) && !away ? '<button data-a="fish">Fish at the water here</button>' : '') +
     '<button data-a="route">Add a gathering route checkpoint here</button>' +
     '<button data-a="kroute">Add a grinding route checkpoint here</button>' +
     '<button data-a="close" style="color:#9a8f77">Cancel</button>';
@@ -455,6 +457,7 @@ function showMenu(sx, sy, sel) {
   m.onclick = (ev) => {
     const a = ev.target.dataset && ev.target.dataset.a; if (!a) return;
     if (a === 'travel') orderTravel(c, target, label);
+    else if (a === 'fish') orderFishing(c, false, target);
     else if (a === 'route' || a === 'kroute') { const k = a === 'route' ? 'gather' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
     else if (a === 'grind') orderGrind(c, target.x, target.y, 100, null, 'around ' + (sel.kind === 'ground' ? label : title));
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
@@ -781,6 +784,8 @@ async function boot() {
     try { G.d.dungeons = await J('../gamedata/dungeons.json'); } catch (e) { G.d.dungeons = null; console.warn('dungeons.json not found - no dungeons'); }
     try { G.d.prof = await J('../gamedata/professions.json'); } catch (e) { G.d.prof = null; console.warn('professions.json not found - no professions'); }
     try { G.d.skinning = await J('../gamedata/skinning.json'); } catch (e) { G.d.skinning = null; }
+    try { G.d.gathering = await J('../gamedata/gathering.json'); } catch (e) { G.d.gathering = null; }
+    if (typeof fishingInit === 'function') fishingInit();
     try { G.d.pets = await J('../gamedata/pets.json'); } catch (e) { G.d.pets = null; }
     try { G.d.stances = await J('../gamedata/spell_stances.json'); } catch (e) { G.d.stances = null; }
     try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }

@@ -24,14 +24,14 @@ async function loadGrid(mapId) {
     const dv = new DataView(buf.buffer, buf.byteOffset, 16);
     const g = { w: dv.getUint16(4, true), h: dv.getUint16(6, true), cell: dv.getFloat32(8, true), origin: dv.getFloat32(12, true), data: buf.subarray(16) };
     // coarse grid: 1 walk, 2 swim only, 0 blocked
-    g.cw = Math.ceil(g.w / COARSE); g.ch = Math.ceil(g.h / COARSE); g.coarse = new Uint8Array(g.cw * g.ch);
+    g.cw = Math.ceil(g.w / COARSE); g.ch = Math.ceil(g.h / COARSE); g.coarse = new Uint8Array(g.cw * g.ch); g.water = 0;
     for (let R = 0; R < g.ch; R++) for (let C = 0; C < g.cw; C++) {
       let walk = 0, swim = 0;
       for (let r = R * COARSE; r < Math.min(g.h, R * COARSE + COARSE); r++) {
         const row = r * g.w;
         for (let c = C * COARSE; c < Math.min(g.w, C * COARSE + COARSE); c++) { const k = g.data[row + c]; if (k === 1) walk++; else if (k === 2) swim++; }
       }
-      g.coarse[R * g.cw + C] = walk >= 4 ? 1 : walk + swim >= 6 ? 2 : 0;
+      g.coarse[R * g.cw + C] = walk >= 4 ? 1 : walk + swim >= 6 ? 2 : 0; g.water += swim;
     }
     G.grids[mapId] = g;
     log('Collision loaded for ' + name + ': mountains, cliffs and lava are avoided now.');

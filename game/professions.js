@@ -439,6 +439,7 @@ function professionsHtml(c) {
   // crafting
   for (const id of mine) {
     const list = Object.keys(P.recipes).filter((sid) => PD().recipes[sid] && PD().recipes[sid].skill === id).sort((a, b) => PD().recipes[b].learn - PD().recipes[a].learn);
+    if (id === FISHING) { h += fishingHtml(c); continue; }
     if (profKind(id) === 'gather' && !list.length) continue;
     h += '<div class="sgroup"><h5>' + esc(profName(id)) + ' - recipes (' + list.length + ')</h5>';
     if (!list.length) h += '<div class="muted small">No recipes yet - visit a trainer.</div>';

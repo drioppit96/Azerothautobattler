@@ -179,6 +179,7 @@ function bindSheet() {
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
     if (typeof rotationClick === 'function' && rotationClick(e)) return;
     if (SH.tab === 'talents' && talentClick(e)) return;
+    if (SH.tab === 'prof' && typeof fishingClick === 'function' && fishingClick(e)) return;
     if (SH.tab === 'prof' && professionsClick(e)) return;
     const g = e.target.closest('[data-go]'); if (g) { if (g.dataset.go === 'v') orderVendor(c); else orderRepair(c); closeSheet(); return; }
     const va = e.target.closest('[data-vact]'); if (va) { if (va.dataset.vact === 'junk') sellJunk(c); else repairAll(c); renderSheet(); return; }

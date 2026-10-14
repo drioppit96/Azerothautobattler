@@ -83,6 +83,59 @@ def _sub(data, pos, ofs, magic):
     return None, 0
 
 
+LIQ_STATS = {"chunks_flagged": 0, "chunks_read": 0}
+LIQ_LAYER = 8 + 81 * 8 + 64 + 4 + 80     # 804 bytes: min/max height, 9x9 vertices, 8x8 flags, flow data
+
+
+def parse_liquid(data, pos, size, ofs_liq, flags):
+    """the old (1.x) MCLQ of one MCNK -> (kind 8x8 [0 none, 1 water, 2 lava/slime], level 8x8) or None.
+    In 1.x clients the size field of the MCLQ header is 0 (the size is in the MCNK header), and there is one
+    804 byte layer for every liquid flag of the chunk (0x04 river, 0x08 ocean, 0x10 magma, 0x20 slime, in this order)."""
+    np = need_numpy()
+    end = min(len(data), pos + 8 + size)
+    q = None
+    for p in (pos + ofs_liq, pos + 8 + ofs_liq):
+        if p + 8 <= end and data[p:p + 4] in (b"QLCM", b"MCLQ"):
+            q = p + 8
+            break
+    if q is None:
+        # some files point at the payload itself
+        for p in (pos + ofs_liq, pos + 8 + ofs_liq):
+            if 0 < p and p + LIQ_LAYER <= end:
+                hmin, hmax = struct.unpack_from("<2f", data, p)
+                if math.isfinite(hmin) and math.isfinite(hmax) and -2000 < hmin <= hmax < 4000:
+                    q = p
+                    break
+    if q is None:
+        return None
+    kind = np.zeros((8, 8), dtype=np.uint8)
+    lvl = np.zeros((8, 8))
+    got = False
+    for bit, k in ((0x04, 1), (0x08, 1), (0x10, 2), (0x20, 2)):
+        if not (flags & bit):
+            continue
+        if q + 8 + 648 + 64 > end:
+            break
+        hmin, hmax = struct.unpack_from("<2f", data, q)
+        vb = np.frombuffer(data, dtype=np.uint8, count=648, offset=q + 8).reshape(81, 8)
+        hh = vb[:, 4:8].copy().view("<f4").reshape(9, 9).astype(np.float64)
+        fl = np.frombuffer(data, dtype=np.uint8, count=64, offset=q + 8 + 648).reshape(8, 8)
+        q += LIQ_LAYER
+        if not (math.isfinite(hmin) and math.isfinite(hmax)):
+            continue
+        # ocean vertices carry no height; wrong or missing heights -> the layer height
+        bad = ~np.isfinite(hh) | (hh < hmin - 2) | (hh > hmax + 2)
+        if bit == 0x08:
+            bad[:] = True
+        hh = np.where(bad, hmax, hh)
+        cl = (hh[:-1, :-1] + hh[:-1, 1:] + hh[1:, :-1] + hh[1:, 1:]) / 4.0
+        has = ((fl & 0x0F) != 0x0F) & (kind == 0)
+        kind = np.where(has, k, kind).astype(np.uint8)
+        lvl = np.where(has, cl, lvl)
+        got = got or bool(has.any())
+    return (kind, lvl) if got else None
+
+
 def parse_tile(data):
     """-> dict(chunks=[Chunk], modf=[(u0, v0, u1, v1, ymin, ymax)])"""
     np = need_numpy()
@@ -113,15 +166,11 @@ def parse_tile(data):
                         inner[r, :] = rows[r * 17 + 9:r * 17 + 17]
                 c.outer, c.inner = outer, inner
             if c.outer is not None:
-                if (c.flags & 0x3C) and size_liq >= 8 + 8 + 648 + 64:
-                    q, qs = _sub(data, pos, ofs_liq, b"QLCM")
-                    if q is not None and qs >= 8 + 648 + 64:
-                        hmin, hmax = struct.unpack_from("<2f", data, q)
-                        vb = np.frombuffer(data, dtype=np.uint8, count=648, offset=q + 8).reshape(81, 8)
-                        hh = vb[:, 4:8].copy().view("<f4").reshape(9, 9).astype(np.float64)
-                        fl = np.frombuffer(data, dtype=np.uint8, count=64, offset=q + 8 + 648).reshape(8, 8)
-                        kind = 2 if (c.flags & 0x30) else 1
-                        c.liq = (kind, fl.copy(), hh)
+                if c.flags & 0x3C:
+                    LIQ_STATS["chunks_flagged"] += 1
+                    c.liq = parse_liquid(data, pos, size, ofs_liq, c.flags)
+                    if c.liq:
+                        LIQ_STATS["chunks_read"] += 1
                 out["chunks"].append(c)
         elif cid == b"FDOM":
             for k in range(size // 64):
@@ -248,13 +297,11 @@ def classify_tile(parsed, cand, slope_tan):
             m8 = np.kron(m, np.ones((2, 2), dtype=bool))
             holes[cj * 8:cj * 8 + 8, ci * 8:ci * 8 + 8] |= xform(m8, cand)
         if ch.liq:
-            kind, fl, hh = ch.liq
-            has = (fl & 0x0F) != 0x0F
-            lvl = (hh[:-1, :-1] + hh[:-1, 1:] + hh[1:, :-1] + hh[1:, 1:]) / 4.0
+            kind, lvl = ch.liq
             sl_ = (slice(cj * 8, cj * 8 + 8), slice(ci * 8, ci * 8 + 8))
-            hx = xform(has, cand)
-            lq_kind[sl_] = np.where(hx, kind, lq_kind[sl_])
-            lq_h[sl_] = np.where(hx, xform(lvl, cand), lq_h[sl_])
+            kx = xform(kind, cand)
+            lq_kind[sl_] = np.where(kx > 0, kx, lq_kind[sl_])
+            lq_h[sl_] = np.where(kx > 0, xform(lvl, cand), lq_h[sl_])
     depth = lq_h - hm
     code = np.where((lq_kind == 1) & (depth > SWIM_DEPTH), 2, code).astype(np.uint8)
     code = np.where((lq_kind == 2) & (depth > -0.5), 4, code).astype(np.uint8)
@@ -640,10 +687,16 @@ def main():
         report = {}
         spawns = load_spawns(cur, map_id)
         log("  creature spawns on this map: %d" % len(spawns))
+        LIQ_STATS["chunks_flagged"] = LIQ_STATS["chunks_read"] = 0
         grid = build_continent(map_id, archives, spawns, report)
         if grid is None:
             meta["maps"][name] = report
             continue
+        report["liquid"] = {"chunks_with_liquid": LIQ_STATS["chunks_flagged"], "chunks_read": LIQ_STATS["chunks_read"],
+                            "swim_cells": int((grid == 2).sum()), "lava_cells": int((grid == 4).sum())}
+        log("  water and lava: %s" % report["liquid"])
+        if LIQ_STATS["chunks_flagged"] and not report["liquid"]["swim_cells"]:
+            log("  WARNING: the terrain has water but none was read - send me this log.")
         spawn_report(grid, spawns, report)
         report["before_overlay_walkable_percent"] = round(100.0 * float((grid == 1).sum()) / max(1, (grid > 0).sum()), 1)
         apply_overlays(cur, map_id, grid, report)

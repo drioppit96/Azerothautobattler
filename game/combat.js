@@ -753,6 +753,7 @@ function updateChar(c, dt) {
   else if (o.type === 'trainer') updateTrainer(c, o, dt);
   else if (o.type === 'npc') updateNpcOrder(c, o);
   else if (o.type === 'follow') updateFollow(c, o, dt);
+  else if (o.type === 'fish') updateFishing(c, o, dt);
   else if (o.type === 'patrol') updatePatrol(c, o, dt);
   else if (o.type === 'dungeon') updateDungeon(c, o, dt);
 }
