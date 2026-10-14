@@ -54,9 +54,16 @@ function bagsHtml(c) {
     const s = c.bags[i];
     if (!s) { h += '<div class="slot empty"></div>'; continue; }
     const up = upgradeFor(c, s); const junk = isJunk(c, s.id); const cant = itemRow(s.id) && itemRow(s.id).sl && itemRow(s.id).sl.length && canEquip(c, s.id);
-    h += '<div class="slot' + (SH.sel === 'b' + i ? ' sel' : '') + '" data-idx="' + i + '">' + iconHtml(s) + (up ? '<i class="up" title="Upgrade"></i>' : '') + (junk ? '<i class="junk" title="Junk"></i>' : '') + (cant ? '<i class="red"></i>' : '') + '</div>';
+    const de = SH.de ? (SH.de.has(s) ? ' desel' : disenchantWhy(c, s) ? ' dedim' : ' decan') : '';
+    h += '<div class="slot' + (SH.sel === 'b' + i ? ' sel' : '') + de + '" data-idx="' + i + '">' + iconHtml(s) + (up ? '<i class="up" title="Upgrade"></i>' : '') + (junk ? '<i class="junk" title="Junk"></i>' : '') + (cant ? '<i class="red"></i>' : '') + '</div>';
   }
   h += '</div><div class="moneyline">' + moneyHtml(c.gold) + '</div>';
+  // enchanters: disenchant many items at once - choose them, then the green tick does it, the red circle cancels
+  if (typeof hasProf === 'function' && hasProf(c, ENCHANTING)) {
+    const q = (rt(c).deQueue || []).length;
+    h += '<div class="debar">' + (!SH.de ? '<button class="mini" data-demode="on" title="Choose items in the bags, then confirm with the green tick">Disenchant...</button>' + (q ? ' <span class="small muted">disenchanting, ' + q + ' left</span>' : '') :
+      '<span class="small">Choose items to disenchant: <b>' + SH.de.size + '</b></span><button class="debtn ok" data-demode="ok" title="Disenchant the chosen items"' + (SH.de.size ? '' : ' disabled') + '>&#10004;</button><button class="debtn no" data-demode="cancel" title="Cancel"><i></i></button>') + '</div>';
+  }
   return h;
 }
 function vendorHtml(c) {
@@ -84,7 +91,7 @@ function vendorHtml(c) {
 function openSheet(tab) {
   SH.open = true; if (tab) SH.tab = tab; $('sheet').hidden = false; renderSheet();
 }
-function closeSheet() { SH.open = false; $('sheet').hidden = true; hideItemTip(); hideItemMenu(); }
+function closeSheet() { SH.de = null; SH.open = false; $('sheet').hidden = true; hideItemTip(); hideItemMenu(); }
 function renderSheet() {
   if (!SH.open) return; const c = active();
   $('sheetTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === SH.tab));
@@ -182,6 +189,16 @@ function bindSheet() {
     const t = e.target.closest('[data-tab]'); if (t) { SH.tab = t.dataset.tab; hideItemMenu(); renderSheet(); return; }
     if (e.target.id === 'sheetClose') { closeSheet(); return; }
     const c = active();
+    // mass disenchant: choosing items in the bags
+    const dm = e.target.closest('[data-demode]');
+    if (dm) {
+      const a = dm.dataset.demode;
+      if (a === 'on') SH.de = new Set();
+      else if (a === 'cancel') SH.de = null;
+      else if (a === 'ok' && SH.de) { const n = disenchantQueue(c, [...SH.de]); SH.de = null; if (n) log('Disenchanting ' + n + ' item' + (n > 1 ? 's' : '') + ' ...'); }
+      hideItemMenu(); renderSheet(); return;
+    }
+    if (SH.de) { const b = e.target.closest('#sheetBags [data-idx]'); if (b) { const inst = c.bags[+b.dataset.idx]; if (inst && !disenchantWhy(c, inst)) { if (SH.de.has(inst)) SH.de.delete(inst); else SH.de.add(inst); } renderSheet(); return; } }
     if (SH.tab === 'ah' && ahClick(e)) return;
     if (SH.tab === 'bank' && bankClick(e)) return;
     if (SH.tab === 'trade' && tradeClick(e)) return;

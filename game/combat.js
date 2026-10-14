@@ -777,6 +777,7 @@ function updateChar(c, dt) {
     r.mv = null; fightStep(c, r.tgt, dt); return;
   }
   if (r.interact) { if (interactStep(c, dt)) return; }
+  if (typeof deQueueStep === 'function' && deQueueStep(c)) return;             // disenchanting what was chosen (before resting)
   if (typeof consumablesOoc === 'function' && consumablesOoc(c)) return;
   if (groupOf(c) && groupHealStep(c)) return;               // a group healer tops everyone up
   if (restStep(c)) return;

@@ -259,31 +259,57 @@ function disenchantWhy(c, inst) {
   return null;
 }
 function disenchantable(id) { const it = itemRow(id); return !!(it && it.de && it.q >= 2 && it.q <= 4); }
-/* 3 seconds of casting; the item is gone, what it broke into goes in the bags */
+/* disenchanting goes through a queue (one item or many - the mass disenchant of the bag panel): 2 seconds each, a fight in
+   between only pauses it; at the end one line with everything it gave. Materials: about half more than in the game
+   (Enchanting is less of a grind here). */
+const DE_TIME = 2, DE_BONUS = 1.5;
+function deBonus(n) { const v = n * DE_BONUS; const f = Math.floor(v); return f + (Math.random() < v - f ? 1 : 0); }
+function disenchantQueue(c, insts) {
+  const r = rt(c); r.deQueue = r.deQueue || []; r.deGot = r.deGot || {}; r.deDone = r.deDone || 0; let n = 0;
+  for (const inst of insts) if (inst && !r.deQueue.includes(inst) && c.bags.includes(inst) && !disenchantWhy(c, inst)) { r.deQueue.push(inst); n++; }
+  return n;
+}
 function disenchantItem(c, idx, quiet) {
   const inst = c.bags[idx]; if (!inst) return false; const why = disenchantWhy(c, inst);
   if (why) { if (!quiet) log(itemName(inst.id, inst) + ': ' + why + '.'); return false; }
-  const it = itemRow(inst.id);
+  return disenchantQueue(c, [inst]) > 0;
+}
+/* one step of the queue (profStep): true while busy with it */
+function deQueueStep(c) {
+  const r = rt(c); if (!r.deQueue || !r.deQueue.length) return false;
+  if (r.interact) return true;
+  while (r.deQueue.length && (!c.bags.includes(r.deQueue[0]) || disenchantWhy(c, r.deQueue[0]))) r.deQueue.shift();      // sold, traded, moved away
+  if (!r.deQueue.length) { deSummary(c); return false; }
+  const inst = r.deQueue[0]; const it = itemRow(inst.id);
+  r.resting = false; r.eating = null; r.drinking = null; r.mv = null;          // stands up for it, rests again afterwards
   startInteract(c, 'Disenchanting ' + itemName(inst.id, inst), () => {
-    const i = c.bags.indexOf(inst); if (i < 0) return;
-    c.bags.splice(i, 1);
+    const i = c.bags.indexOf(inst); if (r.deQueue[0] === inst) r.deQueue.shift(); if (i < 0) return;
+    c.bags.splice(i, 1); r.deDone = (r.deDone || 0) + 1; r.deNames = (r.deNames || []).concat([itemName(inst.id, inst)]);
     const raw = G.d.loot.raw && G.d.loot.raw.disenchant && G.d.loot.raw.disenchant[it.de]; const out = [];
     if (raw) lootRollRows(raw, () => false, out, 0);
     else for (const [item, pct, mn, mx] of (G.d.loot.tables.disenchant || {})[it.de] || []) if (Math.random() * 100 < pct) out.push([item, irnd(mn, mx)]);
-    const got = [];
-    for (const [item, n] of out) { if (addItem(c, item, n)) got.push((n > 1 ? n + ' x ' : '') + itemName(item)); else log('Bags are full - ' + itemName(item) + ' is lost.'); }
-    log('Disenchanted ' + itemName(inst.id, inst) + (got.length ? ': ' + got.join(', ') : ' - nothing came of it') + '.');
+    for (const [item, n0] of out) {
+      const n = deBonus(n0); if (!n) continue;
+      if (addItem(c, item, n)) r.deGot[item] = (r.deGot[item] || 0) + n; else log('Bags are full - ' + itemName(item) + ' is lost.');
+    }
+    if (!r.deQueue.length) deSummary(c);
     if (c.prof) checkRecipeItems(c);
     save(); refreshGear();
-  }, 3);
+  }, DE_TIME);
   return true;
+}
+function deSummary(c) {
+  const r = rt(c); if (!r.deDone) { r.deGot = {}; return; }
+  const got = Object.keys(r.deGot).map((id) => (r.deGot[id] > 1 ? r.deGot[id] + ' x ' : '') + itemName(+id));
+  log('Disenchanted ' + (r.deDone === 1 ? r.deNames[0] : r.deDone + ' items') + ': ' + (got.join(', ') || 'nothing') + '.');
+  r.deGot = {}; r.deDone = 0; r.deNames = [];
 }
 /* the automation option: green gear that is no upgrade is disenchanted instead of sold (out of a fight, one at a time) */
 function autoDisenchantStep(c) {
-  if (!hasProf(c, ENCHANTING) || !cset(c, 'autoDisenchant') || rt(c).interact) return false;
+  if (!hasProf(c, ENCHANTING) || !cset(c, 'autoDisenchant')) return false;
   if (G.gameTime - (rt(c).deT || -9) < 2) return false; rt(c).deT = G.gameTime;
-  const idx = c.bags.findIndex((x) => { const it = itemRow(x.id); return it && it.q === 2 && it.de && !disenchantWhy(c, x) && !upgradeFor(c, x) && !(G.q.startBy && G.q.startBy[x.id]); });
-  return idx >= 0 && bagFree(c) >= 1 && disenchantItem(c, idx, true);
+  const inst = c.bags.find((x) => { const it = itemRow(x.id); return it && it.q === 2 && it.de && !disenchantWhy(c, x) && !upgradeFor(c, x) && !(G.q.startBy && G.q.startBy[x.id]); });
+  return !!inst && disenchantQueue(c, [inst]) > 0 && deQueueStep(c);
 }
 
 /* ------------------------------------------------------------------ skinning */

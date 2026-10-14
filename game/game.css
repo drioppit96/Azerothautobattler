@@ -422,3 +422,15 @@ label.chk.dim{opacity:.55}
 .guild .ginv{margin:8px 0}
 .guild .gbgrid{display:grid;grid-template-columns:repeat(auto-fill,40px);gap:3px;max-height:430px;overflow:auto}.guild .gbgrid .slot{width:40px;height:40px}
 .guild .glog{max-height:420px;overflow:auto}
+
+/* mass disenchant */
+.debar{display:flex;align-items:center;gap:8px;margin-top:8px}
+.debtn{width:24px;height:24px;padding:0;border-radius:50%;border:1px solid #0006;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
+.debtn.ok{background:#1f7a2c;color:#d8ffd8}.debtn.ok:disabled{opacity:.4;cursor:default}
+.debtn.no{background:#2a1414;position:relative}
+.debtn.no i{position:absolute;inset:4px;border:2.5px solid #e03b2f;border-radius:50%}
+.debtn.no i::after{content:'';position:absolute;left:50%;top:-1px;bottom:-1px;width:2.5px;margin-left:-1.25px;background:#e03b2f;transform:rotate(45deg)}
+.slot.desel{outline:2px solid #3fd65a;outline-offset:-1px;box-shadow:0 0 8px #3fd65a99}
+.slot.desel::after{content:'\2714';position:absolute;right:2px;top:0;color:#3fd65a;font-size:13px;text-shadow:0 0 2px #000}
+.slot.dedim{opacity:.3}
+.slot.decan{cursor:pointer}
