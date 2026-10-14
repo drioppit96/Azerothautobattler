@@ -225,7 +225,7 @@ def main():
                            ("du", "maxdurability"), ("bo", "bonding"), ("sp", "sellprice"),
                            ("bp", "buyprice"), ("cs", "containerslots"), ("bf", "bagfamily"),
                            ("set", "itemset"), ("rp", "randomproperty"), ("lk", "lockid"),
-                           ("fl", "flags"), ("qs", "startquest")):
+                           ("fl", "flags"), ("qs", "startquest"), ("de", "disenchantid")):
             v = g(r, ic, field)
             if v:
                 it[key] = v

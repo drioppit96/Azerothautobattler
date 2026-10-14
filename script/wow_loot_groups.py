@@ -5,6 +5,7 @@ gamedata/loot.json as "raw":
 
   raw.creature  {lootId: [[item, chance, group, minCountOrRef, maxCount], ...]}
   raw.reference {refId:  [[item, chance, group, minCountOrRef, maxCount], ...]}
+  raw.disenchant {disenchantId: [...]}   (and "de" - the disenchant id - on the items in items.json)
 
 How the game rolls them (game/combat.js lootDrops, like cMaNGOS):
   - group 0: every row on its own, chance % (a negative chance: a quest item, only with the quest)
@@ -37,7 +38,9 @@ def raw_from_cursor(cur, used):
             ch = g(r, c, "chanceorquestchance", 0) or g(r, c, "chance", 0) or 0
             out.setdefault(g(r, c, "entry"), []).append([g(r, c, "item"), round(float(ch), 4), g(r, c, "groupid") or 0, g(r, c, "mincountorref"), g(r, c, "maxcount") or 1])
         return out
-    return pick(load("creature_loot_template"), load("reference_loot_template"), used)
+    out = pick(load("creature_loot_template"), load("reference_loot_template"), used)
+    out["disenchant"] = {str(k): v for k, v in load("disenchant_loot_template").items()}
+    return out
 
 
 def pick(cr, rf, used):
@@ -58,7 +61,7 @@ def main():
     dump = sys.argv[1]
     path = os.path.join(ROOT, "gamedata", "loot.json")
     L = json.load(open(path, encoding="utf-8"))
-    t = S.tables(dump, ["creature_loot_template", "reference_loot_template"])
+    t = S.tables(dump, ["creature_loot_template", "reference_loot_template", "disenchant_loot_template", "item_template"])
 
     def rows_of(tbl):
         cols, rows = tbl
@@ -73,6 +76,21 @@ def main():
     rf = rows_of(t["reference_loot_template"])
     used = sorted({v[6] for v in L["creatures"].values() if v[6]})
     L["raw"] = pick(cr, rf, used)          # with the reference tables reached from these (references can point to references)
+    L["raw"]["disenchant"] = {str(k): v for k, v in rows_of(t["disenchant_loot_template"]).items()}
+    # which disenchant table every item has ("de" in items.json and items_equip.json, as wow_items_json.py writes it)
+    cols, rows = t["item_template"]; ix = {c.lower(): i for i, c in enumerate(cols)}
+    de = {str(r[ix["entry"]]): r[ix["disenchantid"]] for r in rows if r[ix["disenchantid"]]}
+    for name in ("items", "items_equip"):
+        ip = os.path.join(ROOT, "gamedata", name + ".json")
+        if not os.path.exists(ip):
+            continue
+        J = json.load(open(ip, encoding="utf-8")); n = 0
+        for k, it in J["items"].items():
+            if k in de:
+                it["de"] = de[k]; n += 1
+        with open(ip, "w", encoding="utf-8") as fh:
+            json.dump(J, fh, separators=(",", ":"))
+        print("%s.json: %d items can be disenchanted" % (name, n))
     raw_c, raw_r = L["raw"]["creature"], L["raw"]["reference"]
     # every item that can drop has its name and quality in loot.items
     have = set(L["items"])

@@ -245,6 +245,47 @@ function gatherStep(c, o, rad) {
   o.node = null; gatherNode(c, n); return true;
 }
 
+/* ------------------------------------------------------------------ disenchanting (Enchanting)
+   Green, blue and purple armor and weapons break down into dust, essences and shards (one result each time, from the
+   item's own disenchant table). The skill needed grows with the item level: 1 up to item level 20, then 25 more for
+   every 5 levels; epics need at least 225. */
+const ENCHANTING = 333;
+function disenchantReq(it) { const il = it.il || 1; const r = il <= 20 ? 1 : Math.ceil((il - 20) / 5) * 25; return Math.min(300, it.q >= 4 ? Math.max(225, r) : r); }
+/* why this cannot be disenchanted by c (null: it can) */
+function disenchantWhy(c, inst) {
+  const it = itemRow(inst.id); if (!it || !it.de || !(it.q >= 2 && it.q <= 4)) return 'cannot be disenchanted';
+  if (!hasProf(c, ENCHANTING)) return 'needs Enchanting';
+  const req = disenchantReq(it); if (profSkill(c, ENCHANTING) < req) return 'needs Enchanting ' + req;
+  return null;
+}
+function disenchantable(id) { const it = itemRow(id); return !!(it && it.de && it.q >= 2 && it.q <= 4); }
+/* 3 seconds of casting; the item is gone, what it broke into goes in the bags */
+function disenchantItem(c, idx, quiet) {
+  const inst = c.bags[idx]; if (!inst) return false; const why = disenchantWhy(c, inst);
+  if (why) { if (!quiet) log(itemName(inst.id, inst) + ': ' + why + '.'); return false; }
+  const it = itemRow(inst.id);
+  startInteract(c, 'Disenchanting ' + itemName(inst.id, inst), () => {
+    const i = c.bags.indexOf(inst); if (i < 0) return;
+    c.bags.splice(i, 1);
+    const raw = G.d.loot.raw && G.d.loot.raw.disenchant && G.d.loot.raw.disenchant[it.de]; const out = [];
+    if (raw) lootRollRows(raw, () => false, out, 0);
+    else for (const [item, pct, mn, mx] of (G.d.loot.tables.disenchant || {})[it.de] || []) if (Math.random() * 100 < pct) out.push([item, irnd(mn, mx)]);
+    const got = [];
+    for (const [item, n] of out) { if (addItem(c, item, n)) got.push((n > 1 ? n + ' x ' : '') + itemName(item)); else log('Bags are full - ' + itemName(item) + ' is lost.'); }
+    log('Disenchanted ' + itemName(inst.id, inst) + (got.length ? ': ' + got.join(', ') : ' - nothing came of it') + '.');
+    if (c.prof) checkRecipeItems(c);
+    save(); refreshGear();
+  }, 3);
+  return true;
+}
+/* the automation option: green gear that is no upgrade is disenchanted instead of sold (out of a fight, one at a time) */
+function autoDisenchantStep(c) {
+  if (!hasProf(c, ENCHANTING) || !cset(c, 'autoDisenchant') || rt(c).interact) return false;
+  if (G.gameTime - (rt(c).deT || -9) < 2) return false; rt(c).deT = G.gameTime;
+  const idx = c.bags.findIndex((x) => { const it = itemRow(x.id); return it && it.q === 2 && it.de && !disenchantWhy(c, x) && !upgradeFor(c, x) && !(G.q.startBy && G.q.startBy[x.id]); });
+  return idx >= 0 && bagFree(c) >= 1 && disenchantItem(c, idx, true);
+}
+
 /* ------------------------------------------------------------------ skinning */
 function skinnable(c, m) { if (!hasProf(c, SKINNING) || !m || m.skinned) return false; const l = skinLoot(m.e); return !!(l && l.length) && profSkill(c, SKINNING) >= skinReq(m.lvl); }
 function onKillProf(c, m) { if (skinnable(c, m)) { const r = rt(c); r.skin = (r.skin || []).filter((x) => G.gameTime - x.t < 40).concat([{ m, x: m.x, y: m.y, t: G.gameTime }]); } }
@@ -268,6 +309,7 @@ function skinStep(c) {
 function profStep(c) {
   if (!c.prof || !PD()) return false; const r = rt(c);
   if (r.sellMats && bagFree(c) > 4) r.sellMats = false;
+  if (autoDisenchantStep(c)) return true;           // frees a bag slot, so before the full-bags check
   if (bagFree(c) <= 2) return false;
   if (skinStep(c)) return true;
   const o = c.order; if (!o || G.state.settings.gatherWhileLeveling === false) return false;

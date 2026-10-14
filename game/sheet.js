@@ -138,6 +138,7 @@ function showItemMenu(ev, ref) {
   if (ref.where === 'bag') {
     if (it && it.c === 1 && it.cs) acts.push(['bag', 'Equip bag']);
     else if (it && it.sl && it.sl.length) { const why = canEquip(c, inst.id); acts.push(['equip', why ? 'Equip (' + why + ')' : 'Equip', !!why]); if (it.t === 13 && canDualWield(c)) { acts.push(['equip15', 'Equip in main hand']); acts.push(['equip16', 'Equip in off hand']); } }
+    if (typeof disenchantable === 'function' && disenchantable(inst.id) && hasProf(c, ENCHANTING)) { const why = disenchantWhy(c, inst); acts.push(['dis', why ? 'Disenchant (' + why + ')' : 'Disenchant', !!why]); }
     if (typeof recipeOf === 'function' && recipeOf(inst.id)) { const why = recipeLearnWhy(c, inst.id); acts.push(['learn', why ? 'Learn (' + why + ')' : 'Learn recipe', !!why]); }
     const u = useInfo(inst.id); const cu = typeof consInfo === 'function' && consInfo(inst.id);
     if (u && (u.kind !== 'other' || cu)) acts.push(['use', u.kind === 'potion' ? 'Drink potion' : u.kind === 'food' ? 'Eat' : cu && cu.kind === 'bandage' ? 'Apply bandage' : cu && cu.kind === 'weapon' ? 'Apply to weapon' : cu && cu.kind === 'bomb' ? 'Throw' : 'Use']);
@@ -162,6 +163,7 @@ function showItemMenu(ev, ref) {
     else if (a === 'bag') equipBag(c, ref.idx);
     else if (a === 'use') useItem(c, ref.idx);
     else if (a === 'learn') { learnRecipeItem(c, ref.idx); save(); }
+    else if (a === 'dis') disenchantItem(c, ref.idx);
     else if (a === 'sell') sellIndex(c, ref.idx);
     else if (a === 'destroy') destroyItem(c, ref.idx);
     else if (a === 'unequip') unequipSlot(c, ref.slot);
