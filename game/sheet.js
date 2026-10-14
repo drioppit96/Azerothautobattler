@@ -104,7 +104,7 @@ function renderSheet() {
   $('sheetBags').innerHTML = bagsHtml(c);
   if (!G.qtHover) { /* keep */ }
 }
-function refreshGear() { const c = active(); if (c && c.prof && typeof checkRecipeItems === 'function') checkRecipeItems(c); renderGearCard(); if (SH.open) renderSheet(); }
+function refreshGear() { renderGearCard(); if (SH.open) renderSheet(); }
 
 /* ------------------------------------------------------------------ tooltip */
 function instFromEl(el) {
@@ -233,15 +233,10 @@ function renderGearCard() {
     (upgrades ? '<div class="kv"><span>Upgrades in bags</span><b style="color:#1eff00">' + upgrades + '</b></div>' : '') +
     (talentFree(c) > 0 ? '<div class="kv"><span>Talent points</span><b style="color:#1eff00">' + talentFree(c) + ' free</b></div>' : '') +
     '<div class="btnrow"><button class="act" id="btnSheet">Character &amp; bags (C)</button><button class="mini" id="btnTal">Talents (N)</button><button class="mini" id="btnVendor">' + (v ? 'Vendor' : 'Go to vendor') + '</button><button class="mini" id="btnRepair">Repair</button><button class="mini" id="btnAh">Auction house' + (mailWaiting(c) ? ' (mail ' + mailWaiting(c) + ')' : '') + '</button><button class="mini" id="btnBank">Bank</button></div>' +
-    '<label class="chk"><input type="checkbox" data-set="autoEquip"' + (st.autoEquip ? ' checked' : '') + '> Equip upgrades automatically</label>' +
-    '<label class="chk"><input type="checkbox" data-set="autoBuyBags"' + (st.autoBuyBags ? ' checked' : '') + '> Buy bags at vendors when there is a free bag slot</label>' +
-    '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" id="lnkBeh">Behaviour</a></div>' +
-    '<label class="chk"><input type="checkbox" data-set="autoRepair"' + (st.autoRepair ? ' checked' : '') + '> Repair automatically at vendors</label>';
+    '';
   $('btnSheet').onclick = () => openSheet('char'); $('btnTal').onclick = () => openSheet('talents');
   $('btnVendor').onclick = () => { if (vendorNear(c)) openSheet('vendor'); else orderVendor(c); };
   $('btnRepair').onclick = () => { const vv = vendorNear(c); if (vv && vv.repair) { repairAll(c); } else orderRepair(c); };
-  el.querySelectorAll('[data-set]').forEach((i) => { i.onchange = () => { st[i.dataset.set] = i.checked; save(); }; });
-  $('lnkBeh').onclick = (e) => { e.preventDefault(); openSheet('beh'); };
   $('btnAh').onclick = () => openSheet('ah'); $('btnBank').onclick = () => openSheet('bank');
 }
 

@@ -46,7 +46,7 @@ function switchCharacter(id) {
   G.selected = null; if (SH.open) closeSheet(); hideMenu(); if (G.routeEdit) { G.routeEdit = null; if (typeof renderRouteBar === 'function') renderRouteBar(); }
   const uf = $('unitframes'); if (uf) uf._w = 0;
   ensureWorld(c.pos.map); loadGrid(c.pos.map); goToCharacter();
-  renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderAbar(); renderGroup();
+  renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderSettingsCard(); renderAbar(); renderGroup();
   if (typeof meterReset === 'function') meterReset();
   log('Now playing ' + c.name + (c.order ? ' (' + orderText(c).t + ')' : '') + '.'); save(); renderCharSwitch();
 }
@@ -356,6 +356,36 @@ function renderChar() {
   if (!$('unitframes')) $('charCard').innerHTML = '<div id="unitframes"></div>';
   renderUnitFrames();
 }
+/* ------------------------------------------------------------------ fold-away cards (right panel) */
+function cardOpen(id, def) { const o = G.state.settings.cardOpen || {}; return id in o ? o[id] : def; }
+function cardHead(id, title, def) { const on = cardOpen(id, def); return '<h3 class="ch" data-card="' + id + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span> ' + title + '</h3>'; }
+function bindCards() {
+  $('right').addEventListener('click', (e) => {
+    const h = e.target.closest('[data-card]'); if (!h) return;
+    const id = h.dataset.card; const o = G.state.settings.cardOpen = G.state.settings.cardOpen || {};
+    o[id] = !cardOpen(id, h.closest('.card').dataset.def !== '0'); save();
+    if (id === 'quests') renderQuests(); else if (id === 'auto') renderSettingsCard(); else renderGearCard();
+  });
+}
+/* the automatic behaviour, in groups (what the character does by itself) */
+const AUTO_GROUPS = [
+  ['Selling and junk', [['autoSellJunk', 'Sell junk (grey and vendor trash) when near a vendor, and when the bags are full'], ['sellWhiteGear', 'Count white gear that is no upgrade as junk']]],
+  ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)']]],
+  ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself']]],
+];
+function renderSettingsCard() {
+  const el = $('setCard'); if (!el) return; const st = G.state.settings; const on = cardOpen('auto', false);
+  let h = cardHead('auto', 'Automation', false);
+  if (on) {
+    for (const [title, list] of AUTO_GROUPS) {
+      h += '<div class="aset"><h5>' + title + '</h5>' + list.map(([k, t, defTrue]) => '<label class="chk"><input type="checkbox" data-aset="' + k + '"' + ((defTrue ? st[k] !== false : st[k]) ? ' checked' : '') + '> ' + t + '</label>').join('') + '</div>';
+    }
+    h += '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" data-abeh="1">Behaviour</a></div>';
+  }
+  el.innerHTML = h; el.dataset.def = '0';
+  el.onchange = (e) => { const k = e.target.dataset && e.target.dataset.aset; if (!k) return; st[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
+  el.onclick = (e) => { if (e.target.dataset && e.target.dataset.abeh) { e.preventDefault(); openSheet('beh'); } };
+}
 function orderText(c) {
   const o = c.order; if (!o) return null;
   if (o.type === 'travel' && o.cross) return { t: 'Travel to ' + o.label, d: o.leaving ? 'walking to the way out of the dungeon' : o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : o.via };
@@ -392,14 +422,10 @@ function renderOrder() {
       '<span class="obtn' + (on('gather') ? ' on' : '') + '"><button class="mini" data-oroute="gather" title="' + (gr && gr.pts.length >= 2 ? 'Walk the gathering route: herbs, ore, skinning' : 'Set up a gathering route on the map') + '">&#127807; Gather</button><button class="mini" data-oedit="gather" title="Edit the gathering route on the map">&#9998;</button></span>' +
       '<span class="obtn' + (on('grind') ? ' on' : '') + '"><button class="mini" data-oroute="grind" title="' + (ki && ki.pts.length >= 2 ? 'Walk the grinding route and fight the creatures along it' : 'Set up a grinding route on the map') + '">&#9876; Grind</button><button class="mini" data-oedit="grind" title="Edit the grinding route on the map">&#9998;</button></span></div>';
   }
-  h += '<div style="margin-top:10px"><label class="chk"><input type="checkbox" id="autoSell"' + (G.state.settings.autoSellJunk ? ' checked' : '') + '> Auto-sell junk (grey and vendor trash): when near a vendor, and when bags are full</label>' +
-    '<label class="chk"><input type="checkbox" id="sellWhite"' + (G.state.settings.sellWhiteGear ? ' checked' : '') + '> Count white gear that is no upgrade as junk</label></div>';
   $('orderCard').innerHTML = h;
   const b = $('btnStop'); if (b) b.onclick = () => stopOrder(c);
   $('orderCard').querySelectorAll('[data-oroute]').forEach((x) => { x.onclick = () => { routeButton(c, x.dataset.oroute); renderOrder(); }; });
   $('orderCard').querySelectorAll('[data-oedit]').forEach((x) => { x.onclick = () => routeEditStart(x.dataset.oedit); });
-  const a = $('autoSell'); if (a) a.onchange = () => { G.state.settings.autoSellJunk = a.checked; save(); };
-  const sw = $('sellWhite'); if (sw) sw.onchange = () => { G.state.settings.sellWhiteGear = sw.checked; save(); refreshGear(); };
 }
 function renderInfo(sel) {
   const el = $('infoCard');
@@ -859,7 +885,7 @@ async function boot() {
     goToCharacter();
     loadGrid(c.pos.map);
     setSpeed(G.state.settings.speed === undefined ? 1 : G.state.settings.speed);
-    renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); bindSheet(); syncNodeToggle();
+    renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderSettingsCard(); bindCards(); bindSheet(); syncNodeToggle();
     METER.show = !!G.state.settings.meter; renderMeter(true); syncMeterBtn();
     bindGroupCard(); renderGroup();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');

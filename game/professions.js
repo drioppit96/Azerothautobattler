@@ -94,8 +94,8 @@ function trainAt(c, npc, focus) {
   save(); refreshGear();
 }
 /* recipe items (Recipe: ..., Pattern: ..., Plans: ...) in the bags are learned when the skill is high enough */
-/* recipe items (Recipe:, Pattern:, Plans:, Schematic:, Formula:) in the bags are learned as soon as the character has the
-   profession with enough skill - picked up, bought, traded, or when the skill rises. Or by hand ("Learn" on the item). */
+/* recipe items (Recipe:, Pattern:, Plans:, Schematic:, Formula:) are learned by hand ("Learn recipe" in the item menu)
+   when the character has the profession with enough skill */
 function recipeOf(id) { if (!PD()) return null; const sid = profIndex().byItem[id]; return sid ? { sid, r: PD().recipes[sid] } : null; }
 function recipeLearnWhy(c, id) {
   const x = recipeOf(id); if (!x) return 'not a recipe';
@@ -111,14 +111,15 @@ function learnRecipeItem(c, idx, quiet) {
   if (--inst.n <= 0) c.bags.splice(idx, 1);
   return true;
 }
+/* recipes are learned only by hand (the item menu); this only says once when one in the bags can be learned now */
 function checkRecipeItems(c) {
-  if (!c.prof || !PD()) return;
-  for (let i = c.bags.length - 1; i >= 0; i--) if (recipeOf(c.bags[i].id) && !recipeLearnWhy(c, c.bags[i].id)) learnRecipeItem(c, i, true);
+  if (!c.prof || !PD()) return; const r = rt(c); r.recipeSaid = r.recipeSaid || {};
+  for (const x of c.bags) { const rc = recipeOf(x.id); if (!rc || r.recipeSaid[x.id] || recipeLearnWhy(c, x.id)) continue; r.recipeSaid[x.id] = 1; withLog(c, () => log('You can learn ' + itemName(x.id) + ' now (click it in the bags - Learn recipe).')); }
 }
 function recipeTipLine(c, id) {
   const x = recipeOf(id); if (!x) return ''; const why = recipeLearnWhy(c, id);
   const made = x.r.cr ? itemName(x.r.cr[0]) : x.r.n;
-  return '<div class="small" style="color:' + (why && why !== 'already known' ? '#ff6a5a' : '#1eff00') + '">Teaches ' + esc(profName(x.r.skill)) + ': ' + esc(made) + ' (skill ' + x.r.learn + ')' + (why ? ' - ' + esc(why) : ' - click to learn') + '</div>' +
+  return '<div class="small" style="color:' + (why && why !== 'already known' ? '#ff6a5a' : '#1eff00') + '">Teaches ' + esc(profName(x.r.skill)) + ': ' + esc(made) + ' (skill ' + x.r.learn + ')' + (why ? ' - ' + esc(why) : ' - click it, Learn recipe') + '</div>' +
     (x.r.re ? '<div class="small muted">Reagents: ' + x.r.re.map(([it, n]) => n + ' x ' + esc(itemName(it))).join(', ') + '</div>' : '');
 }
 
@@ -526,7 +527,7 @@ function professionsHtml(c) {
         (r.ench ? '' : '<button class="mini" data-pcraftall="' + sid + '"' + (n > 1 ? '' : ' disabled') + '>All</button>') + '</div>';
     }
     const waiting = c.bags.filter((x) => { const rc = recipeOf(x.id); return rc && rc.r.skill === id && !profState(c).recipes[rc.sid]; });
-    if (waiting.length) b += '<div class="small" style="margin:4px 0">Recipes in your bags, learned when the skill is high enough: ' + waiting.map((x) => '<span data-iid="' + x.id + '" style="color:#ff9a8a">' + esc(itemName(x.id)) + ' (' + recipeOf(x.id).r.learn + ')</span>').join(', ') + '</div>';
+    if (waiting.length) b += '<div class="small" style="margin:4px 0">Recipes in your bags (click one in the bags to learn it when the skill is high enough): ' + waiting.map((x) => '<span data-iid="' + x.id + '" style="color:#ff9a8a">' + esc(itemName(x.id)) + ' (' + recipeOf(x.id).r.learn + ')</span>').join(', ') + '</div>';
     b += '<div class="small muted">Colors: <span class="rc-orange">orange</span> always raises the skill, <span class="rc-yellow">yellow</span> usually, <span class="rc-green">green</span> rarely, <span class="rc-grey">grey</span> never.</div>';
     const craftable = all.filter((sid) => craftCount(c, sid) > 0).length;
     h += profSection('r' + id, esc(profName(id)) + ' - recipes <span class="pcount">' + (filtering ? list.length + ' of ' + all.length : all.length) + (craftable ? ', ' + craftable + ' craftable' : '') + '</span>', b, false, filtering);

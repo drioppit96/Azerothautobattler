@@ -620,7 +620,8 @@ function updateQuesting(c, o, dt) {
 /* ------------------------------------------------------------------------- UI */
 function renderQuests() {
   const el = $('questCard'); if (!el) return; const c = active();
-  let h = '<h3>Quests</h3>';
+  let h = cardHead('quests', 'Quests' + (Object.keys(c.quests).length ? ' <span class="small muted">(' + Object.keys(c.quests).length + ' active)</span>' : ''), true);
+  if (!cardOpen('quests', true)) { el.innerHTML = h; el.onclick = null; questMarks(c); return; }
   const zl = zoneList(c);
   let cur = G.state.settings.questZone && zl.find((z) => z.name === G.state.settings.questZone) ? G.state.settings.questZone : null;
   if (!cur) { const a0 = availableQuests(c, 1)[0]; const zz = a0 && questZoneOf(a0.q); cur = zz ? (zl.find((z) => z.name === zz.sub) ? zz.sub : zz.zone) : (zl[0] || {}).name; }
@@ -649,9 +650,6 @@ function renderQuests() {
     h += '<div class="q"><div class="qt" style="color:' + levelColor(q.level, c.level) + '">[' + q.level + '] ' + esc(q.title) + '</div><div class="muted small">' + esc(spotName(s)) + ' - ' + Math.round(d) + ' yd' + (why ? ' - <i>' + esc(why) + '</i>' : '') + (dq ? ' - <span style="color:#b28cff">dungeon: ' + esc(dq.short || dq.name) + '</span>' : '') + '</div>' +
       '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>Do it</button></div>';
   }
-  h += '<label class="chk" style="margin-top:6px"><input type="checkbox" id="chainQ"' + (G.state.settings.chainQuests ? ' checked' : '') + '> After a single quest, continue with the next one</label>';
-  h += '<label class="chk"><input type="checkbox" id="dgQ"' + (G.state.settings.dungeonQuests !== false ? ' checked' : '') + '> Leveling and auto-quest do dungeon quests too</label>';
-  h += '<label class="chk"><input type="checkbox" id="dgSolo"' + (G.state.settings.dungeonSolo ? ' checked' : '') + '> Do dungeon quests alone (no group)</label>';
   el.innerHTML = h;
   el.onclick = (ev) => {
     const t = ev.target; if (!t.dataset) return;
@@ -661,9 +659,6 @@ function renderQuests() {
     if (t.dataset.ab) { const q = G.q.byId[t.dataset.ab]; if (q && confirm('Abandon "' + q.title + '"?')) { delete c.quests[q.id]; if (c.order && c.order.type === 'quest' && c.order.qid === q.id) c.order = null; save(); renderQuests(); renderOrder(); } }
   };
   const zs = $('qzone'); if (zs) zs.onchange = () => { G.state.settings.questZone = zs.value; save(); };
-  const ch = $('chainQ'); if (ch) ch.onchange = () => { G.state.settings.chainQuests = ch.checked; save(); };
-  const dg = $('dgQ'); if (dg) dg.onchange = () => { G.state.settings.dungeonQuests = dg.checked; save(); };
-  const ds = $('dgSolo'); if (ds) ds.onchange = () => { G.state.settings.dungeonSolo = ds.checked; save(); };
   questMarks(c);
 }
 /* "!" over quest givers with a quest for you, "?" where a finished quest waits */
