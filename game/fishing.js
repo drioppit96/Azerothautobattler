@@ -32,17 +32,18 @@ function fishZoneReq(z) {
   const lv = L ? ((L.p10 || L.min) + (L.p90 || L.max)) / 2 : 20; return Math.max(-20, Math.round(lv * 4.5 - 25));
 }
 function fishTable(z) { const T = G.d.loot.tables.fishing || {}; return z ? T[z.id] || null : null; }
-/* a shore spot near (x, y): standing ground with deep enough water a few yards away; returns {x, y, wx, wy} */
+/* a shore spot near (x, y): dry walkable ground with water 10 and 16 yards away in one direction; returns {x, y, wx, wy} */
 function fishSpot(c, x, y, radius) {
-  if (!gridOf(c.pos.map)) return null; const R = radius || 250; let best = null, bd = Infinity;
-  for (let d = 4; d <= R; d += 4) {
-    const n = Math.max(8, Math.round(d * 1.2));
+  const M = c.pos.map; if (!waterKnown(M)) return null; const R = radius || 250; let best = null, bd = Infinity;
+  const dry = (px, py) => !waterAt(M, px, py) && passable(M, px, py);
+  for (let d = 0; d <= R; d += 4) {
+    const n = d ? Math.max(8, Math.round(d * 1.2)) : 1;
     for (let k = 0; k < n; k++) {
       const a = k / n * Math.PI * 2; const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
-      if (groundAt(c.pos.map, px, py) !== 1) continue;
-      for (let b = 0; b < 8; b++) {
-        const aa = b / 8 * Math.PI * 2; const wx = px + Math.cos(aa) * 9, wy = py + Math.sin(aa) * 9;
-        if (groundAt(c.pos.map, wx, wy) === 2 && groundAt(c.pos.map, px + Math.cos(aa) * 14, py + Math.sin(aa) * 14) === 2) { const dd = Math.hypot(px - c.pos.x, py - c.pos.y); if (dd < bd) { bd = dd; best = { x: px, y: py, wx, wy }; } break; }
+      if (!dry(px, py)) continue;
+      for (let b = 0; b < 12; b++) {
+        const aa = b / 12 * Math.PI * 2; const ux = Math.cos(aa), uy = Math.sin(aa);
+        if (waterAt(M, px + ux * 10, py + uy * 10) && waterAt(M, px + ux * 16, py + uy * 16)) { const dd = Math.hypot(px - c.pos.x, py - c.pos.y); if (dd < bd) { bd = dd; best = { x: px, y: py, wx: px + ux * 12, wy: py + uy * 12 }; } break; }
       }
     }
     if (best) return best;
@@ -57,8 +58,8 @@ function fishPool(c, s) {
   }
   return null;
 }
-/* the collision grid of the map knows water (older grids were built without it) */
-function fishGridWater(c) { const g = gridOf(c.pos.map); return !!(g && g.water > 0); }
+/* the water of the map is known (the water map, or a collision grid built with water) */
+function fishGridWater(c) { return waterKnown(c.pos.map); }
 /* without water in the grid: the spot you show (or where you stand, casting the way you face), or the nearest school of fish */
 function fishSpotBlind(c, here, at) {
   if (at) { const d = Math.hypot(at.x - c.pos.x, at.y - c.pos.y); const a = d > 2 ? Math.atan2(at.x - c.pos.x, at.y - c.pos.y) : c.pos.o || 0; return { x: at.x, y: at.y, wx: at.x + Math.sin(a) * 9, wy: at.y + Math.cos(a) * 9 }; }
@@ -77,7 +78,7 @@ function orderFishing(c, here, at) {
   if (!OPEN_WORLD[c.pos.map]) { log('No fishing here.'); return; }
   const blind = !fishGridWater(c);
   const s = blind ? fishSpotBlind(c, here, at) : at ? fishSpot(c, at.x, at.y, 60) : fishSpot(c, c.pos.x, c.pos.y, here ? 30 : 400);
-  if (!s) { log(blind ? 'The collision map of this continent has no water in it yet (rebuild it: py wow_navgrid.py). Until then right-click the map at a shore and choose "Fish at the water here", or use "Fish right here".' : here ? 'No water close enough to fish here.' : 'No water near here to fish in.'); return; }
+  if (!s) { log(blind ? 'The water of this map is not known - right-click the map at a shore and choose "Fish at the water here", or use "Fish right here".' : here ? 'No water close enough to fish here.' : 'No water near here to fish in.'); return; }
   c.order = { type: 'fish', spot: s, casts: 0, caught: 0, label: 'Fishing', phase: 'walk' }; rt(c).mv = null; rt(c).tgt = null;
   log('Order: go fishing (' + Math.round(Math.hypot(s.x - c.pos.x, s.y - c.pos.y)) + ' yd to the water).'); save(); renderOrder();
 }
@@ -100,7 +101,7 @@ function fishCatch(c, o) {
   const s = o.spot; const z = zoneAt(c.pos.map, s.wx, s.wy) || zoneAt(c.pos.map, c.pos.x, c.pos.y); const req = fishZoneReq(z); const skill = fishSkill(c);
   const pool = fishPool(c, s);
   // below the zone's need, many fish get away
-  const p = Math.max(0.05, Math.min(1, (skill - req + 5) / 100 + (skill >= req ? 0.5 : 0)));
+  const p = skill >= req ? 0.97 : Math.max(0.05, 0.9 - (req - skill) * 0.02);
   if (Math.random() > p) { log('Your fish got away.'); fx(s.wx, s.wy, 'got away', '#cfc6b0'); return; }
   let rows = null, from = '';
   if (pool) { rows = pool.g.loot.map((x) => [x.item, x.chance, x.min, x.max, 0]); from = ' (' + pool.g.name + ')'; o.poolN = (o.poolN || 0) + 1; if (o.poolN >= 3 + Math.floor(Math.random() * 3)) { useGo(pool.g.id, pool.i); o.poolN = 0; log(pool.g.name + ' is fished out.'); } }
@@ -125,7 +126,6 @@ function fishingHtml(c) {
     (z ? ' &middot; ' + esc(z.name) + ' needs about ' + Math.max(0, req) + (fishSkill(c) < req ? ' <span style="color:#ff9a8a">(many fish get away)</span>' : '') : '') + '</div>' +
     '<div class="small">' + (p ? 'Pole: ' + esc(itemName(p.id)) : '<span style="color:#ff9a8a">No fishing pole - buy one from a fishing supplier.</span>') + ' &middot; lures in the bags: ' + c.bags.filter((x) => FISH_LURES[x.id]).reduce((s, x) => s + x.n, 0) + '</div>' +
     '<p>' + (fishing ? '<button class="act red" data-fish="stop">Stop fishing</button>' : '<button class="act" data-fish="go"' + (p ? '' : ' disabled') + '>Go fishing (nearest water)</button> <button class="mini" data-fish="here"' + (p ? '' : ' disabled') + '>Fish right here</button>') + '</p>' +
-    (fishGridWater(c) ? '' : '<div class="small" style="color:#ffcf6a">The collision map has no water in it yet (an older build - rerun py wow_navgrid.py). Until then: right-click a shore on the map and choose "Fish at the water here", or face the water and use "Fish right here".</div>') +
     '<div class="small muted">Schools of fish (pools) in the water give better catches. A lure in the bags goes on the pole by itself.</div></div>';
 }
 function fishingClick(e) {

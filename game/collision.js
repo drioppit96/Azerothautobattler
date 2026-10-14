@@ -34,10 +34,33 @@ async function loadGrid(mapId) {
       g.coarse[R * g.cw + C] = walk >= 4 ? 1 : walk + swim >= 6 ? 2 : 0; g.water += swim;
     }
     G.grids[mapId] = g;
+    loadWaterMap(mapId);
     log('Collision loaded for ' + name + ': mountains, cliffs and lava are avoided now.');
     return g;
   } catch (e) { console.warn('collision grid not loaded', e); return null; }
 }
+/* where the water is (from the colours of the zone maps, make_watermap.py) - only for fishing; 1 bit per 8.33 yd cell */
+async function loadWaterMap(mapId) {
+  G.water = G.water || {}; if (mapId in G.water) return; G.water[mapId] = null;
+  const name = GRID_FILES[mapId]; if (!name) return;
+  try {
+    const res = await fetch('../gamedata/watermap_' + name + '.bin.gz'); if (!res.ok) return;
+    let buf = new Uint8Array(await res.arrayBuffer());
+    if (buf[0] === 0x1f && buf[1] === 0x8b) buf = new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+    if (String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) !== 'WTR1') return;
+    const dv = new DataView(buf.buffer, buf.byteOffset, 16);
+    G.water[mapId] = { w: dv.getUint16(4, true), h: dv.getUint16(6, true), cell: dv.getFloat32(8, true), origin: dv.getFloat32(12, true), bits: buf.subarray(16) };
+  } catch (e) { console.warn('water map not loaded', e); }
+}
+/* water at a world position: the collision grid when it knows water (swim cells), else the water map */
+function waterAt(mapId, x, y) {
+  const g = gridOf(mapId); if (g && g.water > 0) return groundAt(mapId, x, y) === 2;
+  const w = G.water && G.water[mapId]; if (!w) return false;
+  const c = Math.floor((w.origin - y) / w.cell), r = Math.floor((w.origin - x) / w.cell);
+  if (c < 0 || r < 0 || c >= w.w || r >= w.h) return false;
+  return (w.bits[r * (w.w >> 3) + (c >> 3)] >> (7 - (c & 7)) & 1) === 1;
+}
+function waterKnown(mapId) { const g = gridOf(mapId); return !!((g && g.water > 0) || (G.water && G.water[mapId])); }
 function gridOf(mapId) { return G.grids ? G.grids[mapId] || null : null; }
 /* fine-grid code at a world position (1 walk, 2 swim, other = blocked; -1 = no grid) */
 function groundAt(mapId, x, y) {
