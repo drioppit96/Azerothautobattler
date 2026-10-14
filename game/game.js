@@ -58,14 +58,17 @@ function levelColor(mob, lvl) {
   if (diff >= -(lvl < 6 ? 3 : lvl < 40 ? 5 + Math.floor((lvl - 6) / 5) * 0 : 9)) return '#4fc26b';
   return '#9a9a9a';
 }
+/* the version of the game files (shown in the log at the start: after an update it must be the new one) */
+const GAME_VERSION = '2026-10-14 b (disenchanting, mercenaries)';
+/* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
-  const r = await fetch(url);
+  const r = await fetch(url, { cache: 'no-cache' });
   if (!r.ok) throw new Error(url + ' -> ' + r.status);
   return r.json();
 }
 async function listDir(url, ext) {
   try {
-    const r = await fetch(url); if (!r.ok) return [];
+    const r = await fetch(url, { cache: 'no-cache' }); if (!r.ok) return [];
     const html = await r.text(); const out = [];
     const re = /href="([^"]+)"/g; let m;
     while ((m = re.exec(html))) { const n = decodeURIComponent(m[1]); if (n.toLowerCase().endsWith(ext)) out.push(n.split('/').pop()); }
@@ -893,6 +896,7 @@ async function boot() {
     METER.show = !!G.state.settings.meter; renderMeter(true); syncMeterBtn();
     bindGroupCard(); renderGroup();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');
+    log('Game version ' + GAME_VERSION + '.');
     $('loading').style.display = 'none';
     requestAnimationFrame(frame);
     window.G = G;
