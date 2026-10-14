@@ -288,16 +288,30 @@ function autoDisenchantStep(c) {
 
 /* ------------------------------------------------------------------ skinning */
 function skinnable(c, m) { if (!hasProf(c, SKINNING) || !m || m.skinned) return false; const l = skinLoot(m.e); return !!(l && l.length) && profSkill(c, SKINNING) >= skinReq(m.lvl); }
-function onKillProf(c, m) { if (skinnable(c, m)) { const r = rt(c); r.skin = (r.skin || []).filter((x) => G.gameTime - x.t < 40).concat([{ m, x: m.x, y: m.y, t: G.gameTime }]); } }
+const LEATHERWORKING = 165, SKIN_CORPSE_TIME = 120;
+/* after a kill: a beast that can be skinned goes on the list (corpses stay a while, so a fight right after does not lose
+   it); a leatherworker without Skinning is told once how to get the leather */
+function onKillProf(c, m) {
+  const r = rt(c);
+  if (skinnable(c, m)) { r.skin = (r.skin || []).filter((x) => G.gameTime - x.t < SKIN_CORPSE_TIME && !x.m.skinned).concat([{ m, x: m.x, y: m.y, t: G.gameTime }]); return; }
+  if (!hasProf(c, SKINNING) && hasProf(c, LEATHERWORKING) && !r.lwHint && (skinLoot(m.e) || []).length) { r.lwHint = true; log(c.name + ' could skin this ' + (m.info ? m.info[1] : 'beast') + ' for leather - learn Skinning at a trainer (Professions) and every beast it kills is skinned.'); }
+}
 function skinStep(c) {
   const r = rt(c); if (!r.skin || !r.skin.length) return false;
   const s = r.skin[0];
-  if (G.gameTime - s.t > 45 || s.m.st !== 'dead') { r.skin.shift(); return false; }
+  if (G.gameTime - s.t > SKIN_CORPSE_TIME || s.m.st !== 'dead' || s.m.skinned) { r.skin.shift(); return false; }
   if (!goTo(c, s.x, s.y, 3)) { if (r.blocked) { r.blocked = false; r.skin.shift(); } return true; }
-  r.skin.shift();
+  // the corpse stays on the list until it is skinned: a creature that attacks in the middle only delays it
   startInteract(c, 'Skinning', () => {
+    const k = r.skin.indexOf(s); if (k >= 0) r.skin.splice(k, 1);
+    if (s.m.skinned || s.m.st !== 'dead') return;
     const got = [];
-    for (const l of skinLoot(s.m.e) || []) { if (Math.random() * 100 >= l.chance) continue; const n = irnd(l.min || 1, l.max || 1); if (addItem(c, l.item, n)) got.push((n > 1 ? n + ' x ' : '') + itemName(l.item)); }
+    // a skin gives one of the beast's leathers (one roll over their chances, like the game: never nothing)
+    // (tables adding up to well over 100%: each item on its own - scales and the like on top - but never nothing)
+    const L = skinLoot(s.m.e) || []; const sum = L.reduce((t, l) => t + (l.chance || 0), 0);
+    const pickOne = () => { let roll = Math.random() * sum; return L.find((x) => (roll -= x.chance || 0) < 0) || L[L.length - 1]; };
+    let picks = sum <= 110 ? [pickOne()] : L.filter((x) => Math.random() * 100 < x.chance); if (!picks.length && L.length) picks = [pickOne()];
+    for (const l of picks) { const n = irnd(l.min || 1, l.max || 1); if (addItem(c, l.item, n)) got.push((n > 1 ? n + ' x ' : '') + itemName(l.item)); else log('Bags are full - ' + itemName(l.item) + ' is lost.'); }
     s.m.skinned = true; if (got.length) log('Skinned: ' + got.join(', ') + '.');
     const o = c.order; if (o && o.type === 'patrol' && o.kind === 'skin') o.skinned = (o.skinned || 0) + 1;
     skillUp(c, SKINNING, gatherColor(profSkill(c, SKINNING), skinReq(s.m.lvl)));

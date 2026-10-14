@@ -203,9 +203,13 @@ function groupKill(c, m, W) {
     const xp = Math.round(killXp(o, m) * o.level / sum * bonus); gainXp(o, xp);
     log((m.info ? m.info[1] : 'creature') + ' (lvl ' + m.lvl + ') slain' + (o !== c ? ' by ' + c.name : '') + (xp ? ', +' + xp + ' xp' : '') + '.');
     lootMob(o, m, o !== looter, o === looter ? roll : null);     // the looter (in turns) opens the corpse: money shared, green+ rolled; the others get their own quest drops
-    onKill(o, m); if (o.prof && o === looter) onKillProf(o, m);
+    onKill(o, m);
     if (o !== c) { if (!isDungeonMap(o.pos.map)) masteryKill(o, m); const ro = rt(o); if (ro.tgt === m) ro.tgt = null; }
   });
+  // the corpse is skinned by someone of the group who can: the looter first, else the nearest skinner
+  const skinners = near.filter((o) => o.prof && skinnable(o, m)).sort((a, b) => (b === looter) - (a === looter) || Math.hypot(a.pos.x - m.x, a.pos.y - m.y) - Math.hypot(b.pos.x - m.x, b.pos.y - m.y));
+  if (skinners.length) withLog(skinners[0], () => onKillProf(skinners[0], m));
+  else { const lw = near.find((o) => o.prof && hasProf(o, LEATHERWORKING)); if (lw) withLog(lw, () => onKillProf(lw, m)); }
 }
 
 /* ------------------------------------------------------------------ group loot: Need / Greed */

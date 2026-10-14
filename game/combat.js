@@ -32,7 +32,7 @@ function initMob(m) {
   const k = Math.min(Math.max(0, m.lvl - lo), st ? st[1].length - 1 : 0);
   if (st && st[1][k]) { m.maxhp = st[1][k]; m.dmin = st[2][k]; m.dmax = st[3][k]; m.armor = st[4][k]; m.atk = (st[0] || 2000) / 1000; }
   else { m.maxhp = fbHp(m.lvl, rank); const d = fbDmg(m.lvl, rank); m.dmin = d[0]; m.dmax = d[1]; m.armor = fbArmor(m.lvl); m.atk = 2.0; }
-  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5); m.petThreat = 0; m.charThreat = 0;
+  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5); m.petThreat = 0; m.charThreat = 0; m.skinned = false;      // a new creature: it can be skinned again
 }
 /* creatures of world events (Scourge invasion, Ahn'Qiraj war, holidays): not part of the normal world */
 const EVENT_MOBS = [[15414, 15424], [15591, 15591], [15685, 15692], [15730, 15730], [15740, 15811], [16136, 16143], [16172, 16172], [16230, 16230], [16255, 16255], [16285, 16310], [16356, 16401], [16419, 16438], [16995, 16995]];
