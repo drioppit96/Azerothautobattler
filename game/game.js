@@ -184,7 +184,7 @@ function pickAt(sx, sy, rad) {
     const n = G.d.taxi.nodes[id];
     if (n.map !== G.map.map || !inMap(G.map, n.x, n.y) || !n.npcs.length) continue;
     const [x, y] = w2s(n.x, n.y); const d = (x - sx) ** 2 + (y - sy) ** 2;
-    if (d < bd) { bd = d; best = { kind: 'taxi', n }; }
+    if (d < bd) { bd = d; best = { kind: 'taxi', n, id: +id }; }
   }
   return best;
 }
@@ -332,6 +332,15 @@ function orderTravel(c, target, label) {
     log('Order: travel to ' + c.order.label + ' (' + c.order.via + ').'); rt(c).mv = null; save(); renderOrder(); return;
   }
   const p = planPath(c, target);
+  // far on the same continent: a flight (or a boat) when it is clearly quicker than walking
+  if (p.total > 600 && !(typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) {
+    const t = planTrip(c, { map: c.pos.map, x: target.x, y: target.y });
+    if (t && t.legs.some((l) => l.kind !== 'walk') && t.secs < p.total / RUN_SPEED * 0.8) {
+      c.order = { type: 'travel', label: label || 'a point', target: { x: target.x, y: target.y, map: c.pos.map }, cross: true, trip: t, path: [], idx: 1, total: 0, done: 0, via: 'flight' };
+      log('Order: travel to ' + c.order.label + ': ' + t.legs.map((l) => l.kind === 'walk' ? 'walk' : l.kind === 'fly' ? 'fly to ' + G.d.taxi.nodes[l.to].n : TRANSPORTS[l.t].name).join(', ') + ' (about ' + fmtTime(t.secs) + ').');
+      rt(c).mv = null; save(); renderOrder(); return;
+    }
+  }
   c.order = { type: 'travel', label: label || 'a point', target: { x: target.x, y: target.y }, path: p.pts, idx: 1, total: p.total, done: 0, via: p.via };
   log('Order: travel to ' + c.order.label + ' (' + Math.round(p.total) + ' yd, ' + fmtTime(p.total / c.speed / Math.max(1, G.state.settings.speed || 1)) + ', ' + p.via + ').');
   save(); renderOrder();
@@ -460,6 +469,7 @@ function showMenu(sx, sy, sel) {
     const ready = Object.keys(c.quests).map((id) => G.q.byId[id]).filter((q) => q && q.turnin.some((t) => t[1] === sel.mob.e) && questDone(c, q));
     for (const q of ready) extra += '<button data-a="quest:' + q.id + '">Turn in: ' + esc(q.title) + '</button>';
   }
+  if (sel.kind === 'taxi' && !away && sideOk(c, sel.n.side)) extra = '<button data-a="flyfrom">Fly from here ... (choose where)</button>' + extra;
   m.innerHTML = '<h4>' + esc(title) + '</h4>' +
     '<button data-a="travel">Travel here' + (away ? (isDungeonMap(c.pos.map) ? ' (out of the dungeon first)' : ' (ships and flights)') : '') + '</button>' +
     (away ? '' : extra) +
@@ -474,6 +484,7 @@ function showMenu(sx, sy, sel) {
     const a = ev.target.dataset && ev.target.dataset.a; if (!a) return;
     if (a === 'travel') orderTravel(c, target, label);
     else if (a === 'fish') orderFishing(c, false, target);
+    else if (a === 'flyfrom') openFlightWindow(sel.id);
     else if (a === 'route' || a === 'kroute') { const k = a === 'route' ? 'gather' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));

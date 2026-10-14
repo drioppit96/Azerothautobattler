@@ -384,3 +384,13 @@ label.chk.dim{opacity:.55}
 .trade .tr-their .slot{width:40px;height:40px}
 .trade .slot.locked{opacity:.45}
 .trade input[type=number]{background:#0f0c08;color:#f0e6cc;border:1px solid var(--line);border-radius:3px;padding:2px 4px}
+
+/* flight master window */
+#flightwin{position:absolute;right:10px;top:10px;width:300px;max-height:80%;overflow:auto;background:#120e08f0;border:1px solid #6b5631;border-radius:7px;padding:8px;z-index:7;box-shadow:0 4px 16px #000a}
+#flightwin[hidden]{display:none}
+#flightwin .fw-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+#flightwin .fw-head b{color:#ffd76a;font-family:Georgia,serif;font-size:15px}
+#flightwin .fw-list{margin:6px 0}
+#flightwin .fw-row{display:flex;justify-content:space-between;width:100%;background:#1c160d;border:1px solid #3a2f1c;color:#f0e6cc;padding:5px 7px;margin-bottom:3px;border-radius:4px;cursor:pointer;font:13px "Segoe UI"}
+#flightwin .fw-row:hover:not(:disabled){background:#3a2f1c;border-color:#c9a646}
+#flightwin .fw-row:disabled{color:#6d634f;cursor:default}

@@ -50,7 +50,16 @@ function itemBuy(id) { const r = itemRow(id); return r && r.bp ? r.bp : Math.max
 function buyCount(id) { const r = itemRow(id); return r && (r.c === 0 || ((r.c === 7 || r.c === 5) && (r.q || 0) <= 1)) ? Math.min(10, itemStack(id) || 1) : r && r.c === 6 ? itemStack(id) : 1; }
 /* what one piece costs at a vendor */
 function unitBuy(id) { return itemBuy(id) / Math.max(1, buyCount(id)); }
-function itemStack(id) { const r = itemRow(id); if (r && r.sk) return r.sk; const l = lootRow(id); return (l && l[5]) || 1; }
+/* bigger stacks than 1.12 had: potions and elixirs 20, ores, bars, cloth, leather and hides 50 */
+const STACK_50 = /^(Runecloth|Felcloth|Mooncloth)$| Ore$|^Thorium Ore$| Bar$|^(Linen|Wool|Silk|Mageweave|Runecloth|Felcloth|Mooncloth) Cloth$|^Bolt of |Leather$| Hide$|^Light Hide$|^Heavy Hide$|^Thick Hide$|^Rugged Hide$|^Medium Hide$/;
+function itemStack(id) {
+  const r = itemRow(id);
+  if (r && r.n) {
+    if (r.c === 7 && STACK_50.test(r.n) && !/Belt|Pants|Gloves|Boots|Vest|Bracers/.test(r.n)) return 50;
+    if (r.c === 0 && /Potion|Elixir/.test(r.n)) return Math.max(20, r.sk || 1);
+  }
+  if (r && r.sk) return r.sk; const l = lootRow(id); return (l && l[5]) || 1;
+}
 function itemIcon(id) { const r = itemRow(id); return r && r.ic ? '../icons/' + r.ic.toLowerCase() + '.jpg' : ''; }
 function maxDur(id) { const r = itemRow(id); return r && r.du ? r.du : 0; }
 function money(cp) { cp = Math.floor(cp || 0); const g = Math.floor(cp / 10000), s = Math.floor(cp % 10000 / 100), k = cp % 100; return (g ? g + 'g ' : '') + (s || g ? s + 's ' : '') + k + 'c'; }
@@ -651,6 +660,7 @@ function tooltipHtml(c, inst, opts) {
   if (p) for (const [au, mi, v] of p.eq || []) if (au !== 29) { const t = auraText(au, mi, v); if (t) h += '<div class="tt-green">' + t + '</div>'; }
   if (it.ds) h += '<div class="tt-desc">"' + esc(it.ds) + '"</div>';
   if (it.il) h += '<div class="muted small">Item level ' + it.il + '</div>';
+  if (typeof recipeTipLine === 'function') h += recipeTipLine(c, inst.id);
   if (typeof ahTipLine === 'function' && !(opts && opts.noAh)) h += ahTipLine(c, inst);
   const sp = itemSell(id); h += sp ? '<div class="small">Sell price: ' + moneyHtml(sp * (inst.n || 1)) + '</div>' : '<div class="small muted">No sell price</div>';
   if (opts && opts.price) h += '<div class="small">Buy price: ' + moneyHtml(opts.price) + '</div>';

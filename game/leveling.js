@@ -123,10 +123,15 @@ function tripStep(c, t) {
   }
   if (l.kind === 'fly') {
     const n = G.d.taxi.nodes[l.from];
-    if (Math.hypot(n.x - c.pos.x, n.y - c.pos.y) > 8) { const ok = goTo(c, n.x, n.y, 4); if (r.blocked) { r.blocked = false; return 'fail'; } if (!ok) return 'busy'; }
+    if (Math.hypot(n.x - c.pos.x, n.y - c.pos.y) > 8) {
+      const ok = goTo(c, n.x, n.y, 4);
+      if (r.blocked) { r.blocked = false; if (Math.hypot(n.x - c.pos.x, n.y - c.pos.y) > 60) return 'fail'; }       // up the tower stairs
+      else if (!ok) return 'busy';
+      c.pos.x = n.x; c.pos.y = n.y; if (n.z != null) c.pos.z = n.z;
+    }
     if ((c.gold || 0) < l.cost) { log('Not enough money for the flight to ' + G.d.taxi.nodes[l.to].n + '.'); return 'fail'; }
     c.gold -= l.cost; r.mv = null;
-    r.flying = { pts: l.pts.slice(), idx: 0, to: l.to };
+    r.flying = { pts: l.pts.slice(), idx: 0, to: l.to }; r.tgt = null; r.threats = [];
     log('Flying to ' + G.d.taxi.nodes[l.to].n + (l.cost ? ' (' + money(l.cost) + ')' : '') + ', about ' + fmtTime(l.secs) + '.');
     t.i++; return 'busy';
   }
@@ -409,4 +414,47 @@ function fleeLoop(c, o) {
   }
   if (o.type === 'leveling' && o.mode === 'grind' && o.grind) { o.badSpots = (o.badSpots || []).concat([{ map: c.pos.map, x: o.grind.cx, y: o.grind.cy }]).slice(-30); o.mode = 'pick'; o.grind = null; return; }
   if (o.type === 'travel' || o.type === 'trainer') { log('The way is too dangerous - order cancelled.'); c.order = o.resume || null; renderOrder(); }
+}
+
+/* ------------------------------------------------------------------ the flight master window */
+/* every flight path of this side from the chosen flight master: known ones can be flown to (time and price of the
+   flight), the others are greyed out until discovered */
+function openFlightWindow(fromId) {
+  const c = active(); const from = G.d.taxi.nodes[fromId]; if (!from) return;
+  let el = $('flightwin'); if (!el) { el = document.createElement('div'); el.id = 'flightwin'; $('mapwrap').appendChild(el); }
+  el.hidden = false; el.dataset.from = fromId;
+  const known = !!(c.taxi && c.taxi[fromId]);
+  const rows = [];
+  for (const id in G.d.taxi.nodes) {
+    const n = G.d.taxi.nodes[id]; if (+id === +fromId || n.map !== from.map || !n.npcs || !n.npcs.length || !sideOk(c, n.side)) continue;
+    const f = flightRoute(c, +fromId, +id); if (!f) continue;
+    rows.push({ id: +id, n, f, ok: known && !!(c.taxi && c.taxi[id]) });
+  }
+  rows.sort((a, b) => (!!(c.taxi && c.taxi[b.id]) - !!(c.taxi && c.taxi[a.id])) || a.n.n.localeCompare(b.n.n));
+  const far = Math.hypot(from.x - c.pos.x, from.y - c.pos.y);
+  el.innerHTML = '<div class="fw-head"><b>' + esc(from.n) + '</b><button class="mini" data-fwclose="1">&#10005;</button></div>' +
+    '<div class="small muted">' + esc(from.npcs[0][1]) + ', flight master' + (c.pos.map === from.map ? ' - ' + Math.round(far) + ' yd from you' + (far > 10 ? ' (walks there first)' : '') : ' - on another continent (travels there first)') + '</div>' +
+    (known ? '' : '<div class="small" style="color:#ffcf6a">You have not discovered this flight path yet - talking to the flight master discovers it.</div>') +
+    '<div class="fw-list">' + (rows.length ? rows.map((x) => '<button class="fw-row"' + (c.taxi && c.taxi[x.id] ? '' : ' disabled') + ' data-fwto="' + x.id + '"><span>' + esc(x.n.n) + '</span><span class="small">' + fmtTime(x.f.secs) + ' &middot; ' + money(x.f.cost) + '</span></button>').join('') : '<div class="small muted">No flight paths from here.</div>') + '</div>' +
+    '<div class="small muted">Greyed out: not discovered yet. While flying nothing can attack you.</div>';
+  el.onclick = (e) => {
+    const b = e.target.closest('[data-fwto],[data-fwclose]'); if (!b) return;
+    if (b.dataset.fwclose) { el.hidden = true; return; }
+    orderFlight(active(), +el.dataset.from, +b.dataset.fwto); el.hidden = true;
+  };
+}
+/* go to a flight master (walking, ships, other flights if needed), pay and fly to the chosen flight path */
+function orderFlight(c, fromId, toId) {
+  const from = G.d.taxi.nodes[fromId], to = G.d.taxi.nodes[toId];
+  const f = flightRoute(c, fromId, toId); if (!f) { log('No flight from ' + from.n + ' to ' + to.n + '.'); return; }
+  if ((c.gold || 0) < f.cost) { log('Not enough money for the flight to ' + to.n + ' (' + money(f.cost) + ').'); return; }
+  c.taxi = c.taxi || {}; c.taxi[fromId] = 1;
+  let legs = [];
+  if (c.pos.map !== from.map || Math.hypot(from.x - c.pos.x, from.y - c.pos.y) > 10) {
+    const t = planTrip(c, { map: from.map, x: from.x, y: from.y }); if (!t) { log('No way to ' + from.n + ' found.'); return; }
+    legs = t.legs;
+  }
+  legs.push({ kind: 'fly', from: fromId, to: toId, pts: f.pts, cost: f.cost, secs: f.secs });
+  c.order = { type: 'travel', label: to.n, target: { x: to.x, y: to.y, map: to.map }, cross: true, trip: { legs, secs: f.secs, i: 0, dest: to }, path: [], idx: 1, total: 0, done: 0, via: 'flight' };
+  rt(c).mv = null; log('Order: fly from ' + from.n + ' to ' + to.n + ' (' + fmtTime(f.secs) + ', ' + money(f.cost) + ').'); save(); renderOrder();
 }

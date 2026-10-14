@@ -39,7 +39,7 @@ function tradeAccept(c) {
   withLog(o, () => log('Trade with ' + c.name + ' done. You gave ' + desc(take, TR.goldTheirs) + ' and got ' + desc(give, TR.goldMine) + '.'));
   for (const x of take) if (questNeeds(c, x.id)) onItemGained(c, x.id);
   for (const x of give) if (questNeeds(o, x.id)) withLog(o, () => onItemGained(o, x.id));
-  autoEquip(o); tradeReset(true); save(); refreshGear();
+  autoEquip(o); if (o.prof) withLog(o, () => checkRecipeItems(o)); tradeReset(true); save(); refreshGear();
 }
 function tradeSlotHtml(list, owner, side) {
   let h = '<div class="tr-slots">';
