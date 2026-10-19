@@ -26,7 +26,7 @@ spells.json
       fam [spellFamilyName, spellFamilyFlags]   pr proc {flags, chance, charges, ppm, ex, cd}
       cls class ids   src sources (class, talent, racial, item, mob, trigger)   re reagents [[item, count]]
       stack stack amount  focus  totems
-  mob_use  {mobEntry: [[spellId, source, initMin, initMax, repMin, repMax, chance, target]]}
+  mob_use  {mobEntry: [[spellId, source, p1, p2, p3, p4, chance, target, flags]]}   (see wow_mob_spells.py)
 
 Run:  py wow_spells_json.py
 Needs wow_common.py, wow_util.py, wow_spelldata.py (same folder); DBCs Spell, SpellCastTimes,
@@ -407,44 +407,15 @@ def collect_item_spells(cur):
 
 
 def collect_mob_uses(cur):
-    uses = defaultdict(list)
-    cur.execute("SELECT * FROM creature_template")
-    rows = cur.fetchall()
-    tc = columns(cur, "creature_template")
-    lists = {}
-    if table_exists(cur, "creature_spell_list"):
-        lc = columns(cur, "creature_spell_list")
-        cur.execute("SELECT * FROM creature_spell_list")
-        for r in cur.fetchall():
-            lists.setdefault(g(r, lc, "id"), []).append(
-                [g(r, lc, "spellid"), "list", g(r, lc, "initialmin"), g(r, lc, "initialmax"),
-                 g(r, lc, "repeatmin"), g(r, lc, "repeatmax"), g(r, lc, "probability"), g(r, lc, "casttarget")])
-    for r in rows:
-        e = g(r, tc, "entry")
-        for u in lists.get(g(r, tc, "spelllist"), []) if g(r, tc, "spelllist") else []:
-            uses[e].append(list(u))
-    if table_exists(cur, "creature_template_spells"):
-        sc = columns(cur, "creature_template_spells")
-        cur.execute("SELECT * FROM creature_template_spells")
-        for r in cur.fetchall():
-            for k in range(1, 11):
-                v = g(r, sc, "spell%d" % k)
-                if v:
-                    uses[g(r, sc, "entry")].append([v, "template", 0, 0, 0, 0, 0, 0])
-    if table_exists(cur, "creature_ai_scripts"):
-        ac = columns(cur, "creature_ai_scripts")
-        cur.execute("SELECT * FROM creature_ai_scripts")
-        for r in cur.fetchall():
-            cid = g(r, ac, "creature_id")
-            for k in (1, 2, 3):
-                if g(r, ac, "action%d_type" % k) == 11:
-                    ev = g(r, ac, "event_type")
-                    p = [g(r, ac, "event_param%d" % i) for i in range(1, 5)]
-                    uses[cid].append([g(r, ac, "action%d_param1" % k), "ai:%d" % ev,
-                                      p[0] if ev in (0, 1) else 0, p[1] if ev in (0, 1) else 0,
-                                      p[2] if ev in (0, 1) else 0, p[3] if ev in (0, 1) else 0,
-                                      g(r, ac, "event_chance"), g(r, ac, "action%d_param2" % k)])
-    return uses
+    """creature spells with every detail of the server's events (format: wow_mob_spells.py)"""
+    from wow_mob_spells import mob_uses
+
+    def rows(table):
+        if not table_exists(cur, table):
+            return []
+        cur.execute("SELECT * FROM `%s`" % table)
+        return [{k.lower(): v for k, v in r.items()} for r in cur.fetchall()]
+    return mob_uses(rows("creature_template"), rows("creature_spell_list"), rows("creature_template_spells"), rows("creature_ai_scripts"))
 
 
 def main():

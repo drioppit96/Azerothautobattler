@@ -2,7 +2,7 @@
 
 Points saved from the 14 October 2026 session, in the order asked:
 
-1. **Spells for every creature**: inside and outside dungeons and raids. `gamedata/mob_spells.json` already holds the creature spell data; check how much of it is used.
+1. **Creature spells in raids**: creatures outside raids use their spells now (`game/mobspells.js`, data from `script/wow_mob_spells.py`); raids were left out on purpose - switch them on (`msRaid`) together with the raid simulation.
 2. **Hiding experience**: asked for earlier, not started.
 3. **Raid simulation**: asked for earlier, not started.
 

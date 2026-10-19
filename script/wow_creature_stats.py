@@ -3,7 +3,7 @@
 Creature combat stats for the game.
 
 Writes  C:\\wow excel\\gamedata\\creature_stats.json
-  {entry: [attackTimeMs, [health per level], [minDmg per level], [maxDmg per level], [armor per level]]}
+  {entry: [attackTimeMs, [health per level], [minDmg per level], [maxDmg per level], [armor per level], [mana min, mana max]?]}
 "per level" lists start at the creature's minimum level (index = level - minLevel).
 
 Works with both cMaNGOS layouts:
@@ -79,6 +79,9 @@ def main():
                 hp.append(int(round(hmin + (hmax - hmin) * k)))
                 dmin.append(round(d0 * mult, 1)); dmax.append(round(d1 * mult, 1)); arm.append(int(a0 or 0))
         out[e] = [atk, hp, dmin, dmax, arm]
+        mn0 = g(r, tc, "minlevelmana") or 0; mn1 = g(r, tc, "maxlevelmana") or mn0
+        if mn0 or mn1:
+            out[e].append([mn0, mn1])          # mana at the min and max level (the creatures' spells cost mana)
     log("Creatures with stats: %d" % len(out))
     save_json("creature_stats", out)
     log("Wrote creature_stats.json")

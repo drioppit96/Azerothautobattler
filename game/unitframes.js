@@ -88,7 +88,7 @@ function ufFillComp(me, u, lvl) {
   });
   ufCastBar(me, u.cb && !u.dead ? u.cb : null);
   const now = G.gameTime; const au = [];
-  for (const b of u.buffs || []) if (b.until > now) au.push({ n: b.name, ic: b.ic, left: b.until - now, k: 'buff' });
+  for (const b of u.buffs || []) if (b.until > now) au.push({ n: b.name, ic: b.ic, left: b.until - now, k: b.kind || 'buff' });
   if (u.drinking) au.push({ n: 'Drink', ic: 'inv_drink_07', left: null, k: 'buff' });
   ufAuras(me, u.dead ? [] : au);
 }
@@ -97,7 +97,7 @@ function ufCastBar(me, cb) {
   ufSet(me, 'cast', cb ? cb.name + Math.round(20 * cb.t / cb.total) : '', () => {
     if (!me._cb) {
       const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); me._cb = d;
-      if (me.classList.contains('ufmate')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
+      if (me.classList.contains('ufmate') || me.classList.contains('ufenemy')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
     }
     me._cb.hidden = !cb; if (cb) { me._cb.firstChild.style.width = Math.min(100, 100 * cb.t / Math.max(0.01, cb.total)) + '%'; me._cb.lastChild.textContent = cb.name; }
   });
@@ -118,6 +118,7 @@ function ufFillMob(e, m, c, isTgt, noAuras) {
   const hpPct = Math.max(0, Math.round(100 * m.hp / m.maxhp));
   ufSet(e, 'hp', hpPct, (v) => { e._hpi.style.width = v + '%'; e._hpt.textContent = v + '%'; });
   ufSet(e, 'tgt', isTgt, (v) => e.classList.toggle('target', v));
+  ufCastBar(e, m.cast && m.cast.u ? { name: m.cast.u.sp.n, t: m.cast.t, total: m.cast.total } : null);       // what it is casting
   ufAuras(e, noAuras ? [] : ufMobAuras(m));
 }
 /* the other members of the group (your other characters and the dungeon companions), each with what it is fighting */

@@ -487,7 +487,7 @@ function frostNovaStep(c, m, dt) {
     for (const off of [0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) { const a = base + off; if (passable(c.pos.map, c.pos.x + Math.cos(a) * 4, c.pos.y + Math.sin(a) * 4)) { ax = Math.cos(a); ay = Math.sin(a); ok = true; break; } }
     if (!ok) { r.kiteUntil = 0; return false; }
   }
-  c.pos.x += ax * c.speed * dt; c.pos.y += ay * c.speed * dt; c.pos.o = Math.atan2(-ax, -ay); r.mv = null;
+  c.pos.x += ax * charSpeed(c) * dt; c.pos.y += ay * charSpeed(c) * dt; c.pos.o = Math.atan2(-ax, -ay); r.mv = null;
   return true;
 }
 /* paladin: the seal's damage, then the seal is gone */
@@ -705,6 +705,7 @@ function powerTick(c, s, r) {
 function hotStep(c, dt) {
   const r = rt(c);
   for (const b of r.buffs || []) if (b.hot && b.until > G.gameTime) { b.hot.t += dt; while (b.hot.t >= b.hot.every) { b.hot.t -= b.hot.every; healSelf(c, b.hot.v); } }
+  if (typeof charDotStep === 'function') charDotStep(c, dt);              // damage over time from creatures' spells
   totemStep(c, dt);
 }
 function drinkStep(c, dt) {

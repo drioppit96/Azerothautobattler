@@ -312,6 +312,7 @@ function partyStep(c, dt) {
       if (!threats.length && !r.ghost && now - u.deadAt > (healer ? 12 : 30)) { u.dead = false; u.hp = Math.round(u.maxhp * 0.6); if (u.pt === 0) u.mana = Math.round(u.maxmana * 0.6); u.x = c.pos.x; u.y = c.pos.y; log(u.name + ' is back on their feet.'); }
       return;
     }
+    if (typeof msUnitStep === 'function' && msUnitStep(c, u, dt)) return;      // stunned (creature spells); its damage over time
     const mv = (tx, ty, stop) => { const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy); if (d > stop) { const st = Math.min(d - stop, 7.5 * dt); u.x += dx / d * st; u.y += dy / d * st; return false; } return true; };
     if (!threats.length && u.role === 'tank' && r.tankPull && r.tankPull.st === 'alive') {
       const m = r.tankPull; if (mv(m.x, m.y, MELEE_RANGE - 0.5)) { engage(m, c); gThreat(m, u, 50 + c.level * 6); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); for (const x of threatsOf(c)) gThreat(x, u, 30 + c.level * 4); r.tankPull = null; }

@@ -140,7 +140,7 @@ function addMobAura(c, m, sp, e) {
   return a;
 }
 function mobMods(m) {
-  const o = { armor: 0, ap: 0, haste: 1, stun: false, fear: false, snare: 1, disarm: false };
+  const o = { armor: 0, ap: 0, haste: 1, stun: false, fear: false, snare: 1, disarm: false, dmg: 0, dmgPct: 1 };
   if (!m.auras) return o;
   for (const a of m.auras) {
     if (a.until <= G.gameTime) continue;
@@ -152,6 +152,8 @@ function mobMods(m) {
     else if (a.au === 33 || a.au === 31) o.snare *= Math.max(0.2, 1 + a.val / 100);
     else if (a.au === 26) o.snare = 0;
     else if (a.au === 67) o.disarm = true;
+    else if (a.au === 13 && (a.mob || a.val < 0)) o.dmg += a.val;            // its damage: Boar Charge up, Curse of Weakness down
+    else if (a.au === 79) o.dmgPct *= Math.max(0.1, 1 + a.val / 100);
   }
   return o;
 }
@@ -431,6 +433,7 @@ function useAbilities(c, tgt) {
   for (const rule of rulesOf(c)) {
     if (rule.mode === 'off') continue;
     const u = abilityUsable(c, rule.n); if (!u.ok) continue; const sp = u.sp;
+    if (sp.sc && typeof charSilenced === 'function' && charSilenced(c)) continue;          // silenced / interrupted: no spells
     const nextSwing = (sp.fl || []).includes('next_swing');
     if (nextSwing) {
       if (r.queued || !inMelee(c, tgt)) continue;

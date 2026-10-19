@@ -32,7 +32,7 @@ function initMob(m) {
   const k = Math.min(Math.max(0, m.lvl - lo), st ? st[1].length - 1 : 0);
   if (st && st[1][k]) { m.maxhp = st[1][k]; m.dmin = st[2][k]; m.dmax = st[3][k]; m.armor = st[4][k]; m.atk = (st[0] || 2000) / 1000; }
   else { m.maxhp = fbHp(m.lvl, rank); const d = fbDmg(m.lvl, rank); m.dmin = d[0]; m.dmax = d[1]; m.armor = fbArmor(m.lvl); m.atk = 2.0; }
-  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5); m.petThreat = 0; m.charThreat = 0; m.skinned = false;      // a new creature: it can be skinned again
+  m.hp = m.maxhp; m.st = 'alive'; m.x = m.hx; m.y = m.hy; m.tgt = null; m.swing = rnd(0.5, 1.5); m.petThreat = 0; m.charThreat = 0; m.skinned = false; m.sk = null; m.cast = null; m.maxmana = null;      // a new creature: it can be skinned again, its spells start over
 }
 /* creatures of world events (Scourge invasion, Ahn'Qiraj war, holidays): not part of the normal world */
 const EVENT_MOBS = [[15414, 15424], [15591, 15591], [15685, 15692], [15730, 15730], [15740, 15811], [16136, 16143], [16172, 16172], [16230, 16230], [16255, 16255], [16285, 16310], [16356, 16401], [16419, 16438], [16995, 16995]];
@@ -204,7 +204,7 @@ function mobDamage(m, c, s, mods) {
   if ((r -= Math.max(0, s.parry)) < 0) return { t: 'parry' };
   let blocked = 0; if (s.hasShield && (r -= Math.max(0, s.block)) < 0) blocked = s.blockValue;
   let d = rnd(m.dmin, m.dmax);
-  if (mods) { d += mods.ap / 14 * m.atk; if (mods.disarm) d *= 0.5; }
+  if (mods) { d += mods.ap / 14 * m.atk + (mods.dmg || 0); d *= mods.dmgPct || 1; if (mods.disarm) d *= 0.5; }
   d = Math.max(1, d) * s.dmgTaken;
   d *= 1 - s.armorReduction(m.lvl);
   let crit = false;
@@ -237,13 +237,16 @@ function mobTick(W, m, dt, now) {
         return;
       }
     }
+    if ((mods.stun || mods.fear) && m.cast) { m.cast = null; fx(m.x, m.y, 'interrupted', '#cfc6b0'); }
     if (mods.fear) { const sp = 3 * dt; m.x += (m.x - c.pos.x) / (d || 1) * sp; m.y += (m.y - c.pos.y) / (d || 1) * sp; return; }
     if (mods.stun) return;
-    if (d > MELEE_RANGE - 0.5) {
-      const step = Math.min(d, 7 * mods.snare * dt); m.x += (vx - m.x) / d * step; m.y += (vy - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
-    } else {
+    if (typeof mobSpellStep === 'function' && mobSpellStep(W, m, c, dt, now, mods, vk, vu, onPet, d)) return;      // its own spells (mobspells.js)
+    const want = m.sk && typeof msKeepRange === 'function' ? msKeepRange(m, W) : MELEE_RANGE - 0.5;       // casters keep their distance
+    if (d > want) {
+      const step = Math.min(d - want + 0.3, 7 * mods.snare * dt); m.x += (vx - m.x) / d * step; m.y += (vy - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
+    } else if (d <= MELEE_RANGE + 0.5) {
       m.swing -= dt;
-      if (m.swing <= 0 && vu) { m.swing += m.atk / mods.haste; compTakeHit(c, vu, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
+      if (m.swing <= 0 && vu) { m.swing += m.atk / mods.haste; compTakeHit(c, vu, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + mods.dmg) * mods.dmgPct * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { u: vu, x: vu.x, y: vu.y }); }
       else if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
       else if (m.swing <= 0) {
         m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods);
@@ -258,6 +261,7 @@ function mobTick(W, m, dt, now) {
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
           if (r.bandage) bandageHit(c);
           autoPotion(c);
+          if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { c, x: c.pos.x, y: c.pos.y });      // its procs (poison on the blade)
         } else fx(c.pos.x, c.pos.y, h.t, '#cfc6b0');
         const ret = (r.buffs || []).find((b) => b.retaliation && b.until > now);
         if (ret) { ret.retaliation--; if (ret.retaliation <= 0) ret.until = 0; playerSwing(c, m, s, s.mh, { yellow: true }); if (m.hp <= 0) killMob(c, m); }
@@ -266,11 +270,11 @@ function mobTick(W, m, dt, now) {
   } else if (m.st === 'evade') {
     m.fleeing = 0; m.auras = null;
     const d = Math.hypot(m.hx - m.x, m.hy - m.y);
-    if (d < 1) { m.st = 'alive'; m.hp = m.maxhp; m.x = m.hx; m.y = m.hy; m.fled = false; W.active.delete(m); }
+    if (d < 1) { m.st = 'alive'; m.hp = m.maxhp; if (m.maxmana) m.mana = m.maxmana; m.x = m.hx; m.y = m.hy; m.fled = false; W.active.delete(m); }
     else { const step = Math.min(d, 10 * dt); m.x += (m.hx - m.x) / d * step; m.y += (m.hy - m.y) / d * step; m.hp = Math.min(m.maxhp, m.hp + m.maxhp * 0.2 * dt); }
   }
 }
-function evade(W, m) { m.st = 'evade'; m.tgt = null; m.petThreat = 0; m.charThreat = 0; }
+function evade(W, m) { m.sk = null; m.cast = null; m.st = 'evade'; m.tgt = null; m.petThreat = 0; m.charThreat = 0; }
 function worldTick(dt) {
   const now = G.gameTime;
   if (typeof marketTick === 'function') marketTick();
@@ -374,7 +378,7 @@ function revive(c, how) {
   save(); renderOrder();
 }
 function ghostStep(c, dt) {
-  const gh = rt(c).ghost; let left = c.speed * 1.25 * dt;
+  const gh = rt(c).ghost; let left = charSpeed(c) * 1.25 * dt;
   if (!gh.spot) {
     const dc = Math.hypot(gh.corpse.x - c.pos.x, gh.corpse.y - c.pos.y);
     if (dc < 40) {
@@ -490,6 +494,7 @@ function playerSwing(c, m, s, w, opts) {
   let crit = false; if (Math.random() * 100 < critCh) { d *= opts.yellow ? 2 + 0.1 * talentRank(c, 'Impale') : 2; crit = true; }
   d = Math.max(1, Math.round(d));
   m.hp -= d; onMobDamaged(m, d); if (c.cls !== 1) addThreat(m, c, d); meterDmg(c, d, opts.name || (opts.off ? 'Off hand' : 'Melee'));
+  if (m.auras && typeof msThorns === 'function') msThorns(c, m);          // a damage shield on it (Fire Shield)
   fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
   if (c.cls !== 1 && !opts.yellow) classMeleeHit(c, m, s, w, d, crit, opts);
   if (c.cls === 11 && c.form === 'bear' && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
@@ -546,7 +551,7 @@ function fightStep(c, m, dt) {
   const dx = m.x - c.pos.x, dy = m.y - c.pos.y, d = Math.hypot(dx, dy);
   c.pos.o = Math.atan2(dx, dy);
   const want = c.cls === 1 ? MELEE_RANGE : combatRange(c, m);
-  if (d > want) { if (r.cast) return; const step = Math.min(d - want + 0.5, c.speed * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return; }
+  if (d > want) { if (r.cast) return; const step = Math.min(d - want + 0.5, charSpeed(c) * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return; }
   useAbilities(c, m);
   if (m.hp <= 0 || m.st === 'dead' || r.cast) return;
   if (d > MELEE_RANGE + 0.5) { if (c.cls !== 1) rangedStep(c, m, dt, d); return; }
@@ -584,7 +589,7 @@ function fleeStep(c, dt, danger) {
     const base = Math.atan2(ay, ax);
     for (const off of [0.5, -0.5, 1, -1, 1.5, -1.5, 2, -2]) { const a = base + off; if (passable(c.pos.map, c.pos.x + Math.cos(a) * 6, c.pos.y + Math.sin(a) * 6)) { ax = Math.cos(a); ay = Math.sin(a); break; } }
   }
-  c.pos.x += ax * c.speed * dt; c.pos.y += ay * c.speed * dt; c.pos.o = Math.atan2(ax, ay);
+  c.pos.x += ax * charSpeed(c) * dt; c.pos.y += ay * charSpeed(c) * dt; c.pos.o = Math.atan2(ax, ay);
   const o = c.order; if (o && o.type === 'travel') { /* re-plan from the new spot later */ o.replan = true; }
 }
 
@@ -612,7 +617,7 @@ function advance(c, mv, dt) {
     if (Math.hypot(c.pos.x - mv.chk.x, c.pos.y - mv.chk.y) < 6) { mv.blocked = true; return false; }
     mv.chk = { t: G.gameTime, x: c.pos.x, y: c.pos.y };
   }
-  let left = c.speed * dt;
+  let left = charSpeed(c) * dt;
   while (left > 0 && mv.idx < mv.path.length) {
     const nx = mv.path[mv.idx]; let dx = nx.x - c.pos.x, dy = nx.y - c.pos.y; const d = Math.hypot(dx, dy);
     if (d < 0.01) { mv.idx++; continue; }
@@ -753,6 +758,7 @@ function updateChar(c, dt) {
   if (r.riding) { rideStep(c, dt); return; }
   regenStep(c, dt);
   if (r.charging) { chargeStep(c, dt); return; }
+  if (typeof charCcStep === 'function' && charCcStep(c, dt)) return;           // stunned or feared by a creature's spell
   r.scanT -= dt;
   if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); taxiDiscover(c); if (r.equipLater && !threatsOf(c).length) autoEquip(c); }
   const threats = typeof groupOf === 'function' && groupOf(c) ? groupThreats(c) : threatsOf(c); r.threats = threats;
