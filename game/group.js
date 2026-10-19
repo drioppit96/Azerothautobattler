@@ -201,6 +201,7 @@ function groupKill(c, m, W) {
   const lp = partyOf(groupLeader(g) || c) || partyOf(c) || []; const roll = { chars: near, comps: lp.filter((u) => u.comp && !u.dead) };
   for (const o of near) withLog(o, () => {
     const xp = Math.round(killXp(o, m) * o.level / sum * bonus); gainXp(o, xp);
+    if (typeof petOnKill === 'function') petOnKill(o, m, o.level / sum * bonus);
     log((m.info ? m.info[1] : 'creature') + ' (lvl ' + m.lvl + ') slain' + (o !== c ? ' by ' + c.name : '') + (xp ? ', +' + xp + ' xp' : '') + '.');
     lootMob(o, m, o !== looter, o === looter ? roll : null);     // the looter (in turns) opens the corpse: money shared, green+ rolled; the others get their own quest drops
     onKill(o, m);

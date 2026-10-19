@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-19 b (creature spells)';
+const GAME_VERSION = '2026-10-19 c (pets)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -618,10 +618,12 @@ function draw() {
   drawProfOverlay(ctx, m);
   drawDungeonMarks(ctx, m); drawParty(ctx, m);
   // the pet
-  if (c.pet && !c.pet.dead && rt(c).pet && c.pos.map === m.map && !rt(c).ghost) {
+  if (petAlive(c) && c.pos.map === m.map && !rt(c).ghost && !rt(c).flying && !rt(c).riding) {
     const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
-    ctx.fillStyle = '#7fbf5a'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 11, 18, 3); ctx.fillStyle = '#5ec06a'; ctx.fillRect(x - 9, y - 11, 18 * Math.max(0, c.pet.hp / c.pet.maxhp), 3);
+    const ic = petMapIcon(c.pet);
+    if (ic && ic.complete && ic.naturalWidth) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.clip(); ctx.drawImage(ic, x - 7, y - 7, 14, 14); ctx.restore(); ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.stroke(); }
+    else { ctx.fillStyle = '#7fbf5a'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke(); }
+    ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 13, 18, 3); ctx.fillStyle = '#5ec06a'; ctx.fillRect(x - 9, y - 13, 18 * Math.max(0, c.pet.hp / petStats(c).maxhp), 3);
   }
   // the character
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
@@ -826,6 +828,7 @@ function frame(ts) {
     if (G.selected && G.selected.kind === 'mob') renderInfo(G.selected);
     if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); if (!$('groupCard').matches(':hover')) renderGroup(); }
     if (METER.show && (!G.mtT || ts - G.mtT > 500)) { G.mtT = ts; renderMeter(); }
+    if (SH.open && SH.tab === 'pet' && (!G.ptT || ts - G.ptT > 1000) && !$('sheet').querySelector('.sheet-body:hover')) { G.ptT = ts; renderSheet(); }       // the pet's bars move
   }
   requestAnimationFrame(frame);
 }

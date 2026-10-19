@@ -118,6 +118,7 @@ function mobSpellStep(W, m, c, dt, now, mods, vk, vu, onPet, d) {
     if (a.hot) m.hp = Math.min(m.maxhp, m.hp + a.val);                                 // its heals over time
     else { const t2 = spellRow(a.ptr); if (t2) msFire(W, m, c, { kind: 'harm', sp: t2 }, { mob: m }, t2, 1); }      // Fire Shield's pulses
   }
+  if (!m.sk || m.st !== 'chase') return false;          // its pulse killed its target (it went back home) or itself
   if (m.cast) {
     if (mods.stun || mods.fear) { m.cast = null; fx(m.x, m.y, 'interrupted', '#cfc6b0'); return false; }
     m.cast.t += dt;
@@ -167,7 +168,7 @@ function mobSpellStep(W, m, c, dt, now, mods, vk, vu, onPet, d) {
   }
   return false;
 }
-function msHpPct(c, t) { if (t.u) return 100 * t.u.hp / t.u.maxhp; if (t.c) return 100 * t.c.hp / charStats(t.c).maxHp; if (t.pet && c.pet) return 100 * c.pet.hp / c.pet.maxhp; return 100; }
+function msHpPct(c, t) { if (t.u) return 100 * t.u.hp / t.u.maxhp; if (t.c) return 100 * t.c.hp / charStats(t.c).maxHp; if (t.pet && c.pet) return 100 * c.pet.hp / petStats(c).maxhp; return 100; }
 function msCasting(c, t) { if (t.u) return !!t.u.cb; if (t.c) return !!rt(t.c).cast; return false; }
 
 /* ------------------------------------------------------------------ your side interrupts (like players do)
@@ -253,7 +254,7 @@ function msFire(W, m, c, u, tgt, sp0, depth) {
 /* damage on one of the character's side: magic is resisted by the school's resistance, physical goes through the
    attack table (dodge, parry, block) and armor like a swing */
 function msHurt(c, f, m, v, school, name, phys, dot) {
-  if (f.pet) { if (petAlive(c)) petTakeHit(c, m, Math.max(1, v)); return; }
+  if (f.pet) { if (petAlive(c)) petTakeHit(c, m, Math.max(1, v), { school: phys ? 0 : school, magic: !phys, dot, name }); return; }
   if (f.u) {
     const u = f.u; if (u.dead) return;
     let d = phys ? v * (1 - u.armorRed) : v * (1 - Math.min(0.75, (u.res || 0)));
@@ -294,11 +295,11 @@ function msInterrupt(c, f, m, sp) {
 /* a debuff from a creature: damage over time, crowd control, slows, stat debuffs - shown with the buffs */
 function msDebuff(c, f, m, sp, e, dur) {
   const now = G.gameTime; const until = now + dur;
-  if (f.pet) return;
+  if (f.pet) { if (typeof petDebuff === 'function') petDebuff(c, m, sp, e, dur); return; }
   if (f.u) {
     const u = f.u; if (u.dead) return; u.buffs = u.buffs || [];
     let b = u.buffs.find((x) => x.name === sp.n && x.kind === 'debuff'); if (!b) { b = { name: sp.n, ic: sp.ic, kind: 'debuff', until: 0 }; u.buffs.push(b); }
-    b.until = until; b.src = m; b.sc = sp.sc || 0;
+    b.until = until; b.src = m; b.sc = sp.sc || 0; b.disp = sp.disp || 0;
     if (e.au === 3) b.dot = { t: 0, every: (e.amp || 3000) / 1000, v: Math.max(1, msVal(m, sp, e)) };
     if (e.au === 12 || e.au === 5 || e.au === 7) { u.stunUntil = until; u.cb = null; }
     return;
@@ -307,7 +308,7 @@ function msDebuff(c, f, m, sp, e, dur) {
   r.buffs = (r.buffs || []).filter((x) => x.until > now);
   let b = r.buffs.find((x) => x.name === sp.n && x.kind === 'debuff');
   if (!b) { b = { name: sp.n, ic: sp.ic, kind: 'debuff', auras: [], until: 0 }; r.buffs.push(b); }
-  b.until = until; b.src = m; b.sc = sp.sc || 0;
+  b.until = until; b.src = m; b.sc = sp.sc || 0; b.disp = sp.disp || 0;
   switch (e.au) {
     case 3: case 89: b.dot = { t: 0, every: (e.amp || 3000) / 1000, v: Math.max(1, e.au === 89 ? charStats(o).maxHp * msVal(m, sp, e) / 100 : msVal(m, sp, e)) }; break;
     case 12: case 5: r.cc = { kind: 'stun', until, from: m }; r.cast = null; fx(o.pos.x, o.pos.y, e.au === 5 ? 'confused' : 'stunned', '#ffb36b'); break;
@@ -327,7 +328,7 @@ function msDebuff(c, f, m, sp, e, dur) {
 function msMobAura(o, m, sp, e, dur) {
   o.auras = (o.auras || []).filter((a) => a.until > G.gameTime);
   let a = o.auras.find((x) => x.key === sp.n && x.au === e.au); if (!a) { a = { key: sp.n, au: e.au, val: 0, stacks: 1, src: null, t: 0 }; o.auras.push(a); }
-  a.until = G.gameTime + (sp.dur < 0 || sp.dur > 600000 ? 600 : dur); a.val = msVal(m, sp, e, true); a.mob = true;
+  a.until = G.gameTime + (sp.dur < 0 || sp.dur > 600000 ? 600 : dur); a.val = msVal(m, sp, e, true); a.mob = true; a.disp = sp.disp || 0;
   if (e.au === 42 && e.tr) { a.tr = e.tr; a.pch = (sp.pr && sp.pr.chance) || 20; }
   if (e.au === 23 && e.tr) { a.ptr = e.tr; a.every = (e.amp || 3000) / 1000; a.t = 0; }       // a spell it sends out every few seconds (Fire Shield)
   if (e.au === 8) { a.every = (e.amp || 3000) / 1000; a.hot = true; }

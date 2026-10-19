@@ -35,6 +35,8 @@ Object.assign(CLASS_META, {
     'Call Pet': R('', ['off', 'pet'], { mode: 'pet' }),
     'Revive Pet': R('', ['off', 'pet'], { mode: 'pet' }),
     'Mend Pet': R('', ['off', 'petheal'], { mode: 'petheal', p: 40 }),
+    'Bestial Wrath': R('', ['off', 'spam', 'elite'], { mode: 'spam' }),
+    'Intimidation': R('', ['off', 'emergency', 'spam'], { mode: 'emergency', p: 60 }),
     'Aspect of the Hawk': R('', ['off', 'buff'], { mode: 'buff' }),
     'Aspect of the Monkey': R('', ['off', 'buff'], { mode: 'buff', p: 0 }),
     "Hunter's Mark": R('', ['off', 'opener', 'debuff'], { mode: 'opener' }),
@@ -135,6 +137,9 @@ Object.assign(CLASS_META, {
     'Summon Succubus': R('', ['off', 'pet'], { mode: 'off' }),
     'Summon Felhunter': R('', ['off', 'pet'], { mode: 'off' }),
     'Health Funnel': R('', ['off', 'petheal'], { mode: 'petheal', p: 30 }),
+    'Soul Link': R('', ['off', 'buff'], { mode: 'buff' }),
+    'Fel Domination': R('', ['off', 'pet'], { mode: 'pet' }),
+    'Demonic Sacrifice': R('', ['off', 'sacrifice'], { mode: 'sacrifice' }),
     'Death Coil': R('', ['off', 'emergency'], { mode: 'emergency', p: 30 }),
     'Fear': R('', ['off', 'emergency', 'multi'], { mode: 'off', p: 30 }),
     'Howl of Terror': R('', ['off', 'multi'], { mode: 'multi', p: 3 }),
@@ -180,6 +185,7 @@ Object.assign(CLASS_META, {
 Object.assign(MODE_TEXT, {
   heal: 'Heal myself below %', finisher: 'Finisher at combo points', lowmana: 'When mana below %', execute: 'When target health below %',
   pet: 'Keep my pet', petheal: 'When pet health below %', conjure: 'Make food and water', form: 'Shift into this form',
+  sacrifice: 'Sacrifice the demon chosen in the Pet tab',
 });
 Object.assign(MODE_HAS_P, { heal: 1, finisher: 1, lowmana: 1, execute: 1, petheal: 1 });
 
@@ -188,14 +194,7 @@ const CASTERS = { 5: 1, 8: 1, 9: 1 };             // fight from range with spell
 const SPELL_CRIT_INT = { 2: 54, 3: 60, 5: 59.2, 7: 59.5, 8: 59.5, 9: 60.6, 11: 60 };
 const FINISHERS = { 'Eviscerate': 1, 'Slice and Dice': 1, 'Rupture': 1, 'Kidney Shot': 1, 'Expose Armor': 1, 'Rip': 1, 'Ferocious Bite': 1 };
 const FORM_BITS = { cat: 1, bear: 16 | 128 };
-const PET_KINDS = {
-  hunter: { name: 'Pet', stats: '1', dmg: 0.75, tank: true },
-  imp: { name: 'Imp', stats: '416', dmg: 0.0, ranged: true, firebolt: true },
-  voidwalker: { name: 'Voidwalker', stats: '1860', dmg: 0.45, tank: true },
-  succubus: { name: 'Succubus', stats: '1863', dmg: 0.8, tank: false },
-  felhunter: { name: 'Felhunter', stats: '417', dmg: 0.65, tank: true },
-};
-const SUMMON_PET = { 'Summon Imp': 'imp', 'Summon Voidwalker': 'voidwalker', 'Summon Succubus': 'succubus', 'Summon Felhunter': 'felhunter' };
+/* PET_KINDS, SUMMON_PET and the pets themselves: pets.js */
 
 function isCaster(c) { return !!CASTERS[c.cls] || (c.cls === 11 && !c.form) || (c.cls === 7 && c.level < 10); }
 function isHunter(c) { return c.cls === 3; }
@@ -278,6 +277,7 @@ function castTime(c, sp) {
   let t = sp.cast && sp.cast < 60000 ? sp.cast : 0;
   if (!t) return 0;
   t = spellMod(c, sp, 10, t);
+  if (typeof petCastTimeMod === 'function') t = petCastTimeMod(c, sp, t);          // Fel Domination
   const s = charStats(c); if (s.castHaste) t /= 1 + s.castHaste / 100;
   return Math.max(0, t / 1000);
 }
@@ -304,6 +304,7 @@ function spellHit(c, sp, e, m, opts) {
   if (opts.cp) v += (e.cp || 0) * opts.cp;
   v = spellMod(c, sp, 0, v);
   const s = charStats(c); v *= s.dmgDone * (1 + (s.spellPct || 0) / 100);
+  if (s.schoolPct && sp.sc) for (const [mask, pct] of s.schoolPct) if (mask & (1 << sp.sc)) v *= 1 + pct / 100;
   const diff = m.lvl - c.level;
   const miss = clamp(4 + Math.max(0, diff) * (diff > 2 ? 7 : 1) - (s.shit || 0), 1, 60);
   if (Math.random() * 100 < miss) { fx(m.x, m.y, 'resist', '#cfc6b0'); if (m.st === 'alive') engage(m, c); return 0; }
@@ -372,13 +373,14 @@ function castStep(c, dt) {
   if (enemy && (k.tgt.st === 'dead' || k.tgt.st === 'evade')) { r.cast = null; return false; }
   if (r.flying || r.riding || r.ghost) { r.cast = null; return false; }
   k.t += dt;
-  if (k.t >= k.total) { r.cast = null; if (!k.ch) finishSpell(c, k.name, k.sp, k.tgt); }
+  if (k.t >= k.total) { r.cast = null; if (!k.ch) finishSpell(c, k.name, k.sp, k.tgt); else if (k.onEnd) k.onEnd(); }
   return true;
 }
 
 /* ------------------------------------------------------------------ class-specific spell effects (called by applySpell) */
 /* returns true when the effect was handled here */
 function classEffect(c, sp, e, tgt, ctx) {
+  if (typeof petSpellEffect === 'function' && petSpellEffect(c, sp, e, tgt)) return true;          // on the pet (pets.js)
   const r = rt(c); const s = charStats(c); const name = sp.n;
   switch (e.t) {
     case 2: {   // direct damage: magic (spell power, resists) or physical (Eviscerate, Rake: armor, dodge)
@@ -421,8 +423,8 @@ function classEffect(c, sp, e, tgt, ctx) {
       return true;
     }
     case 54: addBuff(c, Object.assign({}, sp, { dur: 1800000 }), { au: 0, mi: 0, lo: 0 }); { const b = r.buffs.find((x) => x.name === name); if (b) b.imbue = name; } dirty(c); return true;
-    case 56: { const k = SUMMON_PET[name] || (c.cls === 3 ? 'hunter' : null); if (k) summonPet(c, k); return true; }
-    case 109: if (c.pet) { c.pet.dead = false; c.pet.hp = Math.round(c.pet.maxhp * 0.15); log('Your pet is revived.'); } return true;
+    case 56: petSummonSpell(c, name, sp); return true;               // Summon Imp ... / Call Pet
+    case 109: petRevive(c, sp, e); return true;
     case 80: if (tgt) { if (r.cpTgt !== tgt) { r.cp = 0; r.cpTgt = tgt; } r.cp = Math.min(5, (r.cp || 0) + Math.max(1, e.lo || 1)); } return true;
     case 87: case 88: case 89: case 90: totem(c, sp, e); return true;
     case 30: if (e.mi === 0) { addPower(c, 0, effValue(c, sp, e)); return true; } return false;
@@ -432,7 +434,6 @@ function classEffect(c, sp, e, tgt, ctx) {
       if (e.au === 36) { setForm(c, e.mi, name); return true; }
       if (e.au === 42 && e.k === 'self' && e.tr && /Lightning Shield/.test(name)) { const t2 = spellRow(e.tr); const d = t2 && (t2.ef || []).find((x) => x.t === 2); r.dmgShield = { v: d ? effValue(c, t2, d) : 10, charges: 3, until: G.gameTime + (sp.dur || 600000) / 1000 }; addBuff(c, sp, { au: 0, mi: 0, lo: 0 }); return true; }
       if (e.au === 8 && (e.k === 'self' || e.k === 'friend')) {   // heal over time
-        if (/Mend Pet|Health Funnel/.test(name)) { if (c.pet && !c.pet.dead) c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + effValue(c, sp, e) * (sp.dur || 5000) / (e.amp || 1000)); return true; }
         addBuff(c, sp, { au: 0, mi: 0, lo: 0 }); const b = r.buffs.find((x) => x.name === name);
         if (b) { b.hot = { v: effValue(c, sp, e) + (e.coef || 0.2) * (s.heal || 0) / Math.max(1, (sp.dur || 12000) / (e.amp || 3000)), every: (e.amp || 3000) / 1000, t: 0 }; }
         return true;
@@ -580,62 +581,7 @@ function formWeapon(c) {
   return null;
 }
 
-/* ------------------------------------------------------------------ pets */
-function petBase(c, kind) {
-  const k = PET_KINDS[kind]; const tbl = G.d.pets && G.d.pets[k.stats]; const L = c.level;
-  const row = tbl && (tbl[L] || tbl[Math.max(...Object.keys(tbl).map(Number).filter((x) => x <= L))]);
-  const hp = row ? row[0] : fbHp(L, 0) * 0.9; const armor = row ? row[2] : fbArmor(L);
-  const d = fbDmg(L, 0);
-  return { hp: Math.round(hp * (kind === 'voidwalker' ? 1.0 : 1)), armor, dmin: d[0] * (k.dmg || 0.5), dmax: d[1] * (k.dmg || 0.5), atk: 2.0 };
-}
-function summonPet(c, kind) {
-  const b = petBase(c, kind);
-  c.pet = { kind, name: kind === 'hunter' ? (c.petName || 'Companion') : PET_KINDS[kind].name, maxhp: b.hp, hp: b.hp, level: c.level, dead: false };
-  const r = rt(c); r.pet = { x: c.pos.x + 2, y: c.pos.y + 1, swing: 1 };
-  log((kind === 'hunter' ? 'Called ' : 'Summoned ') + c.pet.name + '.');
-}
-function petAlive(c) { return !!(c.pet && !c.pet.dead && rt(c).pet); }
-function petStats(c) {
-  const p = c.pet; if (p.level !== c.level) { const b = petBase(c, p.kind); const f = p.hp / p.maxhp; p.maxhp = b.hp; p.hp = Math.round(b.hp * f); p.level = c.level; }
-  return petBase(c, p.kind);
-}
-/* the pet follows, attacks what the character fights, tanks (hunter pet, voidwalker), heals out of combat */
-function petStep(c, dt) {
-  const p = c.pet; if (!p || p.dead) return; const r = rt(c);
-  if (!r.pet) r.pet = { x: c.pos.x + 2, y: c.pos.y + 1, swing: 1 };
-  const P = r.pet; const kind = PET_KINDS[p.kind] || {};
-  const m = r.tgt && r.tgt.st !== 'dead' && r.tgt.st !== 'evade' && (r.threats.length || r.tgt.st === 'chase' || r.petGo === r.tgt) ? r.tgt : null;
-  if (!m) {
-    if (!r.threats.length) { p.hp = Math.min(p.maxhp, p.hp + p.maxhp * 0.02 * dt); }
-    const d = Math.hypot(c.pos.x + 2 - P.x, c.pos.y + 1 - P.y); if (d > 1) { const st = Math.min(d, 9 * dt); P.x += (c.pos.x + 2 - P.x) / d * st; P.y += (c.pos.y + 1 - P.y) / d * st; }
-    return;
-  }
-  const st = petStats(c);
-  const dx = m.x - P.x, dy = m.y - P.y, d = Math.hypot(dx, dy);
-  const reach = kind.ranged ? 25 : MELEE_RANGE;
-  if (d > reach) { const step = Math.min(d - reach + 0.3, 9 * dt); P.x += dx / d * step; P.y += dy / d * step; return; }
-  P.swing -= dt; if (P.swing > 0) return; P.swing += kind.firebolt ? 2.5 : st.atk;
-  let v;
-  if (kind.firebolt) v = 5 + c.level * 1.6 + charStats(c).sd * 0.1;
-  else v = rnd(st.dmin, st.dmax) * (1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75));
-  v = Math.max(1, Math.round(v));
-  if (Math.random() < 0.06) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
-  m.hp -= v; onMobDamaged(m, v); addThreat(m, { isPet: true, tank: !!kind.tank }, v); meterDmg(c, v, kind.firebolt ? 'Firebolt' : 'Attack', true); fx(m.x, m.y, '' + v, '#d7b98a');
-  if (kind.tank && (m.petThreat || 0) <= (m.charThreat || 0) * 1.15 && (P.growlT || 0) <= G.gameTime) { m.petThreat = (m.charThreat || 0) * 1.3 + 20 + c.level * 3; P.growlT = G.gameTime + 5; fx(P.x, P.y, p.kind === 'hunter' ? 'Growl' : 'Torment', '#d7b98a'); }
-  if (m.st === 'alive') engage(m, c);
-  if (m.hp <= 0) killMob(c, m);
-}
-/* a creature attacks the pet instead of the character when the pet has more threat */
-function mobVictimIsPet(m, c) {
-  if (!petAlive(c)) return false;
-  return (m.petThreat || 0) > (m.charThreat || 0) * 1.1;
-}
-function petTakeHit(c, m, d) {
-  const p = c.pet; const st = petStats(c);
-  d = Math.round(d * (1 - clamp(st.armor / (st.armor + 400 + 85 * m.lvl), 0, 0.75)));
-  p.hp -= d; fx(rt(c).pet.x, rt(c).pet.y, '-' + d, '#ff9a8a');
-  if (p.hp <= 0) { p.hp = 0; p.dead = true; log(p.name + ' has died.'); for (const x of threatsOf(c)) x.petThreat = 0; }
-}
+/* ------------------------------------------------------------------ pets: pets.js */
 
 /* ------------------------------------------------------------------ ranged auto attacks */
 function rangedWeapon(c) {
@@ -744,11 +690,8 @@ function oocStep(c) {
     const [pt, cost] = spellCost(c, sp, rule.n); if (powerOf(c, pt) < cost) continue;
     if ((r.cd[rule.n] || 0) > G.gameTime) continue;
     let go = false;
-    if (rule.mode === 'pet') {
-      if (c.cls === 9 && SUMMON_PET[rule.n]) { const want = SUMMON_PET[rule.n]; const better = want === 'voidwalker' || !c.known['Summon Voidwalker']; go = better && (!c.pet || c.pet.dead || (c.pet.kind !== want && want === 'voidwalker')); }
-      if (c.cls === 3 && rule.n === 'Call Pet') go = !c.pet && c.level >= 10;
-      if (c.cls === 3 && rule.n === 'Revive Pet') go = !!(c.pet && c.pet.dead);
-    } else if (rule.mode === 'buff') {
+    if (rule.mode === 'pet') go = petRuleWants(c, rule.n);
+    else if (rule.mode === 'buff') {
       const dur = sp.dur || 0;
       go = (dur < 0 || dur >= 60000 || /Seal|Aspect|Weapon$|Totem|Form$|Shadowform/.test(rule.n)) && !hasBuff(c, rule.n) && !(/Totem/.test(rule.n) && !r.threats.length);
       if (/^Seal of/.test(rule.n)) go = false;          // seals are put on in the fight
@@ -760,7 +703,7 @@ function oocStep(c) {
     } else if (rule.mode === 'heal' || (rule.mode === 'emergency' && /Heal|Light|Wave|Touch|Regrowth|Renew|Rejuv/.test(rule.n))) {
       go = hpPct < 70 && mp > 30 && (sp.ef || []).some((e) => e.t === 10 || e.t === 77 || (e.au === 8));
       if (go && (sp.ef || []).some((e) => e.au === 8) && hasBuff(c, rule.n)) go = false;
-    } else if (rule.mode === 'petheal') go = petAlive(c) && c.pet.hp < c.pet.maxhp * 0.6 && mp > 30;
+    } else if (rule.mode === 'petheal') go = petAlive(c) && c.pet.hp < petStats(c).maxhp * 0.6 && mp > 30 && !petBuff(petRt(c), rule.n) && (rule.n !== 'Health Funnel' || hpPct > 50);
     else if (rule.mode === 'lowmana' && rule.n === 'Life Tap') go = mp < 60 && hpPct > 75;
     // a long buff that can go on others (Arcane Intellect, Fortitude, Mark of the Wild, Divine Spirit ...): the group too
     let who = c;
@@ -824,11 +767,13 @@ function hasBuff(c, name) { const r = rt(c); return (r.buffs || []).some((b) => 
 /* returns the damage left after absorbs and mana shield */
 function absorbDamage(c, d) {
   const r = rt(c);
+  if (c.cls === 9 && typeof soulLinkSplit === 'function') d = soulLinkSplit(c, d);           // Soul Link: part of it goes to the demon
   if (r.absorb && r.absorb.until > G.gameTime && r.absorb.v > 0) { const a = Math.min(d, r.absorb.v); r.absorb.v -= a; d -= a; if (r.absorb.v <= 0) { r.absorb = null; const b = (r.buffs || []).find((x) => x.name === 'Power Word: Shield' || x.name === 'Ice Barrier'); if (b) b.until = 0; } if (a) fx(c.pos.x, c.pos.y, 'absorb ' + a, '#9fe0ff'); }
   if (d > 0 && r.manaShield && r.manaShield.until > G.gameTime && r.manaShield.v > 0) { const a = Math.min(d, r.manaShield.v, (c.mana || 0) / 2); r.manaShield.v -= a; c.mana -= a * 2; d -= a; }
   return Math.round(d);
 }
 function damageShield(c, m) {
+  if (typeof fireShieldHit === 'function') fireShieldHit(c, m);                               // the imp's Fire Shield
   const r = rt(c); const ds = r.dmgShield; if (!ds || ds.until < G.gameTime || ds.charges <= 0) return;
   ds.charges--; spellHit(c, { n: 'Lightning Shield', sc: 3, fam: [11, 0] }, { lo: ds.v, hi: ds.v, coef: 0.27 }, m);
   if (ds.charges <= 0) { const b = (r.buffs || []).find((x) => x.name === 'Lightning Shield'); if (b) b.until = 0; r.dmgShield = null; }
@@ -853,7 +798,7 @@ function classDps(c, s, red) {
   }
   let dps = Math.max(best, rangedWeapon(c) ? 5 + c.level * 0.4 : 2 + c.level * 0.3);
   if (c.cls === 3) { const w = rangedWeapon(c); dps = w ? ((w.min + w.max) / 2 + (s.rap + s.agi) / 14 * w.speed) / w.speed * 1.3 : s.mhDps; }
-  if (petAlive(c)) { const p = petStats(c); dps += (p.dmin + p.dmax) / 2 / p.atk; if (c.pet.kind === 'imp') dps += (5 + c.level * 1.6) / 2.5; }
+  if (petAlive(c)) { const p = petStats(c); dps += c.pet.kind === 'imp' ? (5 + c.level * 1.6) / 2.5 : (p.dmin + p.dmax) / 2 / p.atk; }
   return Math.max(1, dps);
 }
 

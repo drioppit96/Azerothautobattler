@@ -64,3 +64,37 @@ def tables(path, wanted):
 def dicts(tbl):
     cols, rows = tbl
     return [dict(zip(cols, r)) for r in rows]
+
+
+class DumpCursor(object):
+    """Enough of a pymysql DictCursor over tables read with tables(), so the scripts written for the database also run
+    from the dump: SHOW TABLES LIKE, SHOW COLUMNS FROM, SELECT * FROM t [WHERE `col` IN (...)]."""
+    def __init__(self, tabs):
+        self.t = tabs
+        self._res = []
+
+    def execute(self, sql, params=None):
+        s = sql.strip()
+        if re.match(r"SHOW TABLES LIKE", s, re.I):
+            name = params[0] if params else s.split()[-1].strip("'\"")
+            self._res = [{"t": name}] if name in self.t and self.t[name][0] else []
+            return
+        m = re.match(r"SHOW COLUMNS FROM `?(\w+)`?", s, re.I)
+        if m:
+            self._res = [{"Field": c} for c in self.t[m.group(1)][0]]
+            return
+        m = re.match(r"SELECT \* FROM `?(\w+)`?(?:\s+WHERE `(\w+)` IN \((.*)\))?\s*$", s, re.I | re.S)
+        if m:
+            cols, rows = self.t[m.group(1)]
+            if m.group(2):
+                k = cols.index(m.group(2)); want = set(params or [])
+                rows = [r for r in rows if r[k] in want]
+            self._res = [dict(zip(cols, r)) for r in rows]
+            return
+        raise ValueError("DumpCursor cannot run: " + s[:80])
+
+    def fetchall(self):
+        return self._res
+
+    def fetchone(self):
+        return self._res[0] if self._res else None

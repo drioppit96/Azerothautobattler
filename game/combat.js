@@ -247,7 +247,7 @@ function mobTick(W, m, dt, now) {
     } else if (d <= MELEE_RANGE + 0.5) {
       m.swing -= dt;
       if (m.swing <= 0 && vu) { m.swing += m.atk / mods.haste; compTakeHit(c, vu, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + mods.dmg) * mods.dmgPct * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { u: vu, x: vu.x, y: vu.y }); }
-      else if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk) * (mods.disarm ? 0.5 : 1)); }
+      else if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + (mods.dmg || 0)) * (mods.dmgPct || 1) * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { pet: true, x: rt(c).pet.x, y: rt(c).pet.y }); }
       else if (m.swing <= 0) {
         m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods);
         const r = rt(c);
@@ -300,6 +300,7 @@ function killMob(c, m) {
   if (typeof groupOf === 'function' && groupOf(c)) groupKill(c, m, W);           // your characters together: shared kill, experience in parts
   else {
     const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
+    if (typeof petOnKill === 'function') petOnKill(c, m, party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1);
     log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
     const comps = party ? party.filter((u) => u.comp && !u.dead) : [];
     lootMob(c, m, false, comps.length ? { chars: [c], comps } : null);
@@ -688,7 +689,7 @@ function fightCost(c, m) {
   const pack = c.cfg && c.cfg.style === 'aggressive' ? packSize(W, m, c) : Math.min(2, packSize(W, m, c));
   let cost = mobDps * (m.hp / myDps);
   if (pack) cost += pack * mobDps * (m.hp / myDps + m.maxhp / myDps * 0.5);
-  if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank) cost *= 0.35;           // the pet takes the hits
+  if (c.cls !== 1 && petIsTank(c)) cost *= 0.35;           // the pet takes the hits
   else if (c.cls !== 1 && isCaster(c)) cost *= 0.75;                                       // a few spells land before it arrives
   return cost;
 }
@@ -711,7 +712,7 @@ function approach(c, m) {
     if (G.gameTime - r0.tankPullT < 8 && m.st === 'alive') { r0.tankPull = m; r0.mv = null; return 'moving'; }
   }
   if (d <= reach) {
-    if (c.cls !== 1 && petAlive(c) && PET_KINDS[c.pet.kind].tank && d > MELEE_RANGE + 1) {
+    if (c.cls !== 1 && petIsTank(c) && d > MELEE_RANGE + 1) {
       // send the pet in first and wait until it is there (up to 6 seconds)
       r0.petGo = m; r0.tgt = m; const P = r0.pet; const pd = Math.hypot(P.x - m.x, P.y - m.y);
       if (r0.petGoM !== m) { r0.petGoM = m; r0.petGoT = G.gameTime; }
@@ -766,10 +767,11 @@ function updateChar(c, dt) {
   if (threats.length && !r.inFight) { r.fightStart = G.gameTime; masteryFightRoll(c); } r.inFight = threats.length > 0;
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
-  if (c.pet) petStep(c, dt);
+  if (c.pet || c.cls === 9) petStep(c, dt);
   if (r.party) partyStep(c, dt);
   if (r.cast && castStep(c, dt)) { if (threats.length && (!r.tgt || r.tgt.st === 'dead')) r.tgt = threats[0]; return; }
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
+  if (r.tame && threats.length && typeof petTameFight === 'function' && petTameFight(c)) return;     // the beast being tamed attacks: keep taming
   if (threats.length && groupOf(c)) {
     r.tgt = groupPickTarget(c, threats, r.tgt); r.mv = null;
     if (groupHealStep(c)) return;
@@ -788,6 +790,7 @@ function updateChar(c, dt) {
   if (typeof consumablesOoc === 'function' && consumablesOoc(c)) return;
   if (groupOf(c) && groupHealStep(c)) return;               // a group healer tops everyone up
   if (restStep(c)) return;
+  if ((c.cls === 3 || c.cls === 9) && typeof petOoc === 'function' && petOoc(c, dt)) return;      // taming, feeding the pet, Demonic Sacrifice
   if (c.cls !== 1 && oocStep(c)) return;
   if (c.prof && profStep(c)) return;
   const o = c.order;

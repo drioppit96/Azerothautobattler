@@ -18,7 +18,7 @@ DB = dict(host="127.0.0.1", port=3310, user="root", password="123456",
           database="classicmangos")
 
 OUT_FOLDER = r"C:\wow excel"
-DBC_DIR = os.path.join(OUT_FOLDER, "dbc")          # filled by extract_dbc_multi.py
+DBC_DIR = os.environ.get("WOW_DBC_DIR") or os.path.join(OUT_FOLDER, "dbc")      # filled by extract_dbc_multi.py
 CLIENT_DATA = r"C:\GOG Games\mangos\SoloCraft\SoloCraft 1.12.1\Data"
 # archives searched for map (ADT) files, newest first
 ARCHIVE_ORDER = ["patch-2.mpq", "patch.mpq", "terrain.mpq", "base.mpq"]

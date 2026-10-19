@@ -6,17 +6,17 @@
    list (pets, conjuring, forms, pet healing) are kept. Sources: the common Classic class guides of the time. */
 
 const ROTATION_NAMES = { custom: 'Custom (my own list below)', st: 'Optimised single target', aoe: 'Optimised AoE (packs)' };
-const ROT_KEEP_MODES = new Set(['pet', 'conjure', 'form', 'petheal']);
+const ROT_KEEP_MODES = new Set(['pet', 'conjure', 'form', 'petheal', 'sacrifice']);
 /* abilities that are the same for every spec of a class (buffs, defensive cooldowns, heals) */
 const ROT_COMMON = {
   1: [['Battle Shout', 'buff'], ['Bloodrage', 'lowrage', 25], ['Last Stand', 'emergency', 20], ['Shield Wall', 'emergency', 15], ['Hamstring', 'flee'], ['Charge', 'opener'], ['Intercept', 'opener']],
   2: [['Devotion Aura', 'buff'], ['Blessing of Might', 'buff'], ['Divine Shield', 'emergency', 15], ['Lay on Hands', 'emergency', 12], ['Hammer of Justice', 'emergency', 35], ['Holy Light', 'heal', 30], ['Flash of Light', 'emergency', 45]],
-  3: [['Aspect of the Hawk', 'buff'], ['Mend Pet', 'petheal', 40], ['Concussive Shot', 'flee'], ['Feign Death', 'emergency', 10]],
+  3: [['Aspect of the Hawk', 'buff'], ['Mend Pet', 'petheal', 40], ['Intimidation', 'emergency', 60], ['Concussive Shot', 'flee'], ['Feign Death', 'emergency', 10]],
   4: [['Evasion', 'emergency', 40], ['Vanish', 'emergency', 10]],
   5: [['Power Word: Fortitude', 'buff'], ['Inner Fire', 'buff'], ['Power Word: Shield', 'opener'], ['Desperate Prayer', 'emergency', 20], ['Psychic Scream', 'emergency', 25], ['Renew', 'emergency', 60], ['Flash Heal', 'emergency', 35], ['Greater Heal', 'heal', 30], ['Heal', 'heal', 30], ['Lesser Heal', 'heal', 30]],
   7: [['Lightning Shield', 'buff'], ['Strength of Earth Totem', 'buff'], ['Lesser Healing Wave', 'emergency', 40], ['Healing Wave', 'heal', 30]],
   8: [['Ice Armor', 'buff'], ['Frost Armor', 'buff'], ['Arcane Intellect', 'buff'], ['Ice Barrier', 'emergency', 75], ['Ice Block', 'emergency', 12], ['Mana Shield', 'emergency', 30], ['Evocation', 'lowmana', 10]],
-  9: [['Demon Armor', 'buff'], ['Demon Skin', 'buff'], ['Death Coil', 'emergency', 30], ['Life Tap', 'lowmana', 25], ['Health Funnel', 'petheal', 30]],
+  9: [['Demon Armor', 'buff'], ['Demon Skin', 'buff'], ['Soul Link', 'buff'], ['Death Coil', 'emergency', 30], ['Life Tap', 'lowmana', 25], ['Health Funnel', 'petheal', 30]],
   11: [['Mark of the Wild', 'buff'], ['Thorns', 'buff'], ['Barkskin', 'emergency', 30], ['Frenzied Regeneration', 'emergency', 35], ['Regrowth', 'heal', 40], ['Healing Touch', 'heal', 30], ['Rejuvenation', 'emergency', 60]],
 };
 /* per spec (the talent build): single target and AoE priority */

@@ -366,6 +366,10 @@ def fetch_all(cur, sd, ids):
     return out
 
 
+PET_SKILL_FIRST, PET_SKILL_LAST = 203, 218          # Pet - Spider ... Pet - Tallstrider (the imp, felhunter below)
+PET_SKILLS = {188, 189, 236, 251, 270, 653, 654, 655, 656}
+
+
 def collect_player_ids(cur, sd):
     ids = {}
     for sid, lst in sd.sla.items():
@@ -385,6 +389,16 @@ def collect_player_ids(cur, sd):
                     ids.setdefault(sid, (set(), "talent"))
                     if ids[sid][1] != "talent":
                         ids[sid] = (ids[sid][0], ids[sid][1] + "+talent")
+    # hunter pet and warlock demon abilities (the pet skill lines: Pet - Wolf ... Pet - Imp, Pet - Generic)
+    for sid, lst in sd.sla.items():
+        if any(PET_SKILL_FIRST <= skill <= PET_SKILL_LAST or skill in PET_SKILLS for skill, _, _, _ in lst):
+            ids.setdefault(sid, (set(), "pet"))
+    for sid in (18789, 18790, 18791, 18792):            # Demonic Sacrifice: the buff of each demon
+        ids.setdefault(sid, (set(), "pet"))
+    if table_exists(cur, "spell_pet_auras"):           # Master Demonologist, Soul Link, Spirit Bond: the auras they give
+        cur.execute("SELECT * FROM spell_pet_auras")
+        for r in cur.fetchall():
+            ids.setdefault(r["aura"], (set(), "pet"))
     if table_exists(cur, "playercreateinfo_spell"):
         c = columns(cur, "playercreateinfo_spell")
         cur.execute("SELECT DISTINCT `%s` s FROM playercreateinfo_spell" % c["spell"])

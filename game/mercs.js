@@ -241,13 +241,13 @@ function mercHealRanks(c, u, names, L) {
 }
 /* how hurt someone of the group is: {hp, max, miss, pct} */
 function mercHurt(c, t) {
-  if (t.pet) return { hp: c.pet.hp, max: c.pet.maxhp, miss: c.pet.maxhp - c.pet.hp, pct: c.pet.hp / c.pet.maxhp };
+  if (t.pet) { const mx = petStats(c).maxhp; return { hp: c.pet.hp, max: mx, miss: mx - c.pet.hp, pct: c.pet.hp / mx }; }
   if (t.merc) return { hp: t.merc.hp, max: t.merc.maxhp, miss: t.merc.maxhp - t.merc.hp, pct: t.merc.hp / t.merc.maxhp };
   const mx = charStats(t.c).maxHp; return { hp: t.c.hp, max: mx, miss: mx - t.c.hp, pct: t.c.hp / mx };
 }
 function mercHealLand(c, u, t, v, n) {
   const r = rt(c); let got;
-  if (t.pet) { if (!petAlive(c)) return; const h0 = c.pet.hp; c.pet.hp = Math.min(c.pet.maxhp, c.pet.hp + v); got = c.pet.hp - h0; }
+  if (t.pet) { if (!petAlive(c)) return; const h0 = c.pet.hp; c.pet.hp = Math.min(petStats(c).maxhp, c.pet.hp + v); got = c.pet.hp - h0; fx(rt(c).pet.x, rt(c).pet.y, '+' + Math.round(got), '#5ee07a'); }
   else if (t.merc) { const o = t.merc; if (o.dead) return; const h0 = o.hp; o.hp = Math.min(o.maxhp, o.hp + v); got = o.hp - h0; fx(o.x, o.y, '+' + Math.round(got), '#5ee07a'); }
   else { const o = t.c; if (rt(o).ghost || o.hp <= 0) return; const h0 = o.hp; o.hp = Math.min(charStats(o).maxHp, o.hp + v); got = o.hp - h0; fx(o.pos.x, o.pos.y, '+' + Math.round(got), '#5ee07a'); }
   meterGroup(c, u, 'heal', Math.round(got), n);
@@ -268,7 +268,7 @@ function mercHealStep(c, u, dt, inFight) {
   const fast = mercHealRanks(c, u, k.fast ? [k.fast] : [], L);
   const smallest = main[0].val;
   // who needs a heal: real health missing (not a scratch), the tank a little earlier; out of a fight only the ones low
-  const folk = mercFolk(c).concat(petAlive(c) ? [{ pet: true, role: 'pet', x: c.pet.x || c.pos.x, y: c.pet.y || c.pos.y }] : []);
+  const folk = mercFolk(c).concat(petAlive(c) ? [{ pet: true, role: petIsTank(c) ? 'tank' : 'pet', x: rt(c).pet.x, y: rt(c).pet.y }] : []);
   const need = [];
   for (const t of folk) {
     const h = mercHurt(c, t); if (h.miss <= 0) continue;

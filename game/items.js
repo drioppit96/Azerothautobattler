@@ -109,6 +109,7 @@ function questWants(c, id) {
 function isJunk(c, id) {
   if (questWants(c, id)) return false;
   if (c.prof && profKeeps(c, id)) return false;
+  if (typeof petKeeps === 'function' && petKeeps(c, id)) return false;            // soul shards, the pet's food
   if (itemQuality(id) === 0) return true;
   const r = itemRow(id); const l = lootRow(id);
   const cls = r ? r.c : l ? l[3] : -1, sub = r ? r.s : l ? l[4] : -1;
@@ -173,6 +174,7 @@ function applyAura(s, au, mi, v) {
     case 79: s.dmgDone *= 1 + v / 100; break;
     case 55: s.shit += v; break;
     case 9001: s.wBonus += v; break;           // sharpening stone / weightstone (weapon damage)
+    case 9002: (s.schoolPct = s.schoolPct || []).push([mi, v]); break;          // more damage of one school (Demonic Sacrifice)
     default: return false;
   }
   return true;
@@ -531,7 +533,7 @@ function autoBuyAmmo(c, v) {
 }
 function autoBuyFood(c, v, kind) {
   if (!v || G.state.settings.autoBuyFood === false) return;
-  if (!kind) { autoBuyFood(c, v, 'food'); if (typeof usesMana === 'function' && usesMana(c) && c.cls !== 1) autoBuyFood(c, v, 'drink'); if (c.cls === 3) autoBuyAmmo(c, v); return; }
+  if (!kind) { autoBuyFood(c, v, 'food'); if (typeof usesMana === 'function' && usesMana(c) && c.cls !== 1) autoBuyFood(c, v, 'drink'); if (c.cls === 3) { autoBuyAmmo(c, v); if (typeof autoBuyPetFood === 'function') autoBuyPetFood(c, v); } return; }
   let have = 0; for (const x of c.bags) { const u = useInfo(x.id); if (u && u.kind === kind) have += x.n; }
   if (have >= 10) return;
   let best = null;

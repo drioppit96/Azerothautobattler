@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Builds gamedata/professions.json (and event_mobs.json, pets.json) for the game from a cMaNGOS
+Builds gamedata/professions.json (and event_mobs.json) for the game from a cMaNGOS
 classic database dump (Full_DB/ClassicDB_1_12_1_*.sql.gz from github.com/cmangos/classic-db).
 
     py wow_professions_json.py  path\\to\\ClassicDB_1_12_1_z2815.sql.gz
@@ -12,7 +12,7 @@ professions.json:
   trainers {npcEntry: [skillId, ...]}
   nodes    {goEntry: [kind, skill]}           kind: herb | ore
 event_mobs.json: creature entries that only appear during world events
-pets.json:  hunter pet / warlock demon base stats per level
+(pets.json: wow_pets.py)
 """
 import json, os, sys
 from collections import defaultdict
@@ -52,7 +52,7 @@ def main():
     out = os.path.join(root, "gamedata")
     print("Reading", path, "...")
     T = tables(path, ["spell_template", "npc_trainer", "npc_trainer_template", "creature_template", "item_template",
-                      "gameobject_template", "game_event_creature", "creature", "pet_levelstats"])
+                      "gameobject_template", "game_event_creature", "creature"])
     sp = {r["Id"]: r for r in dicts(T["spell_template"])}
     ct = {r["Entry"]: r for r in dicts(T["creature_template"])}
     it = {r["entry"]: r for r in dicts(T["item_template"])}
@@ -184,13 +184,7 @@ def main():
     with open(os.path.join(out, "spell_stances.json"), "w") as f: json.dump(st, f, separators=(",", ":"))
     print("spell_stances.json: %d spells" % len(st))
 
-    # pets: hunter pet base (creature 1) and warlock demons
-    pets = defaultdict(dict)
-    for r in dicts(T["pet_levelstats"]):
-        pets[str(r["creature_entry"])][str(r["level"])] = [r["hp"], r["mana"], r["armor"], r["str"], r["agi"], r["sta"], r["inte"], r["spi"]]
-    with open(os.path.join(out, "pets.json"), "w") as f: json.dump(pets, f, separators=(",", ":"))
-    print("pets.json: %d pet kinds" % len(pets))
-
+    # pets.json (hunter pets and warlock demons: stats, families, abilities, tameable beasts) is written by wow_pets.py
 
 if __name__ == "__main__":
     main()

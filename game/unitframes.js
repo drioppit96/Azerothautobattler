@@ -148,7 +148,7 @@ function renderUnitFrames() {
   const lc = $('left'); const sb = lc ? lc.offsetWidth - lc.clientWidth - (parseFloat(getComputedStyle(lc).borderRightWidth) || 0) : 0;
   const W = (box.clientWidth || 254) + Math.max(0, sb);
   const mates = ufMates(c); const mode = mates.length ? 'group' : 'solo';
-  if (!box._w || Math.abs(box._w - W) > 2 || box._mode !== mode) { box._w = W; box._mode = mode; box.innerHTML = ''; box._me = null; box._en = []; box._mf = []; box._pe = []; box._sep = null; }
+  if (!box._w || Math.abs(box._w - W) > 2 || box._mode !== mode) { box._w = W; box._mode = mode; box.innerHTML = ''; box._me = null; box._en = []; box._mf = []; box._pe = []; box._sep = null; box._pet = null; }
   const sp = Math.min(1.6, (box._w - 4 - 18) / UF.w), se = sp * 0.94;
   if (!box._me) {
     box._me = ufMake(sp, true); box._me.classList.add('ufplayer'); box.appendChild(box._me);
@@ -157,6 +157,13 @@ function renderUnitFrames() {
   }
   const me = box._me; ufFillChar(me, c); me.style.top = '0px';
   let y = ufSlot(me) * sp + 6;
+  // the pet under the character (like the PetFrame of the game)
+  if (c.pet && c.pet.out !== false && typeof ufMakePet === 'function') {
+    const ps = sp * 0.95;
+    if (!box._pet || box._petS !== ps) { if (box._pet) box._pet.remove(); box._pet = ufMakePet(ps); box._petS = ps; box.appendChild(box._pet); box._pet.onclick = () => openSheet('pet'); box._pet.title = 'Pet - click for the Pet tab'; }
+    box._pet.style.display = ''; box._pet.style.top = Math.round(y - 4) + 'px'; ufFillPet(box._pet, c);
+    y += (box._pet._rows ? 66 : 53) * ps + 2;
+  } else if (box._pet) box._pet.style.display = 'none';
   if (mode === 'solo') {
     // alone: the creatures it fights below it, the same size (current target first)
     const list = []; if (r.tgt && r.tgt.st !== 'dead' && (r.tgt.tgt === c || (r.threats || []).length === 0)) list.push(r.tgt);
@@ -167,7 +174,7 @@ function renderUnitFrames() {
       const m = shown[i]; e.style.display = m ? '' : 'none'; e._mob = m || null; if (!m) return;
       e.style.top = Math.round(y) + 'px'; ufFillMob(e, m, c, m === r.tgt); y += ufSlot(e) * se + 3;
     });
-    box.style.height = Math.ceil(shown.length ? y : ufSlot(me) * sp) + 'px';
+    box.style.height = Math.ceil(shown.length || (box._pet && box._pet.style.display !== 'none') ? y : ufSlot(me) * sp) + 'px';
     return;
   }
   /* in a group: the current target big under the character; below, on the left the other members, on the right the

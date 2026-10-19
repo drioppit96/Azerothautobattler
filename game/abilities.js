@@ -180,6 +180,7 @@ function onMobDamaged(m, dmg) {
   for (const a of m.auras) {
     if (a.until <= now) continue;
     if (a.au === 7 && now > a.brk) a.until = 0;
+    else if (a.seduce && dmg > 0) { a.until = 0; fx(m.x, m.y, 'Seduction breaks', '#ff7ad9'); }
     else if (a.au === 26 && dmg > 0) {
       const cap = m.lvl > 8 ? 30 * m.lvl - 100 : 50;
       if (Math.random() < dmg / cap) { a.until = 0; fx(m.x, m.y, 'breaks free', '#9fe0ff'); }
@@ -209,6 +210,7 @@ function abilityUsable(c, name) {
   if (!sp) return { ok: false, why: 'not learned' };
   if (!stanceOk(c, name)) return { ok: false, why: 'needs ' + (CLASS_META[c.cls][name].st.split('').map((x) => STANCE_NAME[x]).join(' or ')) };
   if (!shieldOk(c, name)) return { ok: false, why: 'needs a shield' };
+  if (typeof petNeeded === 'function' && petNeeded(c, name, sp)) return { ok: false, why: c.pet && c.pet.dead ? 'the pet is dead' : 'needs a pet' };
   if (c.cls !== 1) {
     if (!formOk(c, name)) return { ok: false, why: c.form ? 'not in ' + c.form + ' form' : 'needs ' + (/Maul|Swipe|Roar|Frenzied|Enrage|Bash/.test(name) ? 'bear' : 'cat') + ' form' };
     if ((sp.fl || []).includes('ranged') && c.cls === 3 && !rangedWeapon(c)) return { ok: false, why: 'needs a bow, gun or crossbow' };
@@ -376,7 +378,7 @@ function ruleTarget(c, rule, sp, tgt) {
       }
       case 'lowmana': return att.length && mp < (rule.p || 20) && (name !== 'Life Tap' || hpPct > 50) ? c : null;
       case 'execute': return tgt && tgt.hp / tgt.maxhp * 100 < (rule.p || 20) ? tgt : null;
-      case 'petheal': return att.length && petAlive(c) && c.pet.hp < c.pet.maxhp * (rule.p || 40) / 100 ? c : null;
+      case 'petheal': return att.length && petAlive(c) && c.pet.hp < petStats(c).maxhp * (rule.p || 40) / 100 && !petBuff(petRt(c), name) ? c : null;
       case 'form': return att.length && hpPct > 35 && wantedForm(c) && c.form !== wantedForm(c) && formSpellName(c, wantedForm(c)) === name ? c : null;
       case 'opener': {
         if (!tgt) return null;

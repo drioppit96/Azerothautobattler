@@ -96,6 +96,8 @@ function closeSheet() { SH.de = null; SH.open = false; $('sheet').hidden = true;
 function renderSheet() {
   if (!SH.open) return; const c = active();
   $('sheetTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === SH.tab));
+  const pb = $('petTabBtn'); if (pb) pb.hidden = c.cls !== 3 && c.cls !== 9;
+  if (SH.tab === 'pet' && c.cls !== 3 && c.cls !== 9) SH.tab = 'char';
   $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
   $('sheet').classList.toggle('wide', SH.tab === 'talents');
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
@@ -105,7 +107,7 @@ function renderSheet() {
     if (f) { const i = $('profSearch'); if (i) { i.focus(); try { i.setSelectionRange(f[0], f[1]); } catch (e) { /* */ } } }
     return;
   }
-  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) : SH.tab === 'guild' ? guildHtml(c) :
+  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) : SH.tab === 'guild' ? guildHtml(c) : SH.tab === 'pet' ? petTabHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
@@ -205,6 +207,7 @@ function bindSheet() {
     if (SH.tab === 'bank' && bankClick(e)) return;
     if (SH.tab === 'trade' && tradeClick(e)) return;
     if (SH.tab === 'guild' && guildClick(e)) return;
+    if (SH.tab === 'pet' && petTabClick(e)) return;
     if (e.target.closest('[data-bsort]')) { sortBags(c); return; }
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
@@ -219,7 +222,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if (SH.tab === 'guild' && guildChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if (SH.tab === 'guild' && guildChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); });
   sh.addEventListener('dblclick', (e) => {
@@ -282,7 +285,7 @@ function behaviourHtml(c) {
     ([5, 8, 9].includes(c.cls) ? '<label>Shoot the wand below mana</label><select data-cfg="wandAt">' + pctOptions(cfg.wandAt, 10, 90, true) + '</select>' : '') +
     '</div><div class="small muted">Health % out of combat. Food is only eaten while sitting; potions only in combat.' + (usesMana(c) && c.cls !== 1 ? ' Drinks (water, milk, juice) refill mana while sitting.' : '') + '</div></div>';
   if (c.cls === 11) h += '<div class="sgroup"><h5>Druid form for fighting</h5><select data-cfgs="form">' + [['auto', 'Automatic (Cat Form from 20, Bear Form from 10)'], ['cat', 'Cat Form'], ['bear', 'Bear Form'], ['caster', 'Caster form (Wrath, Moonfire)']].map(([k, t]) => '<option value="' + k + '"' + ((cfg.form || 'auto') === k ? ' selected' : '') + '>' + t + '</option>').join('') + '</select> <span class="small muted">Heals are cast in caster form between fights.</span></div>';
-  if (c.pet) h += '<div class="sgroup"><h5>Pet</h5><div class="small">' + esc(c.pet.name) + ' - level ' + c.level + ', ' + (c.pet.dead ? 'dead (revive it)' : Math.round(c.pet.hp) + ' / ' + c.pet.maxhp + ' health') + (PET_KINDS[c.pet.kind] && PET_KINDS[c.pet.kind].tank ? ' - holds the attention of the creatures' : '') + '</div></div>';
+  if (c.pet) h += '<div class="sgroup"><h5>Pet</h5><div class="small">' + esc(c.pet.name) + ' - level ' + petLvl(c) + ', ' + (c.pet.dead ? 'dead (revive it)' : Math.round(c.pet.hp) + ' / ' + petStats(c).maxhp + ' health') + (petIsTank(c) ? ' - holds the attention of the creatures' : '') + ' <button class="mini" data-tab="pet">Pet tab</button></div></div>';
   const stances = Object.keys(STANCES).filter((n) => c.known && c.known[n]);
   if (stances.length) h += '<div class="sgroup"><h5>Stance</h5><select data-cfgs="stance">' + stances.map((n) => '<option value="' + STANCES[n] + '"' + (cfg.stance === STANCES[n] ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> <span class="small muted">Abilities that need another stance are skipped.</span></div>';
   if (typeof consumablesHtml === 'function') h += consumablesHtml(c);
@@ -310,7 +313,7 @@ function behaviourHtml(c) {
 }
 /* every fighting ability can also be kept for rare and elite creatures only */
 function ruleModes(n, modes) {
-  if (modes.includes('elite') || n === 'Charge' || n === 'Intercept' || modes.every((m) => ['off', 'conjure', 'pet', 'petheal', 'form', 'heal'].includes(m))) return modes;
+  if (modes.includes('elite') || n === 'Charge' || n === 'Intercept' || modes.every((m) => ['off', 'conjure', 'pet', 'petheal', 'form', 'heal', 'sacrifice', 'buff'].includes(m))) return modes;
   return modes.concat(['elite']);
 }
 /* rule modes for abilities without a hand-made entry */

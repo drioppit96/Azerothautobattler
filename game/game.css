@@ -440,3 +440,25 @@ label.chk.dim{opacity:.55}
 .craftbar .cbfill{flex:1;position:relative;height:18px;background:#000c;border:1px solid #c9a646;border-radius:3px;overflow:hidden}
 .craftbar .cbfill i{position:absolute;inset:0 auto 0 0;background:linear-gradient(#ffd04a,#c08a10)}
 .craftbar .cbfill span{position:relative;display:block;text-align:center;font-size:11px;line-height:18px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
+/* pets: the pet frame and the Pet tab */
+.uf.ufpet{left:34px}.uf.ufpet.dead{opacity:.6}
+.uf.ufpet .ufname{font-size:calc(9px * var(--s, 1))}
+.ufbar.pw i.p2{background:linear-gradient(#ffa850,#b85a10)}
+.ufhappy{position:absolute;background:url(../ui/PetPaperDollFrame/UI-PetHappiness.png) no-repeat;background-size:calc(128px * var(--s, 1)) calc(64px * var(--s, 1));pointer-events:auto}
+.petpane{padding:4px 6px;font-size:12px}
+.petpane h5{margin:10px 0 4px}
+.pethead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.petpor{width:52px;height:52px;border-radius:50%;border:2px solid #6a5a32;background:#000;object-fit:cover}
+.petname b{font-size:15px;color:#ffd100}
+.pethappy{display:inline-block;width:24px;height:23px;background:url(../ui/PetPaperDollFrame/UI-PetHappiness.png) no-repeat;margin-left:auto}
+.petbar{display:flex;align-items:center;gap:6px;margin:2px 0}.petbar>span{width:72px;color:#cfc6b0}
+.pbar{position:relative;flex:1;height:13px;background:#000a;border:1px solid #3a3020;border-radius:2px;overflow:hidden}
+.pbar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(#2fe04a,#0d8a1e)}
+.pbar.focus i{background:linear-gradient(#ffa850,#b85a10)}.pbar.mana i{background:linear-gradient(#2f6cff,#0a2a9a)}
+.pbar.xp i{background:linear-gradient(#c070ff,#6a2aa0)}.pbar.loy i{background:linear-gradient(#ffe070,#a08010)}
+.pbar.happy1 i{background:linear-gradient(#ff6050,#a01a10)}.pbar.happy2 i{background:linear-gradient(#ffe070,#a08010)}.pbar.happy3 i{background:linear-gradient(#2fe04a,#0d8a1e)}
+.pbar em{position:relative;display:block;text-align:center;font:600 10px/13px "Segoe UI";color:#fff;font-style:normal;text-shadow:0 0 2px #000}
+.petstats{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;margin-top:6px}
+.petab{width:100%;border-collapse:collapse;margin-top:6px}.petab th{text-align:left;font-weight:600;color:#cfc6b0;font-size:11px}
+.petab td{padding:1px 4px;vertical-align:middle}.petab tr.dim td{opacity:.55}.petab .sic{width:18px;height:18px}
+.petbtns{margin-top:6px}.petpane .bad{color:#ff7060}
