@@ -117,9 +117,11 @@ function bagSummaryHtml(c) {
   h += '<div class="vbtns"><button class="mini" data-bs="sort">Sort the bags</button>' + (ups ? ' <button class="mini" data-bs="equip">Put on the upgrades</button>' : '') +
     (v ? ' <button class="mini" data-bs="junk"' + (jk ? '' : ' disabled') + '>Sell junk</button>' + (v.repair && rc ? ' <button class="mini" data-bs="repair">Repair (' + money(rc) + ')</button>' : '') : ' <button class="mini" data-bs="vendor">Go to a vendor</button>') + '</div>';
   h += '<div class="small muted" style="margin-top:8px">Click an item in the bags for what can be done with it; double-click equips or uses it. The bank and the guild bank are the next tabs.</div></div>';
+  if (typeof hearthHtml === 'function') h = h.replace(/<\/div>$/, '') + hearthHtml(c) + '</div>';
   return h;
 }
 function bagSummaryClick(e) {
+  if (typeof hearthClick === 'function' && hearthClick(e)) return true;
   const b = e.target.closest('[data-bs]'); if (!b) return false; const c = active(); const a = b.dataset.bs;
   if (a === 'sort') sortBags(c); else if (a === 'equip') autoEquip(c); else if (a === 'junk') sellJunk(c); else if (a === 'repair') repairAll(c); else if (a === 'vendor') { orderVendor(c); closeSheet(); return true; }
   renderSheet(); return true;
@@ -264,7 +266,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (SH.tab === 'bags' && typeof hearthChange === 'function' && hearthChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); if (SH.tab === 'vendor' && typeof shopInput === 'function') shopInput(e); if (SH.tab === 'gcraft' && typeof gcraftInput === 'function') gcraftInput(e); });
   sh.addEventListener('dblclick', (e) => {
@@ -395,5 +397,12 @@ function renderAbar() {
     h += '<div class="ab' + (dim ? ' dim' : '') + (r.queued && r.queued.name === rule.n ? ' q' : '') + '" title="' + esc(rule.n + ' - ' + MODE_TEXT[rule.mode] + (MODE_HAS_P[rule.mode] ? ' ' + rule.p : '')) + '">' + spellIcon(sp) +
       (cdLeft > 0 && cdTot ? '<i style="height:' + Math.round(100 * cdLeft / cdTot) + '%"></i><b>' + Math.ceil(cdLeft) + '</b>' : '') + '</div>';
   }
+  // the Hearthstone, last on the bar
+  if (typeof hasHearth === 'function' && hasHearth(c)) {
+    const left = hearthLeft(c); const why = hearthWhy(c);
+    h += '<div class="ab abhs' + (why ? ' dim' : '') + '" data-abhs="1" title="' + esc('Hearthstone - ' + (c.bind ? c.bind.zone : 'no home') + (why ? ' (' + why + ')' : ' - click to go home')) + '"><img class="sic" src="../icons/inv_misc_rune_01.jpg" alt="">' +
+      (left > 0 ? '<i style="height:' + Math.round(100 * left / HEARTH_CD) + '%"></i><b>' + (left >= 60 ? Math.ceil(left / 60) + 'm' : Math.ceil(left)) + '</b>' : '') + '</div>';
+  }
   if (el.dataset.h !== h) { el.innerHTML = h; el.dataset.h = h; }
+  if (!el._hs) { el._hs = true; el.addEventListener('click', (e) => { if (e.target.closest('[data-abhs]')) { hearthUse(active()); renderAbar(); } }); }
 }

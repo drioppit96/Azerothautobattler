@@ -490,3 +490,7 @@ label.chk.dim{opacity:.55}
 .wcbar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(#ffd04a,#c08a10)}
 .wcbar span{position:relative;display:block;text-align:center;font-size:10px;line-height:16px;color:#fff;text-shadow:0 0 2px #000}
 .gcraft .reag{color:#cfc6b0;margin-right:6px;white-space:nowrap}.gcraft .reag.miss{color:#9a6a5a}
+/* the Hearthstone */
+#abar .ab.abhs{pointer-events:auto;cursor:pointer;margin-left:8px;border-color:#b8964a}
+.hearth .vbtns{margin:6px 0}.hearth .hsnew{display:flex;gap:6px;align-items:center;margin:6px 0}
+.hearth .hsnew select{flex:1;min-width:0;background:#0f0c08;border:1px solid var(--line);color:#f0e6cc;border-radius:4px;padding:4px}

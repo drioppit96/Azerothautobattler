@@ -372,6 +372,7 @@ function castStep(c, dt) {
   const enemy = k.tgt && k.tgt !== c;
   if (enemy && (k.tgt.st === 'dead' || k.tgt.st === 'evade')) { r.cast = null; return false; }
   if (r.flying || r.riding || r.ghost) { r.cast = null; return false; }
+  if (k.hearth && r.threats && r.threats.length) { hearthInterrupted(c); return false; }       // a hit breaks the Hearthstone
   k.t += dt;
   if (k.t >= k.total) { r.cast = null; if (!k.ch) finishSpell(c, k.name, k.sp, k.tgt); else if (k.onEnd) k.onEnd(); }
   return true;

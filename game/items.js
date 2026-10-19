@@ -107,6 +107,7 @@ function questWants(c, id) {
   return false;
 }
 function isJunk(c, id) {
+  if (typeof HEARTHSTONE !== 'undefined' && id === HEARTHSTONE) return false;
   if (questWants(c, id)) return false;
   if (c.prof && profKeeps(c, id)) return false;
   if (typeof petKeeps === 'function' && petKeeps(c, id)) return false;            // soul shards, the pet's food
@@ -405,7 +406,9 @@ function useInfo(id) {
   return null;
 }
 function useItem(c, idx, auto) {
-  const inst = c.bags[idx]; if (!inst) return false; const u = useInfo(inst.id); const r = rt(c);
+  const inst = c.bags[idx]; if (!inst) return false;
+  if (inst.id === HEARTHSTONE) { const ok = hearthUse(c, auto); if (ok && !auto && SH.open) closeSheet(); return ok; }
+  const u = useInfo(inst.id); const r = rt(c);
   if (!u) { if (!auto) log(itemName(inst.id) + ' cannot be used.'); return false; }
   const inCombat = r.threats && r.threats.length;
   if (u.kind === 'potion') {
@@ -663,6 +666,7 @@ function tooltipHtml(c, inst, opts) {
   if (it.ds) h += '<div class="tt-desc">"' + esc(it.ds) + '"</div>';
   if (it.il) h += '<div class="muted small">Item level ' + it.il + '</div>';
   if (typeof recipeTipLine === 'function') h += recipeTipLine(c, inst.id);
+  if (typeof hearthTipLine === 'function') h += hearthTipLine(c, inst.id);
   if (typeof ahTipLine === 'function' && !(opts && opts.noAh)) h += ahTipLine(c, inst);
   const sp = itemSell(id); h += sp ? '<div class="small">Sell price: ' + moneyHtml(sp * (inst.n || 1)) + '</div>' : '<div class="small muted">No sell price</div>';
   if (opts && opts.price) h += '<div class="small">Buy price: ' + moneyHtml(opts.price) + '</div>';

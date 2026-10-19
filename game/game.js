@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-19 d (windows, vendor search, guild crafters)';
+const GAME_VERSION = '2026-10-19 e (hearthstone)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -219,6 +219,7 @@ function migrate(c) {
   if (c.cfg.autoTalents !== false && talentFree(c) > 0) autoTalents(c, true);
   dirty(c);
   if (c.mana == null || c.mana > (charStats(c).maxMana || 0)) c.mana = charStats(c).maxMana || 0;
+  if (typeof hearthInit === 'function' && G.spawnMap) hearthInit(c);          // the Hearthstone and the home inn
 }
 function active() { return G.state.characters.find((c) => c.id === G.state.activeId); }
 function baseStats(c) {
@@ -616,6 +617,7 @@ function draw() {
     ctx.textAlign = 'start';
   }
   drawProfOverlay(ctx, m);
+  if (typeof drawHome === 'function') drawHome(ctx, m, c);          // the home inn (Hearthstone)
   drawDungeonMarks(ctx, m); drawParty(ctx, m);
   // the pet
   if (petAlive(c) && c.pos.map === m.map && !rt(c).ghost && !rt(c).flying && !rt(c).riding) {
