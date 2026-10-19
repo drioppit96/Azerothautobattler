@@ -68,8 +68,8 @@ function ufFillChar(me, c) {
   ufSet(me, 'pw', pt + ':' + pv + '/' + pm, () => { me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv; });
   const cpn = r.cpTgt && r.cpTgt.st !== 'dead' ? r.cp || 0 : 0;
   ufSet(me, 'cp', cpn, (v) => { me._cp = me._cp || (() => { const d = document.createElement('div'); d.className = 'ufcp'; me.appendChild(d); return d; })(); me._cp.innerHTML = '<i class="on"></i>'.repeat(v) + (c.cls === 4 || c.form === 'cat' ? '<i></i>'.repeat(5 - v) : ''); });
-  const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null;
-  ufCastBar(me, r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null));
+  const castOf = () => { const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null; return r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null) || (typeof wcBarOf === 'function' ? wcBarOf(c) : null); };
+  ufCastBar(me, castOf(), castOf);
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufAuras(me, ufPlayerAuras(c, r));
 }
@@ -86,21 +86,39 @@ function ufFillComp(me, u, lvl) {
     if (pt === 0 && !u.maxmana) { me._pwi.style.width = '0%'; me._pwt.textContent = ''; return; }
     me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv;
   });
-  ufCastBar(me, u.cb && !u.dead ? u.cb : null);
+  ufCastBar(me, u.cb && !u.dead ? u.cb : null, () => (u.cb && !u.dead ? u.cb : null));
   const now = G.gameTime; const au = [];
   for (const b of u.buffs || []) if (b.until > now) au.push({ n: b.name, ic: b.ic, left: b.until - now, k: b.kind || 'buff' });
   if (u.drinking) au.push({ n: 'Drink', ic: 'inv_drink_07', left: null, k: 'buff' });
   ufAuras(me, u.dead ? [] : au);
 }
-/* the cast bar: under the player's frame; on the small frames of the group over the name */
-function ufCastBar(me, cb) {
-  ufSet(me, 'cast', cb ? cb.name + Math.round(20 * cb.t / cb.total) : '', () => {
+/* the cast bar: under the player's frame; on the small frames of the group over the name. get() gives what is cast
+   right now ({name, t, total}): the bar itself moves every frame (animateCastBars), smoothly, not with the 4 redraws
+   a second of the frames */
+function ufCastBar(me, cb, get) {
+  me._cbGet = get || null;
+  ufSet(me, 'cast', cb ? cb.name : '', () => {
     if (!me._cb) {
       const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); me._cb = d;
       if (me.classList.contains('ufmate') || me.classList.contains('ufenemy')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
     }
-    me._cb.hidden = !cb; if (cb) { me._cb.firstChild.style.width = Math.min(100, 100 * cb.t / Math.max(0.01, cb.total)) + '%'; me._cb.lastChild.textContent = cb.name; }
+    me._cb.hidden = !cb; if (cb) me._cb.lastChild.textContent = cb.name;
   });
+  if (cb && me._cb) ufCastWidth(me, cb);
+}
+function ufCastWidth(me, k, extra) { const w = Math.min(100, 100 * ((k.t || 0) + (extra || 0)) / Math.max(0.01, k.total || 1)); me._cb.firstChild.style.width = w.toFixed(2) + '%'; }
+/* every animation frame: the cast bars of the frames on screen (the part of a game step not simulated yet is added,
+   so the bar does not move in steps) */
+function animateCastBars() {
+  const box = $('unitframes'); if (!box) return;
+  const extra = (G.state.settings.speed || 0) > 0 ? Math.min(STEP, G.acc || 0) * 1 : 0;
+  for (const el of box.children) {
+    if (!el._cb || el._cb.hidden || !el._cbGet || el.style.display === 'none') continue;
+    const k = el._cbGet();
+    if (!k) { el._cb.hidden = true; el._vcast = ''; continue; }
+    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; }
+    ufCastWidth(el, k, extra);
+  }
 }
 /* a creature's frame, as seen by the character c */
 function ufFillMob(e, m, c, isTgt, noAuras) {
@@ -118,7 +136,8 @@ function ufFillMob(e, m, c, isTgt, noAuras) {
   const hpPct = Math.max(0, Math.round(100 * m.hp / m.maxhp));
   ufSet(e, 'hp', hpPct, (v) => { e._hpi.style.width = v + '%'; e._hpt.textContent = v + '%'; });
   ufSet(e, 'tgt', isTgt, (v) => e.classList.toggle('target', v));
-  ufCastBar(e, m.cast && m.cast.u ? { name: m.cast.u.sp.n, t: m.cast.t, total: m.cast.total } : null);       // what it is casting
+  const mc = () => (m.cast && m.cast.u ? { name: m.cast.u.sp.n, t: m.cast.t, total: m.cast.total } : null);
+  ufCastBar(e, mc(), mc);       // what it is casting
   ufAuras(e, noAuras ? [] : ufMobAuras(m));
 }
 /* the other members of the group (your other characters and the dungeon companions), each with what it is fighting */
@@ -232,6 +251,13 @@ function ufMobAuras(m) {
   return out;
 }
 function ufAuras(el, list) {
+  // the same buffs as before: only the times change (the icons stay - drawing them again makes them flicker)
+  const shape = list.map((a) => a.n + '|' + (a.st || 1) + '|' + a.k + '|' + (a.ic || '')).join(',');
+  if (el._vaurashape === shape && el._auras.children.length === list.length) {
+    list.forEach((a, i) => { const em = el._auras.children[i].lastChild; const t = ufTime(a.left); if (em.textContent !== t) { em.textContent = t; el._auras.children[i].title = a.n + (a.left && a.left < 7200 * 4 ? ' - ' + t + ' left' : ''); } });
+    return;
+  }
+  el._vaurashape = shape;
   const key = list.map((a) => a.n + '|' + ufTime(a.left) + '|' + (a.st || 1) + '|' + a.k).join(',');
   ufSet(el, 'auras', key, () => {
     el._rows = Math.ceil(list.length / UF.aura.perRow);

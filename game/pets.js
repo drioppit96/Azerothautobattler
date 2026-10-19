@@ -985,7 +985,7 @@ function ufFillPet(me, c) {
   ufSet(me, 'pw', pv + '/' + pm + focus, () => { me._pwi.style.width = 100 * pv / pm + '%'; me._pwi.className = focus ? 'p2' : 'p0'; me._pwt.textContent = focus ? 'Focus ' + pv : pv + ' / ' + pm; });
   const h = p.kind === 'hunter' ? petHappy(p) : 0;
   ufSet(me, 'happy', h, (v) => { me._happy.style.display = v ? '' : 'none'; me._happy.style.backgroundPosition = 'calc(' + (-(3 - v) * 24) + 'px * var(--s, 1)) 0'; me._happy.title = ['', 'Unhappy - 75% damage', 'Content - 100% damage', 'Happy - 125% damage'][v] || ''; });
-  ufCastBar(me, P.cast ? { name: P.cast.name, t: P.cast.t, total: P.cast.total } : null);
+  ufCastBar(me, P.cast, () => P.cast);
   const now = G.gameTime; const au = [];
   for (const b of P.buffs || []) if (b.until > now) au.push({ n: b.name, ic: b.ic, left: b.until - now, k: b.kind || 'buff' });
   ufAuras(me, p.dead ? [] : au);

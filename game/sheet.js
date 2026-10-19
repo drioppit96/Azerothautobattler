@@ -6,6 +6,22 @@ const DOLL_RIGHT = [9, 5, 6, 7, 10, 11, 12, 13];
 const DOLL_BOTTOM = [15, 16, 17];
 const SLOT_LABEL = { 0: 'Head', 1: 'Neck', 2: 'Shoulder', 3: 'Shirt', 4: 'Chest', 5: 'Waist', 6: 'Legs', 7: 'Feet', 8: 'Wrist', 9: 'Hands', 10: 'Finger', 11: 'Finger', 12: 'Trinket', 13: 'Trinket', 14: 'Back', 15: 'Main Hand', 16: 'Off Hand', 17: 'Ranged', 18: 'Tabard' };
 const SH = { tab: 'char', open: false, sel: null };
+/* the five windows (like the C window of the game) and their tabs */
+const SH_GROUPS = [
+  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['pet', 'Pet']] },
+  { k: 'bag', n: 'Bags', key: 'B', tabs: [['bags', 'Bags'], ['bank', 'Bank'], ['gbank', 'Guild bank']] },
+  { k: 'trade', n: 'Trade', key: 'T', tabs: [['vendor', 'Vendor'], ['ah', 'Auction house'], ['trade', 'Trade']] },
+  { k: 'prof', n: 'Professions', key: 'P', tabs: [['prof', 'Professions'], ['gcraft', 'Guild crafters']] },
+  { k: 'guild', n: 'Guild', key: 'G', tabs: [['guild', 'Members'], ['glog', 'Guild log']] },
+];
+function shGroupOf(tab) { return SH_GROUPS.find((g) => g.tabs.some((t) => t[0] === tab)) || SH_GROUPS[0]; }
+function shTabShown(c, tab) { return tab !== 'pet' || c.cls === 3 || c.cls === 9; }
+/* a window's button (gear card) or key: open it on its last tab; again closes it */
+function toggleGroup(k) {
+  const g = SH_GROUPS.find((x) => x.k === k); if (!g) return;
+  if (SH.open && shGroupOf(SH.tab) === g) { closeSheet(); return; }
+  SH.last = SH.last || {}; const t = SH.last[k] && shTabShown(active(), SH.last[k]) ? SH.last[k] : g.tabs[0][0]; openSheet(t);
+}
 
 function iconHtml(inst, extra) {
   const id = inst.id; const q = itemQuality(id); const src = itemIcon(id);
@@ -69,12 +85,7 @@ function bagsHtml(c) {
 }
 function vendorHtml(c) {
   const v = vendorNear(c);
-  if (!v) {
-    const nv = nearestVendor(c), nr = nearestVendor(c, true);
-    return '<div class="muted">No vendor in reach.</div>' +
-      (nv ? '<p><button class="act" data-go="v">Go to ' + esc(nv.name) + ' (' + Math.round(Math.hypot(nv.x - c.pos.x, nv.y - c.pos.y)) + ' yd)</button></p>' : '') +
-      (nr && nr !== nv ? '<p><button class="act" data-go="r">Go to repair: ' + esc(nr.name) + ' (' + Math.round(Math.hypot(nr.x - c.pos.x, nr.y - c.pos.y)) + ' yd)</button></p>' : '');
-  }
+  if (!v) return '<div class="muted small" style="margin-top:8px">No vendor in reach - "Find the nearest vendor" walks to one; there the goods are listed here and you can sell (click an item in the bags).</div>';
   const items = vendorItems(v.e);
   let h = '<div class="vhead"><b>' + esc(v.name) + '</b>' + (v.repair ? ' <span class="muted">(repairs)</span>' : '') + '</div>' +
     '<div class="vbtns"><button class="mini" data-vact="junk"' + (junkCount(c) ? '' : ' disabled') + '>Sell junk (' + junkCount(c) + ')</button>' +
@@ -90,16 +101,39 @@ function vendorHtml(c) {
   return h;
 }
 function openSheet(tab) {
-  SH.open = true; if (tab) SH.tab = tab; $('sheet').hidden = false; renderSheet();
+  SH.open = true; if (tab) SH.tab = tab; $('sheet').hidden = false; renderSheet(); renderGearCard();
 }
-function closeSheet() { SH.de = null; SH.open = false; $('sheet').hidden = true; hideItemTip(); hideItemMenu(); }
+function closeSheet() { SH.de = null; SH.open = false; $('sheet').hidden = true; hideItemTip(); hideItemMenu(); renderGearCard(); }
+/* the Bags tab: what is in the bags at a glance, and what can be done with it */
+function bagSummaryHtml(c) {
+  const v = vendorNear(c); const rc = repairCost(c); const jk = junkCount(c); let jv = 0; for (const s of c.bags) if (isJunk(c, s.id)) jv += itemSell(s.id) * s.n;
+  const ups = c.bags.filter((s) => upgradeFor(c, s)).length;
+  const kinds = { food: 0, drink: 0, potion: 0 }; for (const s of c.bags) { const u = useInfo(s.id); if (u && kinds[u.kind] != null) kinds[u.kind] += s.n; }
+  let h = '<div class="bagsum"><div class="sgroup"><h5>Bags</h5>' + statRow('Slots used', c.bags.length + ' / ' + bagCapacity(c) + (bagFree(c) <= 0 ? ' <span class="bad">full</span>' : '')) + statRow('Money', moneyHtml(c.gold)) +
+    statRow('Junk', jk ? jk + ' item' + (jk > 1 ? 's' : '') + ' - ' + money(jv) : 'none') + statRow('Upgrades', ups ? '<span style="color:#1eff00">' + ups + '</span>' : 'none') +
+    statRow('Food / drink / potions', kinds.food + ' / ' + kinds.drink + ' / ' + kinds.potion) +
+    (c.cls === 3 && typeof ammoCount === 'function' ? statRow('Arrows / bullets', ammoCount(c)) : '') + (c.cls === 9 ? statRow('Soul Shards', bagCount(c, 6265)) : '') + '</div>';
+  h += '<div class="sgroup"><h5>Gear</h5>' + statRow('Durability', Math.round(durabilityPct(c) * 100) + '%') + statRow('Repair cost', rc ? money(rc) : 'nothing to repair') + '</div>';
+  h += '<div class="vbtns"><button class="mini" data-bs="sort">Sort the bags</button>' + (ups ? ' <button class="mini" data-bs="equip">Put on the upgrades</button>' : '') +
+    (v ? ' <button class="mini" data-bs="junk"' + (jk ? '' : ' disabled') + '>Sell junk</button>' + (v.repair && rc ? ' <button class="mini" data-bs="repair">Repair (' + money(rc) + ')</button>' : '') : ' <button class="mini" data-bs="vendor">Go to a vendor</button>') + '</div>';
+  h += '<div class="small muted" style="margin-top:8px">Click an item in the bags for what can be done with it; double-click equips or uses it. The bank and the guild bank are the next tabs.</div></div>';
+  return h;
+}
+function bagSummaryClick(e) {
+  const b = e.target.closest('[data-bs]'); if (!b) return false; const c = active(); const a = b.dataset.bs;
+  if (a === 'sort') sortBags(c); else if (a === 'equip') autoEquip(c); else if (a === 'junk') sellJunk(c); else if (a === 'repair') repairAll(c); else if (a === 'vendor') { orderVendor(c); closeSheet(); return true; }
+  renderSheet(); return true;
+}
 function renderSheet() {
   if (!SH.open) return; const c = active();
-  $('sheetTabs').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === SH.tab));
-  const pb = $('petTabBtn'); if (pb) pb.hidden = c.cls !== 3 && c.cls !== 9;
-  if (SH.tab === 'pet' && c.cls !== 3 && c.cls !== 9) SH.tab = 'char';
+  if (!shTabShown(c, SH.tab)) SH.tab = 'char';
+  const grp = shGroupOf(SH.tab); SH.last = SH.last || {}; SH.last[grp.k] = SH.tab;
+  const tabs = grp.tabs.filter((t) => shTabShown(c, t[0])).map((t) => '<button data-tab="' + t[0] + '"' + (t[0] === SH.tab ? ' class="on"' : '') + '>' + esc(t[1]) + '</button>').join('');
+  const nav = $('sheetTabs'); if (nav._h !== tabs) { nav.innerHTML = tabs; nav._h = tabs; }
+  const gt = $('sheetGroup'); if (gt) gt.textContent = grp.n;
   $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
-  $('sheet').classList.toggle('wide', SH.tab === 'talents');
+  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft');
+  $('sheet').dataset.group = grp.k;
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') {
     const f = document.activeElement && document.activeElement.id === 'profSearch' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
@@ -107,12 +141,15 @@ function renderSheet() {
     if (f) { const i = $('profSearch'); if (i) { i.focus(); try { i.setSelectionRange(f[0], f[1]); } catch (e) { /* */ } } }
     return;
   }
-  const left = SH.tab === 'vendor' ? '<div class="vendor">' + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) : SH.tab === 'guild' ? guildHtml(c) : SH.tab === 'pet' ? petTabHtml(c) :
+  if (SH.tab === 'gcraft') { $('sheetLeft').innerHTML = gcraftHtml(c); $('sheetBags').innerHTML = ''; return; }
+  const vs = SH.tab === 'vendor' && document.activeElement && document.activeElement.id === 'vsQ' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+  const left = SH.tab === 'vendor' ? '<div class="vendor">' + (typeof shopHtml === 'function' ? shopHtml(c) : '') + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
+    SH.tab === 'guild' ? guildHtml(c, 'info') : SH.tab === 'glog' ? guildHtml(c, 'log') : SH.tab === 'gbank' ? guildHtml(c, 'bank') : SH.tab === 'bags' ? bagSummaryHtml(c) : SH.tab === 'pet' ? petTabHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
   $('sheetBags').innerHTML = bagsHtml(c);
-  if (!G.qtHover) { /* keep */ }
+  if (vs) { const i = $('vsQ'); if (i) { i.focus(); try { i.setSelectionRange(vs[0], vs[1]); } catch (e) { /* */ } } }
 }
 function refreshGear() { renderGearCard(); if (SH.open) renderSheet(); }
 
@@ -153,6 +190,7 @@ function showItemMenu(ev, ref) {
     const u = useInfo(inst.id); const cu = typeof consInfo === 'function' && consInfo(inst.id);
     if (u && (u.kind !== 'other' || cu)) acts.push(['use', u.kind === 'potion' ? 'Drink potion' : u.kind === 'food' ? 'Eat' : cu && cu.kind === 'bandage' ? 'Apply bandage' : cu && cu.kind === 'weapon' ? 'Apply to weapon' : cu && cu.kind === 'bomb' ? 'Throw' : 'Use']);
     if (SH.tab === 'ah' && auctioneerNear(c) && ahSellable(inst)) acts.unshift(['ahsell', 'Sell at the auction house']);
+    if (bankerNear(c) && guildOf(c) && SH.tab === 'gbank') acts.unshift(['gbput', 'Put in the guild bank']);
     if (bankerNear(c)) { acts.unshift(['bankput', 'Put in the bank']); if (it && it.c === 1 && it.cs && bankOf(c).bags.slice(0, bankOf(c).slots).filter(Boolean).length < bankOf(c).slots) acts.push(['bankbag', 'Put in a bank bag slot']); }
     const v = vendorNear(c); acts.push(['sell', v ? 'Sell for ' + money(itemSell(inst.id) * inst.n) : 'Sell (go to a vendor first)', !v || !itemSell(inst.id)]);
     acts.push(['destroy', 'Destroy']);
@@ -181,6 +219,7 @@ function showItemMenu(ev, ref) {
     else if (a === 'buy') buyItem(c, ref.inst.id);
     else if (a === 'ahsell') { AHUI.sub = 'sell'; AHUI.sel = ref.idx; AHUI.price = null; }
     else if (a === 'bankput') bankPut(c, ref.idx);
+    else if (a === 'gbput') gbankPut(c, ref.idx);
     else if (a === 'bankbag') bankPutBag(c, ref.idx);
     hideItemMenu(); renderSheet();
   };
@@ -206,7 +245,10 @@ function bindSheet() {
     if (SH.tab === 'ah' && ahClick(e)) return;
     if (SH.tab === 'bank' && bankClick(e)) return;
     if (SH.tab === 'trade' && tradeClick(e)) return;
-    if (SH.tab === 'guild' && guildClick(e)) return;
+    if ((SH.tab === 'guild' || SH.tab === 'glog' || SH.tab === 'gbank') && guildClick(e)) return;
+    if (SH.tab === 'gcraft' && typeof gcraftClick === 'function' && gcraftClick(e)) return;
+    if (SH.tab === 'vendor' && typeof shopClick === 'function' && shopClick(e)) return;
+    if (SH.tab === 'bags' && bagSummaryClick(e)) return;
     if (SH.tab === 'pet' && petTabClick(e)) return;
     if (e.target.closest('[data-bsort]')) { sortBags(c); return; }
     if (behaviourClick(e)) return;
@@ -222,9 +264,9 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if (SH.tab === 'guild' && guildChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
-  sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); });
+  sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); if (SH.tab === 'vendor' && typeof shopInput === 'function') shopInput(e); if (SH.tab === 'gcraft' && typeof gcraftInput === 'function') gcraftInput(e); });
   sh.addEventListener('dblclick', (e) => {
     const el = e.target.closest('[data-idx],[data-slot]'); if (!el) return; const c = active();
     if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id); if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }
@@ -241,9 +283,11 @@ function bindSheet() {
   sh.addEventListener('mouseleave', hideItemTip);
   window.addEventListener('keydown', (e) => {
     if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
-    if (e.key === 'c' || e.key === 'C' || e.key === 'b' || e.key === 'B') { if (SH.open && SH.tab === 'char') closeSheet(); else openSheet('char'); }
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const k = (e.key || '').toUpperCase(); const g = SH_GROUPS.find((x) => x.key === k);
+    if (g) toggleGroup(g.k);
     if (e.key === 'Escape' && SH.open) closeSheet();
-    if (e.key === 'n' || e.key === 'N') { if (SH.open && SH.tab === 'talents') closeSheet(); else openSheet('talents'); }
+    if (k === 'N') { if (SH.open && SH.tab === 'talents') closeSheet(); else openSheet('talents'); }
   });
 }
 
@@ -258,12 +302,9 @@ function renderGearCard() {
     '<div class="kv"><span>Money</span><b>' + moneyHtml(c.gold) + '</b></div>' +
     (upgrades ? '<div class="kv"><span>Upgrades in bags</span><b style="color:#1eff00">' + upgrades + '</b></div>' : '') +
     (talentFree(c) > 0 ? '<div class="kv"><span>Talent points</span><b style="color:#1eff00">' + talentFree(c) + ' free</b></div>' : '') +
-    '<div class="btnrow"><button class="act" id="btnSheet">Character &amp; bags (C)</button><button class="mini" id="btnTal">Talents (N)</button><button class="mini" id="btnVendor">' + (v ? 'Vendor' : 'Go to vendor') + '</button><button class="mini" id="btnRepair">Repair</button><button class="mini" id="btnAh">Auction house' + (mailWaiting(c) ? ' (mail ' + mailWaiting(c) + ')' : '') + '</button><button class="mini" id="btnBank">Bank</button></div>' +
-    '';
-  $('btnSheet').onclick = () => openSheet('char'); $('btnTal').onclick = () => openSheet('talents');
-  $('btnVendor').onclick = () => { if (vendorNear(c)) openSheet('vendor'); else orderVendor(c); };
-  $('btnRepair').onclick = () => { const vv = vendorNear(c); if (vv && vv.repair) { repairAll(c); } else orderRepair(c); };
-  $('btnAh').onclick = () => openSheet('ah'); $('btnBank').onclick = () => openSheet('bank');
+    '<div class="gbtns">' + SH_GROUPS.map((g) => '<button class="act gbtn' + (SH.open && shGroupOf(SH.tab) === g ? ' on' : '') + '" data-grp="' + g.k + '">' + g.n + ' <span>(' + g.key + ')</span>' +
+      (g.k === 'trade' && mailWaiting(c) ? '<i class="gbadge" title="Mail at the auction house">' + mailWaiting(c) + '</i>' : '') + (g.k === 'char' && talentFree(c) > 0 ? '<i class="gbadge" title="Talent points to spend">' + talentFree(c) + '</i>' : '') + '</button>').join('') + '</div>';
+  el.querySelectorAll('[data-grp]').forEach((b) => { b.onclick = () => { toggleGroup(b.dataset.grp); renderGearCard(); }; });
 }
 
 /* ------------------------------------------------------------- behaviour tab */

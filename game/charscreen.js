@@ -126,22 +126,34 @@ function renderCharSwitch(force) {
   const el = $('charswitch'); if (!el || el.hidden) return;
   if (!force && el.querySelector('button:hover')) return;          // not under the mouse pointer: a click would miss
   const me = active(); const running = G.state.characters.filter((c) => c.bg || c === me).length;
-  let h = '<div class="cw-win"><button class="mini cs-close" data-close="1">&#10005;</button><h2>Characters</h2>';
-  for (const c of G.state.characters) {
+  const parts = G.state.characters.map((c) => {
     const on = c === me; const t = c.order ? orderText(c) : null; const r = rt(c);
     const where = (typeof dungeonByMap === 'function' && dungeonByMap(c.pos.map) ? dungeonByMap(c.pos.map).name : zoneNameAt(c.pos)) || 'somewhere';
     const grp = typeof groupOf === 'function' && groupOf(c); const st = on ? (c.bg ? 'Playing - keeps going when you switch' : 'Playing') : grp && liveChars().includes(c) ? 'In the group' + (grp.leader === c.id ? ' (leader)' : '') : c.bg ? (r.ghost ? 'Running (dead - on the way back)' : 'Running on its own') : 'Paused';
     const last = G.logs && G.logs[c.id] && G.logs[c.id][0];
     const xpNeed = (G.d.xp.levels[c.level - 1] || {}).xp_to_next || 0;
-    h += '<div class="cw-row' + (on ? ' on' : '') + '"><img src="' + racePortrait(c.race, c.gender) + '"><div class="cw-info"><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b> <span class="muted">level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</span>' +
+    const info = '<b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b> <span class="muted">level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</span>' +
       (xpNeed ? '<div class="bar xp cw-xp"><i style="width:' + Math.min(100, 100 * c.xp / xpNeed) + '%"></i></div>' : '') +
       '<div class="small"><span class="cw-st' + (c.bg || on ? ' run' : '') + '">' + st + '</span> &middot; ' + esc(where) + ' &middot; ' + moneyHtml(c.gold) + (G.state.settings.showMastery !== false ? ' &middot; skill ' + stars(skillLevel(c)) : '') + '</div>' +
       '<div class="small muted">' + (t ? esc(t.t) + (t.d ? ' - ' + esc(t.d) : '') : 'No order') + '</div>' +
-      (last && !on ? '<div class="small muted cw-last">' + fmtTime(last[0]) + ' ' + esc(last[1]) + '</div>' : '') + '</div>' +
-      '<div class="cw-btns">' + (on ? '<span class="muted small">playing</span>' : '<button class="act" data-sw="1" data-id="' + c.id + '">Switch</button>') +
-      (c.bg ? '<button class="mini" data-pause="1" data-id="' + c.id + '">&#10074;&#10074; Pause</button>' : '<button class="mini cw-go" data-go="1" data-id="' + c.id + '" title="' + (c.order ? 'Carry on with: ' + esc(t.t) : 'Level up on its own (auto-quest)') + '">&#9654; Go</button>') + '</div></div>';
+      (last && !on ? '<div class="small muted cw-last">' + fmtTime(last[0]) + ' ' + esc(last[1]) + '</div>' : '');
+    const btns = (on ? '<span class="muted small">playing</span>' : '<button class="act" data-sw="1" data-id="' + c.id + '">Switch</button>') +
+      (c.bg ? '<button class="mini" data-pause="1" data-id="' + c.id + '">&#10074;&#10074; Pause</button>' : '<button class="mini cw-go" data-go="1" data-id="' + c.id + '" title="' + (c.order ? 'Carry on with: ' + esc(t.t) : 'Level up on its own (auto-quest)') + '">&#9654; Go</button>');
+    return { c, on, info, btns };
+  });
+  const foot = running + ' in the world now; each one running makes the computer work a little more.';
+  // the same characters as before: only the texts and buttons change - the portraits stay (no flickering)
+  const shape = parts.map((x) => x.c.id + (x.on ? '*' : '') + x.c.race + '_' + (x.c.gender || 0)).join(',');
+  if (el._shape === shape && el.querySelector('.cw-win')) {
+    const rows = el.querySelectorAll('.cw-row');
+    parts.forEach((x, i) => { const row = rows[i]; const a = row.querySelector('.cw-info'), b = row.querySelector('.cw-btns'); if (a._h !== x.info) { a.innerHTML = x.info; a._h = x.info; } if (b._h !== x.btns) { b.innerHTML = x.btns; b._h = x.btns; } });
+    const f = el.querySelector('.cw-run'); if (f) f.textContent = foot;
+    return;
   }
+  el._shape = shape;
+  let h = '<div class="cw-win"><button class="mini cs-close" data-close="1">&#10005;</button><h2>Characters</h2>';
+  for (const x of parts) h += '<div class="cw-row' + (x.on ? ' on' : '') + '"><img src="' + racePortrait(x.c.race, x.c.gender) + '"><div class="cw-info">' + x.info + '</div><div class="cw-btns">' + x.btns + '</div></div>';
   h += '<div class="cw-foot"><button class="mini" data-allgo="1">&#9654; All go</button><button class="mini" data-allpause="1">&#10074;&#10074; Pause all</button><button class="mini" data-manage="1">New / delete characters</button></div>' +
-    '<div class="small muted" style="margin-top:6px">Characters set to Go keep playing - questing and leveling on their own - while you watch another one. Paused ones wait where they are. ' + running + ' in the world now; each one running makes the computer work a little more.</div></div>';
+    '<div class="small muted" style="margin-top:6px">Characters set to Go keep playing - questing and leveling on their own - while you watch another one. Paused ones wait where they are. <span class="cw-run">' + foot + '</span></div></div>';
   el.innerHTML = h;
 }

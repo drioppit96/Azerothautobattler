@@ -278,6 +278,7 @@ function evade(W, m) { m.sk = null; m.cast = null; m.st = 'evade'; m.tgt = null;
 function worldTick(dt) {
   const now = G.gameTime;
   if (typeof marketTick === 'function') marketTick();
+  if (typeof wcTick === 'function') wcTick(dt);             // guild crafting orders (workshop.js)
   for (const id in G.world) {
     const W = G.world[id];
     for (const m of W.active) mobTick(W, m, dt, now);

@@ -114,8 +114,9 @@ function sortBank(c) { sortItems(c, bankOf(c).items); save(); refreshGear(); }
 function sortGuildBank(c) { const g = guildOf(c); if (!g) return; sortItems(c, g.bank.items); guildLog(g, c.name + ' sorted the guild bank.'); save(); refreshGear(); }
 
 /* ------------------------------------------------------------------ the Guild tab */
-function guildHtml(c) {
-  const g = guildOf(c);
+function guildHtml(c, mode) {
+  const g = guildOf(c); GUI.tab = mode || GUI.tab || 'info';
+  if (!g && GUI.tab !== 'info') return '<div class="guild"><div class="muted">' + esc(c.name) + ' is not in a guild. Found one or join one in the Guild window (Members).</div></div>';
   if (!g) {
     const d = GUI.draft = GUI.draft || { name: '', her: { emblem: EMBLEMS[0], color: '#e8d48a', bg: '#1c4f8a', border: '#c9a646' } };
     const sw = (k) => '<div class="gsw">' + GCOLORS.map((col) => '<i data-gcol="' + k + ':' + col + '" style="background:' + col + '"' + (d.her[k] === col ? ' class="on"' : '') + '></i>').join('') + '</div>';
@@ -128,7 +129,6 @@ function guildHtml(c) {
   }
   const rk = guildRank(g, c); const mem = guildMembers(g).sort((a, b) => a.m.rank - b.m.rank || b.c.level - a.c.level);
   let h = '<div class="guild"><div class="ghead">' + heraldrySvg(g.heraldry, 56) + '<div><div class="gname">&lt;' + esc(g.name) + '&gt;</div><div class="small muted">' + g.members.length + ' member' + (g.members.length > 1 ? 's' : '') + ' &middot; you: ' + GUILD_RANKS[rk] + '</div></div></div>';
-  h += '<div class="gtabs">' + [['info', 'Members'], ['bank', 'Guild bank'], ['log', 'Guild log']].map(([k, t]) => '<button class="mini' + (GUI.tab === k ? ' on' : '') + '" data-gtab="' + k + '">' + t + '</button>').join('') + '</div>';
   if (GUI.tab === 'info') {
     h += '<table class="gmem"><tr><th>Name</th><th>Level</th><th>Class</th><th>Rank</th><th></th></tr>';
     for (const { m, c: o } of mem) {
@@ -153,7 +153,7 @@ function guildHtml(c) {
   return h + '</div>';
 }
 function guildClick(e) {
-  if (SH.tab !== 'guild') return false; const c = active(); const t = e.target; let b; const g = guildOf(c);
+  if (SH.tab !== 'guild' && SH.tab !== 'glog' && SH.tab !== 'gbank') return false; const c = active(); const t = e.target; let b; const g = guildOf(c);
   if ((b = t.closest('[data-gemb]'))) { GUI.draft.her.emblem = b.dataset.gemb; renderSheet(); return true; }
   if ((b = t.closest('[data-gcol]'))) { const [k, col] = b.dataset.gcol.split(':'); GUI.draft.her[k] = col; renderSheet(); return true; }
   if ((b = t.closest('[data-gfound]'))) { if (foundGuild(c, $('gName').value, GUI.draft.her)) GUI.draft = null; renderSheet(); return true; }
@@ -168,11 +168,11 @@ function guildClick(e) {
   if ((b = t.closest('[data-gsort]'))) { sortGuildBank(c); return true; }
   if ((b = t.closest('[data-gmon]'))) { gbankMoney(c, (+$('gMoney').value || 0) * 10000 * +b.dataset.gmon); return true; }
   if ((b = t.closest('[data-gb]'))) { gbankTake(c, +b.dataset.gb); return true; }
-  if (GUI.tab === 'bank' && (b = t.closest('#sheetBags [data-idx]'))) { gbankPut(c, +b.dataset.idx); return true; }
+  if (SH.tab === 'gbank' && (b = t.closest('#sheetBags [data-idx]'))) { gbankPut(c, +b.dataset.idx); return true; }
   return false;
 }
 function guildChange(e) {
-  if (SH.tab !== 'guild') return false; const t = e.target; const c = active(); const g = guildOf(c);
+  if (SH.tab !== 'guild' && SH.tab !== 'gbank') return false; const t = e.target; const c = active(); const g = guildOf(c);
   if (t.id === 'gName') { GUI.draft.name = t.value; setTimeout(renderSheet, 0); return true; }
   if (t.dataset.grank && g) { guildSetRank(g, c, charById(t.dataset.grank), +t.value); setTimeout(renderSheet, 0); return true; }
   return false;

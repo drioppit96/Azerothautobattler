@@ -93,12 +93,13 @@ function updateNpcOrder(c, o) {
     if (rt(c).blocked || G.gameTime - o.t0 > 3600) { rt(c).blocked = false; log('Could not reach ' + o.label + '.'); c.order = o.resume || null; renderOrder(); }
     return;
   }
+  if (o.kind === 'vendor') { shopArrive(c, o); return; }            // shop.js: Go and buy
   c.order = o.resume || null; if (c.order) { c.order.wait = 0; c.order.noSell = false; }
   collectMail(c, true);
   renderOrder(); save();
   if (!G.headless && isActive(c)) openSheet(o.kind === 'bank' ? 'bank' : 'ah');
 }
-function npcOrderText(c, o) { return { t: (o.kind === 'ah' ? 'Auction house: ' : o.kind === 'bank' ? 'Bank: ' : 'Mail: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'walking there' }; }
+function npcOrderText(c, o) { return { t: (o.kind === 'ah' ? 'Auction house: ' : o.kind === 'bank' ? 'Bank: ' : o.kind === 'vendor' ? 'Buy ' + (o.buy ? itemName(o.buy) + ' at ' : 'at ') : 'Mail: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'walking there' }; }
 
 /* ------------------------------------------------------------------ what things are worth */
 function marketIndex() {
