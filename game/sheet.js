@@ -58,6 +58,7 @@ function bagsHtml(c) {
     h += '<div class="slot' + (SH.sel === 'b' + i ? ' sel' : '') + de + '" data-idx="' + i + '">' + iconHtml(s) + (up ? '<i class="up" title="Upgrade"></i>' : '') + (junk ? '<i class="junk" title="Junk"></i>' : '') + (cant ? '<i class="red"></i>' : '') + '</div>';
   }
   h += '</div><div class="moneyline">' + moneyHtml(c.gold) + '</div>';
+  if (typeof craftBarHtml === 'function') h += craftBarHtml(c);             // crafting: the progress, like the cast bar of the game
   // enchanters: disenchant many items at once - choose them, then the green tick does it, the red circle cancels
   if (typeof hasProf === 'function' && hasProf(c, ENCHANTING)) {
     const q = (rt(c).deQueue || []).length;
@@ -190,6 +191,7 @@ function bindSheet() {
     if (e.target.id === 'sheetClose') { closeSheet(); return; }
     const c = active();
     // mass disenchant: choosing items in the bags
+    if (e.target.closest('[data-ccancel]')) { craftCancel(c); renderSheet(); return; }
     const dm = e.target.closest('[data-demode]');
     if (dm) {
       const a = dm.dataset.demode;

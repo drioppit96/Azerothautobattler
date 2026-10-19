@@ -68,7 +68,8 @@ function ufFillChar(me, c) {
   ufSet(me, 'pw', pt + ':' + pv + '/' + pm, () => { me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv; });
   const cpn = r.cpTgt && r.cpTgt.st !== 'dead' ? r.cp || 0 : 0;
   ufSet(me, 'cp', cpn, (v) => { me._cp = me._cp || (() => { const d = document.createElement('div'); d.className = 'ufcp'; me.appendChild(d); return d; })(); me._cp.innerHTML = '<i class="on"></i>'.repeat(v) + (c.cls === 4 || c.form === 'cat' ? '<i></i>'.repeat(5 - v) : ''); });
-  ufCastBar(me, r.cast || null);
+  const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null;
+  ufCastBar(me, r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null));
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufAuras(me, ufPlayerAuras(c, r));
 }

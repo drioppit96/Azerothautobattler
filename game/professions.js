@@ -165,28 +165,72 @@ function craftCount(c, sid) {
   for (const [it, k] of r.re || []) n = Math.min(n, Math.floor(bagCount(c, it) / k));
   return n === Infinity ? 0 : n;
 }
+/* crafting takes as long as in the game (the recipe's cast time: a bolt of cloth 3 s, an enchant 5 s, a hauberk a
+   minute): Craft / All put it in a queue, one item after the other; a fight pauses it (the item being made starts over),
+   the character stands still while crafting. The progress bar is in the bag panel and under the portrait. */
+function craftTime(r) { return Math.max(0.5, (r.ct || 3000) / 1000); }
 function craft(c, sid, times) {
   const r = PD().recipes[sid]; if (!r || !profState(c).recipes[sid]) return 0;
-  let done = 0; const made = {};
-  for (let k = 0; k < (times || 1); k++) {
-    if (craftCount(c, sid) < 1) break;
-    if (r.ench) {
-      const slot = enchantSlot(r); const inst = slot != null ? c.equip[slot] : null;
-      if (!inst) { log('Nothing to enchant: ' + r.n + ' needs an item in that slot.'); break; }
-      if (r.ench && /2H Weapon/.test(r.ench) && (itemRow(inst.id) || {}).t !== 17) { log(r.n + ' needs a two-handed weapon.'); break; }
-      for (const [it, n] of r.re || []) removeItem(c, it, n);
-      inst.ench = enchantBonus(r.ench); dirty(c);
-      log('Enchanted ' + itemName(inst.id, inst) + ': ' + inst.ench.n + '.');
-    } else if (r.cr) {
-      if (bagFree(c) <= 0 && !c.bags.some((x) => x.id === r.cr[0] && x.n < itemStack(r.cr[0]))) { log('Bags are full.'); break; }
-      for (const [it, n] of r.re || []) removeItem(c, it, n);
-      const n = irnd(r.cr[1] || 1, Math.max(r.cr[1] || 1, r.cr[2] || 1)); addItem(c, r.cr[0], n); made[r.cr[0]] = (made[r.cr[0]] || 0) + n;
-    } else break;
-    skillUp(c, r.skill, recipeColor(c, r)); done++;
-  }
-  for (const id in made) log('Created ' + made[id] + ' x ' + itemName(+id) + '.');
-  if (done) { checkRecipeItems(c); autoEquip(c); save(); refreshGear(); }
-  return done;
+  const n = Math.min(times || 1, craftCount(c, sid)); if (n < 1) return 0;
+  const R = rt(c);
+  if (R.craftQ && R.craftQ.sid !== sid) craftFinish(c);          // something else was being made: it stops there
+  R.craftQ = { sid, left: n, total: n, done: 0, made: {}, t: 0 };
+  R.resting = false; R.eating = null; R.drinking = null; R.mv = null;
+  log((r.ench ? 'Enchanting: ' : 'Crafting ' + (n > 1 ? n + ' x ' : '')) + r.n + ' (' + fmtCraft(craftTime(r)) + (n > 1 ? ' each' : '') + ').');
+  return n;
+}
+function fmtCraft(s) { return s >= 60 ? Math.round(s / 60 * 10) / 10 + ' min' : (Math.round(s * 10) / 10) + ' s'; }
+/* one item of the recipe made: true when it worked */
+function craftOne(c, r, made) {
+  if (r.ench) {
+    const slot = enchantSlot(r); const inst = slot != null ? c.equip[slot] : null;
+    if (!inst) { log('Nothing to enchant: ' + r.n + ' needs an item in that slot.'); return false; }
+    if (/2H Weapon/.test(r.ench) && (itemRow(inst.id) || {}).t !== 17) { log(r.n + ' needs a two-handed weapon.'); return false; }
+    for (const [it, n] of r.re || []) removeItem(c, it, n);
+    inst.ench = enchantBonus(r.ench); dirty(c);
+    log('Enchanted ' + itemName(inst.id, inst) + ': ' + inst.ench.n + '.');
+  } else if (r.cr) {
+    if (bagFree(c) <= 0 && !c.bags.some((x) => x.id === r.cr[0] && x.n < itemStack(r.cr[0]))) { log('Bags are full.'); return false; }
+    for (const [it, n] of r.re || []) removeItem(c, it, n);
+    const n = irnd(r.cr[1] || 1, Math.max(r.cr[1] || 1, r.cr[2] || 1)); addItem(c, r.cr[0], n); made[r.cr[0]] = (made[r.cr[0]] || 0) + n;
+  } else return false;
+  skillUp(c, r.skill, recipeColor(c, r));
+  return true;
+}
+/* every frame (updateChar, out of a fight): true while crafting */
+function craftStep(c, dt) {
+  const R = rt(c); const q = R.craftQ; if (!q) return false;
+  const r = PD() && PD().recipes[q.sid]; if (!r || q.left <= 0 || craftCount(c, q.sid) < 1) { craftFinish(c); return false; }
+  R.mv = null; q.t += dt;
+  if (q.t < craftTime(r)) return true;
+  q.t = 0;
+  if (!craftOne(c, r, q.made)) { craftFinish(c); return false; }
+  q.done++; q.left--;
+  if (q.left <= 0 || craftCount(c, q.sid) < 1) craftFinish(c);
+  else { save(); if (SH.open) renderSheet(); }
+  return true;
+}
+function craftFinish(c) {
+  const R = rt(c); const q = R.craftQ; if (!q) return; R.craftQ = null;
+  for (const id in q.made) log('Created ' + q.made[id] + ' x ' + itemName(+id) + '.');
+  if (q.done) { checkRecipeItems(c); autoEquip(c); save(); refreshGear(); } else if (SH.open) renderSheet();
+}
+function craftCancel(c) { const q = rt(c).craftQ; if (!q) return; log('Crafting stopped' + (q.done ? ' after ' + q.done + ' of ' + q.total : '') + '.'); craftFinish(c); }
+/* what is being made, for the bars: {name, t, total, n} */
+function craftNow(c) {
+  const q = rt(c).craftQ; const r = q && PD() && PD().recipes[q.sid]; if (!r) return null;
+  return { name: r.n, t: q.t, total: craftTime(r), n: q.total > 1 ? (q.done + 1) + '/' + q.total : '', ic: r.ic };
+}
+function craftBarHtml(c) {
+  const k = craftNow(c); if (!k) return '';
+  return '<div class="craftbar" id="craftBar"><div class="cbfill"><i style="width:' + Math.min(100, 100 * k.t / k.total).toFixed(1) + '%"></i><span>' + esc(k.name) + (k.n ? ' (' + k.n + ')' : '') + '</span></div><button class="mini" data-ccancel="1" title="Stop crafting">&#10006;</button></div>';
+}
+/* the bar moves without redrawing the whole window */
+function updateCraftBar() {
+  if (!SH.open) return; const el = $('craftBar'); const k = craftNow(active());
+  if (!k) { if (el) renderSheet(); return; }
+  if (!el) { renderSheet(); return; }
+  el.querySelector('i').style.width = Math.min(100, 100 * k.t / k.total).toFixed(1) + '%';
 }
 
 /* ------------------------------------------------------------------ nodes */
@@ -649,8 +693,8 @@ function professionsClick(e) {
   if (d.pall) { const o = G.state.settings.profOpen = {}; for (const k of ['mine', 'learn', 'fish', 'route'].concat(Object.keys(profState(c).skills).map((x) => 'r' + x))) o[k] = d.pall === '1'; save(); renderSheet(); return true; }
   if (d.ptrain) { orderTrainer(c, +d.ptrain); closeSheet(); return true; }
   if (d.punlearn) { if (confirm('Forget ' + profName(+d.punlearn) + ' and all its recipes?')) unlearnProfession(c, +d.punlearn); renderSheet(); return true; }
-  if (d.pcraft) { craft(c, d.pcraft, 1); renderSheet(); return true; }
-  if (d.pcraftall) { craft(c, d.pcraftall, 999); renderSheet(); return true; }
+  if (d.pcraft) { craft(c, +d.pcraft, 1); renderSheet(); return true; }
+  if (d.pcraftall) { craft(c, +d.pcraftall, 999); renderSheet(); return true; }
   if (d.proute === 'edit') { routeEditStart('gather'); return true; }
   if (d.proute === 'clear') { profState(c).route = null; save(); renderSheet(); return true; }
   if (d.proute === 'start') { orderPatrol(c, 'gather'); closeSheet(); return true; }

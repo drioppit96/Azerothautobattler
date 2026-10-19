@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-14 d (mass disenchant)';
+const GAME_VERSION = '2026-10-19 a (crafting times)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -818,7 +818,7 @@ function frame(ts) {
   const c = active();
   if (ts - (G.followT || 0) > 500) { G.followT = ts; followZone(c); if (!$('maptabs').matches(':hover')) renderNav(); }
   if ($('follow').checked && c.pos.map === G.map.map && !G.map.world) { const [px, py] = w2m(G.map, c.pos.x, c.pos.y); G.ox = G.cw / 2 - px * G.scale; G.oy = G.ch / 2 - py * G.scale; }
-  draw();
+  draw(); if (typeof updateCraftBar === 'function') updateCraftBar();          // the crafting bar moves every frame
   if (ts - (G.saveT || 0) > 30000) { G.saveT = ts; save(); }
   if (ts - G.uiT > 250) {
     G.uiT = ts; renderChar(); renderAbar(); if (c.order) renderOrder();

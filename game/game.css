@@ -434,3 +434,9 @@ label.chk.dim{opacity:.55}
 .slot.desel::after{content:'\2714';position:absolute;right:2px;top:0;color:#3fd65a;font-size:13px;text-shadow:0 0 2px #000}
 .slot.dedim{opacity:.3}
 .slot.decan{cursor:pointer}
+
+/* crafting progress in the bag panel */
+.craftbar{display:flex;align-items:center;gap:6px;margin-top:8px}
+.craftbar .cbfill{flex:1;position:relative;height:18px;background:#000c;border:1px solid #c9a646;border-radius:3px;overflow:hidden}
+.craftbar .cbfill i{position:absolute;inset:0 auto 0 0;background:linear-gradient(#ffd04a,#c08a10)}
+.craftbar .cbfill span{position:relative;display:block;text-align:center;font-size:11px;line-height:18px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}

@@ -40,6 +40,12 @@ ORES = {"Copper Vein": 1, "Tin Vein": 65, "Incendicite Mineral Vein": 65, "Silve
         "Small Obsidian Chunk": 305, "Large Obsidian Chunk": 305}
 
 
+# SpellCastTimes.dbc of 1.12 (index -> ms): the cast time of every crafting spell
+CAST_MS = {0: 0, 1: 0, 2: 250, 3: 500, 4: 1000, 5: 2000, 6: 5000, 7: 10000, 8: 20000, 9: 30000, 14: 3000, 15: 4000, 16: 1500,
+           19: 2500, 20: 2500, 21: 2600, 22: 3500, 23: 1800, 24: 2200, 28: 3200, 30: 4500, 31: 2300, 32: 7000, 33: 5125,
+           34: 8000, 35: 12500, 37: 25000, 38: 45000, 39: 60000, 50: 1300, 90: 1700, 91: 2800, 110: 750, 130: 1600, 171: 6000}
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "ClassicDB_1_12_1_z2815.sql.gz"
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -130,6 +136,7 @@ def main():
         r = sp.get(s)
         if not r: del recipes[s]; continue
         rec = recipes[s]; rec["n"] = r["SpellName"]
+        rec["ct"] = CAST_MS.get(r.get("CastingTimeIndex"), 0)        # how long one craft takes (ms), as in the game
         rec["re"] = [[r["Reagent%d" % k], r["ReagentCount%d" % k]] for k in range(1, 9) if r["Reagent%d" % k]]
         rec["cr"] = None; rec["ench"] = None
         for k in (1, 2, 3):
