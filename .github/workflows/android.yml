@@ -70,7 +70,18 @@ jobs:
         run: |
           export APP_VERSION="$(grep -o "GAME_VERSION = '[^']*'" game/game.js | cut -d"'" -f2)"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
-          gradle -p android_app assembleRelease --no-daemon --stacktrace
+          set +e
+          gradle -p android_app assembleRelease --no-daemon > gradle.log 2>&1
+          rc=$?
+          set -e
+          tail -n 60 gradle.log
+          if [ $rc -ne 0 ]; then
+            # the reason as an annotation (readable without the full log)
+            msg=$(grep -A25 -m1 "What went wrong" gradle.log || tail -n 40 gradle.log)
+            msg="${msg//'%'/'%25'}"; msg="${msg//$'\n'/'%0A'}"; msg="${msg//$'\r'/'%0D'}"
+            echo "::error title=Gradle build failed::$msg"
+            exit 1
+          fi
           mkdir -p out
           cp android_app/app/build/outputs/apk/release/app-release.apk out/AzerothAutoBattler.apk
           ls -la out
