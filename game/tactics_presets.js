@@ -137,18 +137,34 @@ const TAC_CLASS = {
   },
   /* ---------------- Shaman */
   7: {
-    dps: (c, spec) => [
-      ...tacSurvive(c, 25),
-      T('self.hp<', 35, 'Lesser Healing Wave'), T('self.hp<', 35, 'Healing Wave'),
-      T('enemy.cast', null, 'Earth Shock'), T('self.disp', null, 'Cure Poison'), T('self.disp', null, 'Cure Disease'),
-      T('enemy.flee', null, 'Frost Shock'),
-      T('self.nobuff', null, 'Windfury Weapon'), T('self.nobuff', null, 'Flametongue Weapon'), T('self.nobuff', null, 'Rockbiter Weapon'), T('self.nobuff', null, 'Lightning Shield'),
-      T('enemy.elite', null, 'Elemental Mastery'), T('enemy.elite', null, 'Searing Totem'),
-      T('enemy.clus>', 3, 'Magma Totem'), T('enemy.clus>', 3, 'Fire Nova Totem'), T('enemy.clus>', 2, 'Chain Lightning'),
-      T('self.att>', 1, 'Strength of Earth Totem'),
-      T('enemy.nodeb', null, 'Flame Shock'), T('enemy.tgt', null, 'Stormstrike'),
-      T('enemy.tgt', null, spec === 'enh' ? 'Earth Shock' : 'Lightning Bolt'), T('enemy.tgt', null, 'Lightning Bolt'),
-    ],
+    dps: (c, spec) => {
+      // the best weapon imbue it knows (only one: they replace each other)
+      const imbue = ['Windfury Weapon', 'Flametongue Weapon', 'Rockbiter Weapon'].find((n) => c.known && c.known[n]) || 'Rockbiter Weapon';
+      const first = [
+        ...tacSurvive(c, 25),
+        T('self.hp<', 35, 'Lesser Healing Wave'), T('self.hp<', 35, 'Healing Wave'),
+        T('enemy.cast', null, 'Earth Shock'), T('self.disp', null, 'Cure Poison'), T('self.disp', null, 'Cure Disease'),
+        T('enemy.flee', null, 'Frost Shock'),
+        T('self.nobuff', null, imbue), T('self.nobuff', null, 'Lightning Shield'),
+      ];
+      // Enhancement: a melee fighter - the weapon, Stormstrike, the totems, a shock while the mana is there; Lightning
+      // Bolt only for what is out of reach (pulling, runners)
+      if (spec === 'enh') return first.concat([
+        T('enemy.elite', null, 'Searing Totem'), T('enemy.clus>', 3, 'Magma Totem'), T('enemy.clus>', 3, 'Fire Nova Totem'),
+        T('self.att>', 1, 'Strength of Earth Totem'), T('enemy.elite', null, 'Grace of Air Totem'),
+        T('enemy.tgt', null, 'Stormstrike'),
+        T('self.mp>', 45, 'Earth Shock'), T('enemy.elite', null, 'Flame Shock'),
+        T('enemy.far', null, 'Lightning Bolt'),
+      ]);
+      // Elemental (and Restoration alone): the spells
+      return first.concat([
+        T('enemy.elite', null, 'Elemental Mastery'), T('enemy.elite', null, 'Searing Totem'),
+        T('enemy.clus>', 3, 'Magma Totem'), T('enemy.clus>', 3, 'Fire Nova Totem'), T('enemy.clus>', 2, 'Chain Lightning'),
+        T('self.att>', 1, 'Strength of Earth Totem'),
+        T('enemy.nodeb', null, 'Flame Shock'), T('enemy.hp<', 25, 'Earth Shock'),
+        T('enemy.tgt', null, 'Lightning Bolt'),
+      ]);
+    },
     heal: (c) => [
       ...tacSurvive(c, 20),
       T('ally.hp<', 25, "Nature's Swiftness"), T('ally.hp<', 30, 'Lesser Healing Wave'),
