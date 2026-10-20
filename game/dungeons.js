@@ -278,7 +278,8 @@ function dungeonPath(c, from, to) {
   const ef = dgExactFloor(c.pos.map, from.x, from.y, c.pos.z);
   if (ef && dungeonFloorAt(ef && dungeonByMap(c.pos.map), to.x, to.y, to.z) === ef && walkLine(ef, from, to)) return direct;          // in plain sight on the floor
   const s = dgNearest(g, from.x, from.y, c.pos.z, ef), e = dgNearest(g, to.x, to.y, to.z, dgExactFloor(c.pos.map, to.x, to.y, to.z));
-  if (s < 0 || e < 0 || s === e) return direct;
+  if (s < 0 || e < 0) return direct;
+  if (s === e) { const q = g.pts[s]; if (!ef || walkLine(ef, from, to)) return direct; return { pts: [{ x: from.x, y: from.y }, { x: q.x, y: q.y, z: q.z }, { x: to.x, y: to.y, z: to.z }], total: Math.hypot(q.x - from.x, q.y - from.y) + Math.hypot(to.x - q.x, to.y - q.y), via: 'through the dungeon', d: 0 }; }      // around the corner, by the path point
   const N = g.pts.length; const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1); dist[s] = 0;
   const heap = [[0, s]]; const push = (it) => { heap.push(it); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
   const pop = () => { const t = heap[0], l = heap.pop(); if (heap.length) { heap[0] = l; let i = 0; for (;;) { const a = 2 * i + 1, b = a + 1; let m = i; if (a < heap.length && heap[a][0] < heap[m][0]) m = a; if (b < heap.length && heap[b][0] < heap[m][0]) m = b; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return t; };
@@ -475,9 +476,34 @@ function dungeonResetOut(c) {
     else { if (d.entrance) m.pos = { map: d.entrance.map, x: d.entrance.x + (Math.random() - 0.5) * 4, y: d.entrance.y + (Math.random() - 0.5) * 4, z: 0, o: m.pos.o }; r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = []; if (m.order && m.order.type !== 'follow') m.order = null; }
   }
   if (W) { for (const m of W.list) { initMob(m); m.gThr = null; m.cThr = null; } W.dead = []; W.active.clear(); }
+  if (g) g.hold = false;
   log(d.name + ' is reset - everyone is at the entrance outside.');
   if (isActive(c) && $('follow').checked) goToCharacter();
   save(); renderOrder(); return true;
+}
+/* the Quests card buttons while in a dungeon: Rest - everyone sits down and the group stays put until Continue;
+   Continue dungeon - on with the run now: nobody waits or rests, whoever is far off is brought to the leader, the leader
+   picks the way on again (and gets its dungeon order back if it was lost) */
+function dungeonGroupOf(c) { const g = typeof groupOf === 'function' ? groupOf(c) : null; const L = g ? groupLeader(g) || c : c; return { g, L, who: g ? groupChars(g) : [c] }; }
+function dungeonRest(c) {
+  const { g, L, who } = dungeonGroupOf(c); const d = dungeonByMap(L.pos.map); if (!d) return;
+  if (g) g.hold = true; else if (L.order) L.order.hold = true;
+  for (const m of who) { if (m.pos.map !== d.map) continue; const r = rt(m); if (r.ghost) continue; r.mv = null; r.tgt = null; if (!(r.threats || []).length) { r.resting = true; r.restFull = true; } }
+  log('Resting in ' + d.name + ' - press Continue dungeon to go on.'); save(); renderOrder();
+}
+function dungeonContinue(c) {
+  const { g, L, who } = dungeonGroupOf(c); const d = dungeonByMap(L.pos.map) || dungeonByMap(c.pos.map); if (!d) return;
+  if (g) g.hold = false; if (L.order) L.order.hold = false;
+  if (!L.order || L.order.type !== 'dungeon' || L.order.map !== d.map) { withLog(L, () => orderDungeon(L, d, true)); }
+  const o = L.order;
+  if (o && o.type === 'dungeon') { o.target = null; o.since = G.gameTime; o.targetSince = null; o.lastPos = null; o.phase = o.phase === 'leaving' ? 'leaving' : 'inside'; if (o.entered == null) o.entered = G.gameTime; }
+  for (const m of who) {
+    if (m.pos.map !== d.map) continue; const r = rt(m); if (r.ghost) continue;
+    r.mv = null; r.blocked = false; r.resting = false; r.restFull = false; r.eating = null; r.drinking = null;
+    if (m !== L && (Math.hypot(m.pos.x - L.pos.x, m.pos.y - L.pos.y) > 25 || Math.abs((m.pos.z || 0) - (L.pos.z || 0)) > 10)) { m.pos = { map: L.pos.map, x: L.pos.x + (Math.random() - 0.5) * 3, y: L.pos.y + (Math.random() - 0.5) * 3, z: L.pos.z, o: L.pos.o }; r.trail = null; }
+    if (m !== L && g && (!m.order || m.order.type !== 'follow')) m.order = { type: 'follow', label: L.name };
+  }
+  log('On with ' + d.name + '.'); save(); renderOrder();
 }
 /* walking out: to the nearest way out (or the one given), then out through the portal to the entrance */
 function dungeonNearestExit(c, d) {
@@ -696,6 +722,7 @@ function updateDungeon(c, o, dt) {
   }
   if (c.pos.map !== d.map) { c.order = o.resume || null; renderOrder(); return; }
   if (o.phase === 'leaving') { if (dungeonExitStep(c, o, d)) leaveDungeon(c, o.leaveMsg); return; }
+  if (o.hold && !(r.threats && r.threats.length)) { r.mv = null; o.since = G.gameTime; return; }          // alone: the Rest button
   if (G.gameTime - (o.lastCall || 0) > 2) o.since = G.gameTime;          // busy with fighting, resting or looting in between
   o.lastCall = G.gameTime;
   if (r.bagFull || bagFree(c) <= 0) { const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n); if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 3)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('Bags are full - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); } }

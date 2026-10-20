@@ -111,6 +111,8 @@ function followText(c, o) { const g = groupOf(c); const L = g && groupLeader(g);
 /* the leader waits for the group: someone dead, resting, or left behind */
 function groupHold(c, o) {
   if (!isLeader(c) || !o || o.type === 'follow') return false; const g = groupOf(c); const r = rt(c);
+  if (g.hold && !(typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) g.hold = false;          // out of the dungeon: no more resting
+  if (g.hold && !(r.threats && r.threats.length)) { o.where = 'resting - press Continue dungeon'; r.mv = null; return true; }          // the Rest button (dungeons.js)
   if (r.threats && r.threats.length) return false;
   const tripping = (o.trip && o.trip.legs && o.trip.legs[o.trip.i] && o.trip.legs[o.trip.i].kind !== 'walk') || (o.mode === 'travel');
   for (const m of groupChars(g)) {

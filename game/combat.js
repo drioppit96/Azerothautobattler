@@ -730,7 +730,7 @@ function goTo(c, x, y, stop, z) {
   const arrived = advance(c, r.mv, STEP);
   if (r.mv && r.mv.blocked) {
     const det = r.mv.detours || 0;
-    if (det < 3) {   // try to walk around the blocking creatures
+    if (det < 3 && !(typeof dgExactFloor === 'function' && dgExactFloor(c.pos.map, c.pos.x, c.pos.y, c.pos.z))) {   // try to walk around the blocking creatures (not where the walls are known: the path already goes around)
       const dx = x - c.pos.x, dy = y - c.pos.y, L = Math.hypot(dx, dy) || 1; const side = det % 2 ? -1 : 1; const off = 45 + det * 30;
       const wx = c.pos.x + dx / L * Math.min(40, L / 2) - dy / L * off * side, wy = c.pos.y + dy / L * Math.min(40, L / 2) + dx / L * off * side;
       const rest = planPath({ pos: { map: c.pos.map, x: wx, y: wy } }, { x, y });
