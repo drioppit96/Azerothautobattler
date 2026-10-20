@@ -96,6 +96,7 @@ function renderNav() {
     else if (b.dataset.floor != null) setMap(dungeonMapDef(m.dungeon, m.dungeon.floors[+b.dataset.floor]));
     else if (b.dataset.crumb != null) { const p = parts[+b.dataset.crumb]; if (p !== G.map) setMap(p); }
   };
+  if (typeof rmRenderTop === 'function') rmRenderTop();          // the route marker tab and the floors (dungeon maps)
 }
 /* what is under the pointer on the world / continent maps */
 function navHit(sx, sy) {

@@ -14,19 +14,29 @@
   <header id="top">
     <div class="brand">Azeroth <span>Auto&nbsp;Battler</span></div>
     <nav id="maptabs"></nav>
+    <button id="btnRmark" class="mini rmtab" hidden title="Mark the way through this dungeon (a tool for while the game is being made)">&#9998; Route marker</button>
+    <span id="floorSel" class="floorsel" hidden></span>
     <div class="spacer"></div>
-    <label class="chk"><input type="checkbox" id="follow"> Follow</label>
-    <label class="chk"><input type="checkbox" id="showroutes"> Routes</label>
-    <label class="chk" title="Red: cannot walk there (mountains, cliffs, lava). Blue: swimming."><input type="checkbox" id="showterrain"> Terrain</label>
-    <label class="chk"><input type="checkbox" id="showmobs" checked> Creatures</label>
-    <label class="chk" title="Herb and ore nodes you have gathered once"><input type="checkbox" id="shownodes" checked> Nodes</label>
-    <button id="hdmaps" class="mini hdbtn on" title="High resolution terrain map over the normal one">HD map</button>
-    <div class="seg" id="speed">
-      <button data-s="0" title="Pause">&#10074;&#10074;</button>
-      <button data-s="1" class="on">1x</button>
-      <button data-s="2">2x</button>
-      <button data-s="4">4x</button>
-      <button data-s="8" title="Fast forward">8x</button>
+    <div class="dd" id="ddView"><button class="mini ddb" title="What the map shows">Map view &#9662;</button>
+      <div class="ddm">
+        <label class="chk"><input type="checkbox" id="follow"> Follow the character</label>
+        <label class="chk"><input type="checkbox" id="showroutes"> Routes</label>
+        <label class="chk" title="Red: cannot walk there (mountains, cliffs, lava). Blue: swimming."><input type="checkbox" id="showterrain"> Terrain</label>
+        <label class="chk"><input type="checkbox" id="showmobs" checked> Creatures</label>
+        <label class="chk" title="Herb and ore nodes you have gathered once"><input type="checkbox" id="shownodes" checked> Nodes</label>
+        <button id="hdmaps" class="mini hdbtn on" title="High resolution terrain map over the normal one">HD map</button>
+      </div>
+    </div>
+    <div class="dd" id="ddSpeed"><button class="mini ddb" id="speedBtn" title="Game speed (space: pause)">Speed 1x &#9662;</button>
+      <div class="ddm">
+        <div class="seg" id="speed">
+          <button data-s="0" title="Pause">&#10074;&#10074; Pause</button>
+          <button data-s="1" class="on">1x</button>
+          <button data-s="2">2x</button>
+          <button data-s="4">4x</button>
+          <button data-s="8" title="Fast forward">8x</button>
+        </div>
+      </div>
     </div>
     <button id="btnMeter" class="mini" title="Damage meter">DPS</button>
     <button id="btnChars" class="mini" title="Switch, create or delete characters">Characters</button>
@@ -42,6 +52,7 @@
   </aside>
   <main id="mapwrap">
     <canvas id="map"></canvas>
+    <div id="rmPanel" hidden></div>
     <div id="hud"><span id="coords">&nbsp;</span><span id="zonehint"></span></div>
     <div id="legend">
       <i style="background:#e0453a"></i>attacks <i style="background:#e6b93c"></i>neutral
@@ -98,6 +109,7 @@
 <script src="hearth.js"></script>
 <script src="reputation.js"></script>
 <script src="groupquest.js"></script>
+<script src="routemarker.js"></script>
 <script src="workshop.js"></script>
 <script src="guild.js"></script>
 <script src="market.js"></script>

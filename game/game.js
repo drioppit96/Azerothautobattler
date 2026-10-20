@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 b (ignore quests, group-wide buffs, dungeon aggro)';
+const GAME_VERSION = '2026-10-20 c (top bar menus, dungeon route marker)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -620,6 +620,7 @@ function draw() {
   drawProfOverlay(ctx, m);
   if (typeof drawHome === 'function') drawHome(ctx, m, c);          // the home inn (Hearthstone)
   drawDungeonMarks(ctx, m); drawParty(ctx, m);
+  if (typeof drawRouteMarks === 'function') drawRouteMarks(ctx, m);
   // the pet
   if (petAlive(c) && c.pos.map === m.map && !rt(c).ghost && !rt(c).flying && !rt(c).riding) {
     const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
@@ -717,17 +718,18 @@ function bindInput() {
     if (d.closed) return;                 // a click away from an open menu only closes it
     const [sx, sy] = pos(e);
     if (e.button === 2) return;
-    const ex = !G.routeEdit && dungeonExitHit(sx, sy); if (ex) { dungeonExitClick(ex); return; }
+    const ex = !G.routeEdit && !G.rmOn && dungeonExitHit(sx, sy); if (ex) { dungeonExitClick(ex); return; }
     const dh = !G.routeEdit && dungeonHit(sx, sy); if (dh) { openDungeon(dh); return; }
     if (G.map.world || G.map.cont) { const h = navHit(sx, sy); if (h && h.def) { const w = s2w(sx, sy); setMap(h.def); } return; }
     if (G.routeEdit) { const w0 = s2w(sx, sy); if (inMap(G.map, w0.x, w0.y)) routeAddPoint(w0); return; }
+    if (G.rmOn) { const w0 = s2w(sx, sy); if (inMap(G.map, w0.x, w0.y)) rmClick(w0); return; }          // the route marker (dungeons)
     const hit = pickAt(sx, sy, d.touch ? 18 : 8);
     const w = s2w(sx, sy);
     const sel = hit || { kind: 'ground', x: w.x, y: w.y };
     if (!hit && !inMap(G.map, w.x, w.y)) return;
     G.selected = sel; renderInfo(sel); showMenu(sx, sy, sel);
   });
-  cv.addEventListener('contextmenu', (e) => { e.preventDefault(); hideMenu(); goUp(); });
+  cv.addEventListener('contextmenu', (e) => { e.preventDefault(); hideMenu(); if (G.rmOn) { rmUndo(); return; } goUp(); });
   // a click anywhere outside the menu closes it
   document.addEventListener('pointerdown', (e) => { if (G.menuOpen && e.target !== cv && !$('menu').contains(e.target)) hideMenu(); }, true);
   cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; G.drag = null; });
@@ -786,7 +788,8 @@ function bindInput() {
     if (e.key === 'Escape') hideMenu();
     if (e.key === ' ' && document.activeElement === document.body) { e.preventDefault(); setSpeed(G.state.settings.speed ? 0 : (G.lastSpeed || 1)); }
   });
-  $('speed').addEventListener('click', (e) => { const s = e.target.dataset && e.target.dataset.s; if (s !== undefined) setSpeed(+s); });
+  $('speed').addEventListener('click', (e) => { const s = e.target.dataset && e.target.dataset.s; if (s !== undefined) { setSpeed(+s); ddClose(); } });
+  bindDropdowns(); if (typeof rmBind === 'function') rmBind();
   $('btnSave').onclick = () => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(G.state, null, 1)], { type: 'application/json' }));
     a.download = 'auto_battler_save.json'; a.click();
@@ -802,10 +805,24 @@ function bindInput() {
     catch (err) { alert('Could not read that file: ' + err.message); }
   };
 }
+/* the top bar's drop-down menus (map view, speed): open under their button, close on a click elsewhere */
+function ddClose() { document.querySelectorAll('.dd.open').forEach((d) => d.classList.remove('open')); }
+function bindDropdowns() {
+  document.querySelectorAll('.dd > .ddb').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation(); const dd = b.parentElement; const was = dd.classList.contains('open'); ddClose(); if (was) return;
+      dd.classList.add('open'); const m = dd.querySelector('.ddm'); const r = b.getBoundingClientRect();
+      m.style.top = (r.bottom + 4) + 'px'; m.style.left = Math.max(4, Math.min(window.innerWidth - m.offsetWidth - 4, r.right - m.offsetWidth)) + 'px';
+    };
+  });
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.dd')) ddClose(); }, true);
+  window.addEventListener('resize', ddClose);
+}
 function setSpeed(s) {
   if (s) G.lastSpeed = s;
   G.state.settings.speed = s;
   document.querySelectorAll('#speed button').forEach((b) => b.classList.toggle('on', +b.dataset.s === s));
+  const sb = $('speedBtn'); if (sb) sb.innerHTML = (s ? 'Speed ' + s + 'x' : '&#10074;&#10074; Paused') + ' &#9662;';
   save(); renderOrder();
 }
 
@@ -851,6 +868,8 @@ async function boot() {
     try { G.d.eventMobs = new Set(await J('../gamedata/event_mobs.json')); } catch (e) { G.d.eventMobs = null; }
     try { G.d.dungeons = await J('../gamedata/dungeons.json'); } catch (e) { G.d.dungeons = null; console.warn('dungeons.json not found - no dungeons'); }
     try { G.dgRoutes = await J('../gamedata/dungeon_routes.json'); } catch (e) { G.dgRoutes = {}; }
+    try { G.rmarksFile = await J('../gamedata/route_marks.json'); } catch (e) { G.rmarksFile = null; }          // routes marked by hand (routemarker.js)
+    if (typeof rmApplyAll === 'function') rmApplyAll();
     try { G.d.prof = await J('../gamedata/professions.json'); } catch (e) { G.d.prof = null; console.warn('professions.json not found - no professions'); }
     try { G.d.skinning = await J('../gamedata/skinning.json'); } catch (e) { G.d.skinning = null; }
     try { G.d.gathering = await J('../gamedata/gathering.json'); } catch (e) { G.d.gathering = null; }
