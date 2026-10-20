@@ -50,12 +50,19 @@ function itemBuy(id) { const r = itemRow(id); return r && r.bp ? r.bp : Math.max
 function buyCount(id) { const r = itemRow(id); return r && (r.c === 0 || ((r.c === 7 || r.c === 5) && (r.q || 0) <= 1)) ? Math.min(10, itemStack(id) || 1) : r && r.c === 6 ? itemStack(id) : 1; }
 /* what one piece costs at a vendor */
 function unitBuy(id) { return itemBuy(id) / Math.max(1, buyCount(id)); }
-/* bigger stacks than 1.12 had: potions and elixirs 20, ores, bars, cloth, leather and hides 50 */
+/* bigger stacks than 1.12 had: potions and elixirs 20, herbs, ores, bars, stone, cloth, leather and hides 200 */
 const STACK_50 = /^(Runecloth|Felcloth|Mooncloth)$| Ore$|^Thorium Ore$| Bar$|^(Linen|Wool|Silk|Mageweave|Runecloth|Felcloth|Mooncloth) Cloth$|^Bolt of |Leather$| Hide$|^Light Hide$|^Heavy Hide$|^Thick Hide$|^Rugged Hide$|^Medium Hide$/;
+/* herbs, ores, bars, stone, cloth, leather and hides: stacks of 200 */
+const STACK_200_STONE = /^(Rough|Coarse|Heavy|Solid|Dense) Stone$|Leather Scraps$/;
+function bigTradeGood(id, r) {
+  if (!r || r.c !== 7 || !r.n || /Belt|Pants|Gloves|Boots|Vest|Bracers/.test(r.n)) return false;
+  if (STACK_50.test(r.n) || STACK_200_STONE.test(r.n) || r.s === 9) return true;
+  return typeof FARM_KINDS !== 'undefined' && FARM_KINDS.herb.items.includes(id);
+}
 function itemStack(id) {
   const r = itemRow(id);
   if (r && r.n) {
-    if (r.c === 7 && STACK_50.test(r.n) && !/Belt|Pants|Gloves|Boots|Vest|Bracers/.test(r.n)) return 50;
+    if (bigTradeGood(id, r)) return 200;
     if (r.c === 0 && /Potion|Elixir/.test(r.n)) return Math.max(20, r.sk || 1);
   }
   if (r && r.sk) return r.sk; const l = lootRow(id); return (l && l[5]) || 1;
@@ -506,6 +513,15 @@ function sellIndex(c, idx) {
   if (!p) { log(itemName(s.id, s) + ' cannot be sold.'); return; }
   c.bags.splice(idx, 1); c.gold += p; rt(c).bagFull = false; (rt(c).buyback = rt(c).buyback || []).unshift(s); rt(c).buyback.length = Math.min(12, rt(c).buyback.length);
   log('Sold ' + itemName(s.id, s) + (s.n > 1 ? ' x' + s.n : '') + ' for ' + money(p) + '.'); save(); refreshGear();
+}
+/* the mass sell of the bag panel: the chosen items at once */
+function sellMany(c, insts) {
+  if (!vendorNear(c)) { log('No vendor in reach.'); return 0; }
+  let n = 0, gold = 0; const r = rt(c); r.buyback = r.buyback || [];
+  for (const s of insts) { const i = c.bags.indexOf(s); if (i < 0) continue; const p = itemSell(s.id) * (s.n || 1); if (!p) continue; c.bags.splice(i, 1); gold += p; n++; r.buyback.unshift(s); }
+  r.buyback.length = Math.min(12, r.buyback.length);
+  if (n) { c.gold += gold; r.bagFull = false; log('Sold ' + n + ' item' + (n > 1 ? 's' : '') + ' for ' + money(gold) + '.'); fx(c.pos.x, c.pos.y, '+' + money(gold), '#ffd866'); }
+  save(); refreshGear(); return n;
 }
 function buyItem(c, id) {
   const v = vendorNear(c); if (!v) { log('No vendor in reach.'); return; }

@@ -70,11 +70,17 @@ function bagsHtml(c) {
     const s = c.bags[i];
     if (!s) { h += '<div class="slot empty"></div>'; continue; }
     const up = upgradeFor(c, s); const junk = isJunk(c, s.id); const cant = itemRow(s.id) && itemRow(s.id).sl && itemRow(s.id).sl.length && canEquip(c, s.id);
-    const de = SH.de ? (SH.de.has(s) ? ' desel' : disenchantWhy(c, s) ? ' dedim' : ' decan') : '';
+    const de = SH.de ? (SH.de.has(s) ? ' desel' : disenchantWhy(c, s) ? ' dedim' : ' decan') : SH.sell ? (SH.sell.has(s) ? ' desel' : itemSell(s.id) ? ' decan' : ' dedim') : '';
     h += '<div class="slot' + (SH.sel === 'b' + i ? ' sel' : '') + de + '" data-idx="' + i + '">' + iconHtml(s) + (up ? '<i class="up" title="Upgrade"></i>' : '') + (junk ? '<i class="junk" title="Junk"></i>' : '') + (cant ? '<i class="red"></i>' : '') + '</div>';
   }
   h += '</div><div class="moneyline">' + moneyHtml(c.gold) + '</div>';
   if (typeof craftBarHtml === 'function') h += craftBarHtml(c);             // crafting: the progress, like the cast bar of the game
+  // at a vendor: sell many items at once - choose them, the green tick sells them, the red circle cancels
+  if (!SH.de && typeof vendorNear === 'function' && vendorNear(c)) {
+    const val = SH.sell ? [...SH.sell].reduce((t, x) => t + itemSell(x.id) * (x.n || 1), 0) : 0;
+    h += '<div class="debar">' + (!SH.sell ? '<button class="mini" data-sellmode="on" title="Choose items in the bags, then confirm with the green tick">Sell...</button>' :
+      '<span class="small">Choose items to sell: <b>' + SH.sell.size + '</b> - ' + money(val) + '</span><button class="debtn ok" data-sellmode="ok" title="Sell the chosen items"' + (SH.sell.size ? '' : ' disabled') + '>&#10004;</button><button class="debtn no" data-sellmode="cancel" title="Cancel"><i></i></button>') + '</div>';
+  } else if (SH.sell) SH.sell = null;
   // enchanters: disenchant many items at once - choose them, then the green tick does it, the red circle cancels
   if (typeof hasProf === 'function' && hasProf(c, ENCHANTING)) {
     const q = (rt(c).deQueue || []).length;
@@ -245,11 +251,20 @@ function bindSheet() {
     const dm = e.target.closest('[data-demode]');
     if (dm) {
       const a = dm.dataset.demode;
-      if (a === 'on') SH.de = new Set();
+      if (a === 'on') { SH.de = new Set(); SH.sell = null; }
       else if (a === 'cancel') SH.de = null;
       else if (a === 'ok' && SH.de) { const n = disenchantQueue(c, [...SH.de]); SH.de = null; if (n) log('Disenchanting ' + n + ' item' + (n > 1 ? 's' : '') + ' ...'); }
       hideItemMenu(); renderSheet(); return;
     }
+    const sm = e.target.closest('[data-sellmode]');
+    if (sm) {
+      const a = sm.dataset.sellmode;
+      if (a === 'on') { SH.sell = new Set(); SH.de = null; }
+      else if (a === 'cancel') SH.sell = null;
+      else if (a === 'ok' && SH.sell) { sellMany(c, [...SH.sell]); SH.sell = null; }
+      hideItemMenu(); renderSheet(); return;
+    }
+    if (SH.sell) { const b = e.target.closest('#sheetBags [data-idx]'); if (b) { const inst = c.bags[+b.dataset.idx]; if (inst && itemSell(inst.id)) { if (SH.sell.has(inst)) SH.sell.delete(inst); else SH.sell.add(inst); } renderSheet(); return; } }
     if (SH.de) { const b = e.target.closest('#sheetBags [data-idx]'); if (b) { const inst = c.bags[+b.dataset.idx]; if (inst && !disenchantWhy(c, inst)) { if (SH.de.has(inst)) SH.de.delete(inst); else SH.de.add(inst); } renderSheet(); return; } }
     if (SH.tab === 'ah' && ahClick(e)) return;
     if (SH.tab === 'bank' && bankClick(e)) return;

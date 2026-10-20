@@ -109,13 +109,25 @@ function guildDisband(g, quiet) {
 
 /* ------------------------------------------------------------------ guild bank (at any banker) */
 function gbankFree(g, id) { if (id != null) return gbSlotFor(g, id) ? 1 : 0; return GB_TOTAL - g.bank.items.length; }
-function gbankPut(c, idx) {
+function gbankPut(c, idx, quiet) {
   const g = guildOf(c); const inst = c.bags[idx]; if (!g || !inst) return false;
   const st = itemStack(inst.id);
   if (st > 1 && !inst.rp) for (const s of g.bank.items) if (s.id === inst.id && s.n < st) { const k = Math.min(st - s.n, inst.n); s.n += k; inst.n -= k; if (!inst.n) break; }
   let tab = null;
   if (inst.n > 0) { tab = gbSlotFor(g, inst.id); if (!tab) { log('The ' + gbTabName(gbTabOf(inst.id)) + ' tab and General of the guild bank are full.'); save(); refreshGear(); return false; } inst.gt = tab; g.bank.items.push(inst); }
-  c.bags.splice(idx, 1); rt(c).bagFull = false; guildLog(g, c.name + ' deposited ' + itemName(inst.id, inst) + (tab ? ' (' + gbTabName(tab) + ')' : '') + '.'); GUI.gbTab = tab || gbTabOf(inst.id); save(); refreshGear(); return true;
+  c.bags.splice(idx, 1); rt(c).bagFull = false; if (!quiet) { guildLog(g, c.name + ' deposited ' + itemName(inst.id, inst) + (tab ? ' (' + gbTabName(tab) + ')' : '') + '.'); GUI.gbTab = tab || gbTabOf(inst.id); save(); refreshGear(); } return true;
+}
+/* every trade good in the bags into the guild bank, each to its tab (not what an open quest still needs) */
+function gbankPutAll(c) {
+  const g = guildOf(c); if (!g) return 0; let n = 0, items = 0, left = 0;
+  for (let i = c.bags.length - 1; i >= 0; i--) {
+    const s = c.bags[i]; const it = itemRow(s.id); if (!it || it.c !== 7 || s.id >= 9000000) continue;
+    if (typeof questWants === 'function' && questWants(c, s.id)) continue;
+    const k = s.n || 1; if (gbankPut(c, i, true)) { n += k; items++; } else left++;
+  }
+  if (items) { guildLog(g, c.name + ' deposited ' + n + ' trade goods.'); log('Put ' + n + ' trade goods in the guild bank.'); }
+  else log(left ? 'The guild bank has no room for them.' : 'No trade goods in the bags.');
+  save(); refreshGear(); return n;
 }
 function gbankTake(c, i) {
   const g = guildOf(c); const inst = g && g.bank.items[i]; if (!inst) return;
@@ -188,6 +200,7 @@ function guildHtml(c, mode) {
     if (!v) h += '<div class="muted">The guild bank is used at a banker.</div><p><button class="act" data-bkgo="1">Go to the nearest banker</button></p>';
     else {
       h += '<div class="vbtns"><button class="mini" data-gsort="1">Sort</button> <span class="small">Money: <input type="number" min="0" id="gMoney" value="1" style="width:60px"> gold <button class="mini" data-gmon="1">Deposit</button>' + (rk <= 1 ? '<button class="mini" data-gmon="-1">Take</button>' : '') + '</span>' +
+        ' <button class="mini" data-gball="1" title="Herbs, ore, cloth, leather, enchanting and cooking materials ... each to its own tab">Deposit all trade goods</button>' +
         ' <span class="muted small">Click an item in your bags to put it in, one here to take it out.</span></div>';
       const cur = GUI.gbTab && GB_CAP[GUI.gbTab] ? GUI.gbTab : 'gen';
       h += '<div class="gbtabs">' + GB_TABS.map(([k, n, cap]) => { const used = gbCount(g, k); return '<button class="mini' + (k === cur ? ' on' : '') + (used >= cap ? ' full' : '') + '" data-gbtab="' + k + '">' + n + ' <span class="small">' + used + '/' + cap + '</span></button>'; }).join('') + '</div>';
@@ -212,6 +225,7 @@ function guildClick(e) {
   if ((b = t.closest('[data-bkgo]'))) { orderNpc(c, 'bank'); closeSheet(); return true; }
   if (!bankerNear(c)) return false;
   if ((b = t.closest('[data-gsort]'))) { sortGuildBank(c); return true; }
+  if ((b = t.closest('[data-gball]'))) { gbankPutAll(c); renderSheet(); return true; }
   if ((b = t.closest('[data-gbtab]'))) { GUI.gbTab = b.dataset.gbtab; renderSheet(); return true; }
   if ((b = t.closest('[data-gmon]'))) { gbankMoney(c, (+$('gMoney').value || 0) * 10000 * +b.dataset.gmon); return true; }
   if ((b = t.closest('[data-gb]'))) { gbankTake(c, +b.dataset.gb); return true; }
