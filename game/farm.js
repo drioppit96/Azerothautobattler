@@ -1,8 +1,8 @@
 'use strict';
-/* farm.js - farming profession materials (Automation: "Profession materials"): leather, ore or cloth, and which one.
+/* farm.js - farming profession materials (Automation: "Profession materials"): leather, ore, herbs or cloth, and which one.
    - Leather: the beasts that give it when skinned (skinning.json), the character needs Skinning and the skill for them.
-   - Ore: the veins that give it (their loot), the character needs Mining and the skill for them; it walks from vein to
-     vein in the area and mines them.
+   - Ore / herbs: the veins and plants that give it (their loot), the character needs Mining / Herbalism and the skill
+     for them; it walks from node to node in the area and gathers them.
    - Cloth: the creatures that drop it (their loot tables), anyone can.
    The place: where the most of it comes from for the character (its level, its skill), weighed by how far it is (by
    flight path, boat and zeppelin when far) and away from creatures too strong for it. Full bags: the junk is sold,
@@ -12,8 +12,11 @@
 const FARM_KINDS = {
   leather: { n: 'Leather', skill: 393, items: [2934, 2318, 783, 2319, 4232, 4234, 4235, 4304, 8169, 8170, 8171] },
   ore: { n: 'Ore', skill: 186, items: [2770, 2771, 2772, 2775, 2776, 3858, 7911, 10620, 11370] },
+  herb: { n: 'Herbs', skill: 182, items: [2447, 765, 2449, 785, 2450, 3820, 2453, 3355, 3369, 3356, 3357, 3818, 3821, 3358, 3819, 4625, 8831, 8836, 8838, 8839, 8845, 8846, 13464, 13463, 13465, 13466, 13467, 13468] },
   cloth: { n: 'Cloth', skill: 0, items: [2589, 2592, 4306, 4338, 14047, 14256] },
 };
+/* herbs and ore come from nodes (gathered on a round), leather and cloth from creatures */
+function farmNode(kind) { return kind === 'ore' || kind === 'herb'; }
 const FARM_CELL = { mob: 200, node: 450 };
 
 function farmOf(c) { if (!c.farm) c.farm = { kind: 'cloth', item: 2589, idle: false }; return c.farm; }
@@ -36,7 +39,7 @@ function farmSources(c, kind, item) {
   } else {
     const P = G.d.prof, go = G.d.go;
     if (P && go) for (const e in P.nodes) {
-      const [k, req] = P.nodes[e]; if (k !== 'ore') continue; const g = go.objects[e]; const rows = g && go.loot[g[2]]; const row = rows && rows.find((x) => x[0] === item); if (!row) continue;
+      const [k, req] = P.nodes[e]; if (k !== kind) continue; const g = go.objects[e]; const rows = g && go.loot[g[2]]; const row = rows && rows.find((x) => x[0] === item); if (!row) continue;
       out.push({ e: +e, p: row[1] / 100 * (row[2] + row[3]) / 2, req, node: true });
     }
   }
@@ -45,7 +48,7 @@ function farmSources(c, kind, item) {
 }
 /* the ones this character can take on */
 function farmUsable(c, kind, s) {
-  if (s.node) return profSkill(c, 186) >= s.req;
+  if (s.node) return profSkill(c, FARM_KINDS[kind].skill) >= s.req;
   if (s.rank >= 1 || s.hi > c.level + 1) return false;
   if (kind === 'leather' && profSkill(c, 393) < s.req) return false;
   const b = behOf({ e: s.e }, c); if (b !== 'A' && b !== 'N') return false;
@@ -70,9 +73,9 @@ function farmDangerAt(c, map, x, y) {
 }
 /* the best place: {map, x, y, score, entries, nodes, names, lo, hi} or null */
 function farmSpot(c, kind, item) {
-  const key = [c.id, kind, item, c.level, kind === 'leather' ? profSkill(c, 393) : kind === 'ore' ? profSkill(c, 186) : 0, c.pos.map].join(':');
+  const key = [c.id, kind, item, c.level, FARM_KINDS[kind].skill ? profSkill(c, FARM_KINDS[kind].skill) : 0, c.pos.map, Math.round(c.pos.x / 300), Math.round(c.pos.y / 300)].join(':');
   G.farmSpots = G.farmSpots || {}; if (key in G.farmSpots) return G.farmSpots[key];
-  const srcs = farmSources(c, kind, item).filter((s) => farmUsable(c, kind, s)); const node = kind === 'ore'; const C = node ? FARM_CELL.node : FARM_CELL.mob;
+  const srcs = farmSources(c, kind, item).filter((s) => farmUsable(c, kind, s)); const node = farmNode(kind); const C = node ? FARM_CELL.node : FARM_CELL.mob;
   const cells = new Map();
   for (const s of srcs) {
     for (const sp of node ? objSpawns(s.e) : G.spawnMap.get(s.e) || []) {
@@ -82,14 +85,19 @@ function farmSpot(c, kind, item) {
       a.sc += s.p; a.sx += sp[1] * s.p; a.sy += sp[2] * s.p; a.n++; a.ents.add(s.e); if (node) a.pts.push([sp[1], sp[2]]);
     }
   }
+  // the closest place that gives enough of it wins (a richer one only when it is not much farther); another continent
+  // counts as very far
   let best = null, bs = 0;
   for (const a of cells.values()) {
-    if (a.n < (node ? 3 : 4)) continue;
-    const x = a.sx / a.sc, y = a.sy / a.sc; const far = a.map === c.pos.map ? Math.hypot(x - c.pos.x, y - c.pos.y) : 6000;
-    let sc = a.sc / (1 + far / 3000);
+    if (a.n < (node ? 3 : 4) || (!node && a.sc < 0.6)) continue;
+    const x = a.sx / a.sc, y = a.sy / a.sc; const far = a.map === c.pos.map ? Math.hypot(x - c.pos.x, y - c.pos.y) : 8000;
+    let sc = Math.sqrt(a.sc) / (1 + far / 400);
     const dg = farmDangerAt(c, a.map, x, y); if (dg > 2) sc *= 0.15; else if (dg) sc *= 0.6;
     if (sc > bs) { bs = sc; best = Object.assign(a, { x, y, score: sc }); }
+    // creatures: the nearest group that gives a fair amount (3 or more in a round) and has nothing too strong about
+    if (!node && a.sc >= 2.5 && dg <= 1) { const d = far / (dg ? 0.7 : 1); if (!a.near || d < a.near) a.near = d; }
   }
+  if (!node) { let nb = null; for (const a of cells.values()) if (a.near && (!nb || a.near < nb.near)) nb = a; if (nb) best = Object.assign(nb, { x: nb.sx / nb.sc, y: nb.sy / nb.sc, score: nb.sc }); }
   if (best) {
     const es = [...best.ents]; best.entries = node ? null : es; best.nodes = node ? es : null;
     best.names = [...new Set(es.map((e) => node ? ((G.d.go.objects[e] || [])[0] || 'vein') : (G.mobIdx[e] || [0, 'creature'])[1]))].slice(0, 4);
@@ -103,7 +111,7 @@ function farmWhy(c, kind, item) {
   const need = farmNeeds(c, kind); if (need) return 'needs ' + need;
   const all = farmSources(c, kind, item); if (!all.length) return 'nothing in the world gives it';
   if (!farmSpot(c, kind, item)) {
-    if (kind === 'ore') { const req = Math.min(...all.map((s) => s.req)); if (profSkill(c, 186) < req) return 'needs Mining ' + req + ' (you have ' + profSkill(c, 186) + ')'; }
+    if (farmNode(kind)) { const sk = FARM_KINDS[kind].skill; const req = Math.min(...all.map((s) => s.req)); if (profSkill(c, sk) < req) return 'needs ' + profName(sk) + ' ' + req + ' (you have ' + profSkill(c, sk) + ')'; }
     if (kind === 'leather') { const req = Math.min(...all.map((s) => s.req)); if (profSkill(c, 393) < req) return 'needs Skinning ' + req + ' (you have ' + profSkill(c, 393) + ')'; }
     const lo = Math.min(...all.filter((s) => !s.node).map((s) => s.lo)); if (lo > c.level + 1) return 'its creatures are level ' + lo + '+';
     return 'no place to farm it for you';
@@ -115,9 +123,9 @@ function farmWhy(c, kind, item) {
 function orderFarm(c, kind, item, auto) {
   const why = farmWhy(c, kind, item); if (why) { if (!auto) log('Cannot farm ' + itemName(item) + ': ' + why + '.'); return false; }
   const s = farmSpot(c, kind, item);
-  const o = { type: 'farm', kind, item, map: s.map, cx: s.x, cy: s.y, radius: kind === 'ore' ? 420 : 170, entries: s.entries, nodes: s.nodes, lvl: c.level,
+  const o = { type: 'farm', kind, item, map: s.map, cx: s.x, cy: s.y, radius: farmNode(kind) ? 420 : 170, entries: s.entries, nodes: s.nodes, lvl: c.level,
     label: itemName(item), where: (s.zone || 'out there'), have0: bagCount(c, item), banked: 0, t0: G.gameTime, wi: 0 };
-  if (kind === 'ore') o.pts = farmTour(s.pts, c);
+  if (farmNode(kind)) o.pts = farmTour(s.pts, c);
   c.order = o; rt(c).mv = null; rt(c).tgt = null;
   log('Order: farm ' + itemName(item) + ' - ' + (s.zone || 'the best place') + ' (' + s.names.join(', ') + (s.lo ? ', level ' + s.lo + (s.hi > s.lo ? '-' + s.hi : '') : '') + ').');
   save(); renderOrder(); return true;
@@ -139,7 +147,7 @@ function updateFarm(c, o, dt) {
   if (r.bagFull || bagFree(c) <= 0) { farmBagsFull(c, o); return; }
   // a level up: maybe a better place now
   if (o.lvl !== c.level) { o.lvl = c.level; const s = farmSpot(c, o.kind, o.item); if (s && (s.map !== o.map || Math.hypot(s.x - o.cx, s.y - o.cy) > 400)) { log('A better place to farm ' + itemName(o.item) + ' now: ' + (s.zone || 'elsewhere') + '.'); orderFarm(c, o.kind, o.item, true); if (c.order) { c.order.banked = o.banked; c.order.have0 = o.have0; } return; } }
-  if (o.kind === 'ore') {
+  if (farmNode(o.kind)) {
     if (!(o._set instanceof Set)) o._set = new Set(o.nodes || []);
     if (gatherStep(c, o, 70)) return;
     if (!o.pts || !o.pts.length) return;
