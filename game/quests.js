@@ -555,7 +555,7 @@ function zoneList(c) {
   }
   const out = Object.values(z).filter((x) => x.n >= 3);
   for (const k of out) { k.lv.sort((a, b) => a - b); k.lo = k.lv[Math.floor(k.lv.length * 0.1)]; k.hi = k.lv[Math.floor(k.lv.length * 0.9)]; k.mid = k.lv[Math.floor(k.lv.length / 2)]; }
-  return out.sort((a, b) => a.mid - b.mid || b.n - a.n);
+  return out.sort((a, b) => a.lo - b.lo || a.hi - b.hi || b.n - a.n);        // by level, lowest first (as the list shows them)
 }
 function orderQuesting(c, zone) {
   const z = zoneList(c).find((x) => x.name === zone);

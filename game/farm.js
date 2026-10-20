@@ -12,9 +12,14 @@
 const FARM_KINDS = {
   leather: { n: 'Leather', skill: 393, items: [2934, 2318, 783, 2319, 4232, 4234, 4235, 4304, 8169, 8170, 8171] },
   ore: { n: 'Ore', skill: 186, items: [2770, 2771, 2772, 2775, 2776, 3858, 7911, 10620, 11370] },
-  herb: { n: 'Herbs', skill: 182, items: [2447, 765, 2449, 785, 2450, 3820, 2453, 3355, 3369, 3356, 3357, 3818, 3821, 3358, 3819, 4625, 8831, 8836, 8838, 8839, 8845, 8846, 13464, 13463, 13465, 13466, 13467, 13468] },
+  herb: { n: 'Herbs', skill: 182, items: [0, 2447, 765, 2449, 785, 2450, 3820, 2453, 3355, 3369, 3356, 3357, 3818, 3821, 3358, 3819, 4625, 8831, 8836, 8838, 8839, 8845, 8846, 13464, 13463, 13465, 13466, 13467, 13468] },
   cloth: { n: 'Cloth', skill: 0, items: [2589, 2592, 4306, 4338, 14047, 14256] },
 };
+/* item 0 of herbs: every herb the character can gather in the place */
+const FARM_ALL_HERBS = () => FARM_KINDS.herb.items.filter((x) => x);
+function farmItemName(item) { return item ? itemName(item) : 'all herbs'; }
+function farmIsMine(o, id) { return o && (o.item ? id === o.item : o.kind === 'herb' && FARM_ALL_HERBS().includes(id)); }
+function farmCount(c, o) { return o.item ? bagCount(c, o.item) : FARM_ALL_HERBS().reduce((t, id) => t + bagCount(c, id), 0); }
 /* herbs and ore come from nodes (gathered on a round), leather and cloth from creatures */
 function farmNode(kind) { return kind === 'ore' || kind === 'herb'; }
 const FARM_CELL = { mob: 200, node: 450 };
@@ -39,7 +44,9 @@ function farmSources(c, kind, item) {
   } else {
     const P = G.d.prof, go = G.d.go;
     if (P && go) for (const e in P.nodes) {
-      const [k, req] = P.nodes[e]; if (k !== kind) continue; const g = go.objects[e]; const rows = g && go.loot[g[2]]; const row = rows && rows.find((x) => x[0] === item); if (!row) continue;
+      const [k, req] = P.nodes[e]; if (k !== kind) continue; const g = go.objects[e]; const rows = g && go.loot[g[2]];
+      if (!item) { if (rows && rows.length) out.push({ e: +e, p: 1, req, node: true }); continue; }        // all herbs: every plant counts
+      const row = rows && rows.find((x) => x[0] === item); if (!row) continue;
       out.push({ e: +e, p: row[1] / 100 * (row[2] + row[3]) / 2, req, node: true });
     }
   }
@@ -77,11 +84,15 @@ function farmSpot(c, kind, item) {
   G.farmSpots = G.farmSpots || {}; if (key in G.farmSpots) return G.farmSpots[key];
   const srcs = farmSources(c, kind, item).filter((s) => farmUsable(c, kind, s)); const node = farmNode(kind); const C = node ? FARM_CELL.node : FARM_CELL.mob;
   const cells = new Map();
+  const byZone = kind === 'herb' && !item;        // all herbs: a whole zone, every plant in it on the round
+  const hereZ = byZone && typeof zoneAt === 'function' ? zoneAt(c.pos.map, c.pos.x, c.pos.y) : null;
   for (const s of srcs) {
     for (const sp of node ? objSpawns(s.e) : G.spawnMap.get(s.e) || []) {
       if (sp[0] !== 0 && sp[0] !== 1) continue;
-      const k = sp[0] + ':' + Math.floor(sp[1] / C) + ':' + Math.floor(sp[2] / C); let a = cells.get(k);
-      if (!a) cells.set(k, a = { map: sp[0], sc: 0, sx: 0, sy: 0, n: 0, ents: new Set(), pts: [] });
+      let k; if (byZone) { const z = typeof zoneAt === 'function' ? zoneAt(sp[0], sp[1], sp[2]) : null; if (!z) continue; k = sp[0] + ':z' + z.i; }
+      else k = sp[0] + ':' + Math.floor(sp[1] / C) + ':' + Math.floor(sp[2] / C);
+      let a = cells.get(k);
+      if (!a) cells.set(k, a = { zi: byZone ? +k.split(':z')[1] : 0, map: sp[0], sc: 0, sx: 0, sy: 0, n: 0, ents: new Set(), pts: [] });
       a.sc += s.p; a.sx += sp[1] * s.p; a.sy += sp[2] * s.p; a.n++; a.ents.add(s.e); if (node) a.pts.push([sp[1], sp[2]]);
     }
   }
@@ -89,8 +100,10 @@ function farmSpot(c, kind, item) {
   // counts as very far
   let best = null, bs = 0;
   for (const a of cells.values()) {
-    if (a.n < (node ? 3 : 4) || (!node && a.sc < 0.6)) continue;
-    const x = a.sx / a.sc, y = a.sy / a.sc; const far = a.map === c.pos.map ? Math.hypot(x - c.pos.x, y - c.pos.y) : 8000;
+    if (a.n < (byZone ? 8 : node ? 3 : 4) || (!node && a.sc < 0.6)) continue;
+    const x = a.sx / a.sc, y = a.sy / a.sc;
+    let far = a.map === c.pos.map ? Math.hypot(x - c.pos.x, y - c.pos.y) : 8000;
+    if (byZone) { if (a.map === c.pos.map) far = Math.min(...a.pts.map((p) => Math.hypot(p[0] - c.pos.x, p[1] - c.pos.y))); /* the zone it is in first */ const here = a.map === c.pos.map && hereZ && a.zi === hereZ.i; const sc = (here ? 1e6 : 0) + Math.sqrt(a.n) / (1 + far / 800); if (sc > bs) { bs = sc; best = Object.assign(a, { x, y, score: sc }); } continue; }
     let sc = Math.sqrt(a.sc) / (1 + far / 400);
     const dg = farmDangerAt(c, a.map, x, y); if (dg > 2) sc *= 0.15; else if (dg) sc *= 0.6;
     if (sc > bs) { bs = sc; best = Object.assign(a, { x, y, score: sc }); }
@@ -103,6 +116,7 @@ function farmSpot(c, kind, item) {
     best.names = [...new Set(es.map((e) => node ? ((G.d.go.objects[e] || [])[0] || 'vein') : (G.mobIdx[e] || [0, 'creature'])[1]))].slice(0, 4);
     if (!node) { best.lo = Math.min(...es.map((e) => (G.mobIdx[e] || [0, 0, 1])[2])); best.hi = Math.max(...es.map((e) => (G.mobIdx[e] || [0, 0, 0, 1])[3])); }
     const z = typeof zoneAt === 'function' ? zoneAt(best.map, best.x, best.y) : null; best.zone = z ? z.name : '';
+    if (byZone) { const z0 = zoneAt(best.map, best.pts[0][0], best.pts[0][1]); if (z0) best.zone = z0.name; best.span = Math.max(...best.pts.map((p) => Math.hypot(p[0] - best.x, p[1] - best.y))) + 250; }
   }
   return (G.farmSpots[key] = best);
 }
@@ -121,13 +135,14 @@ function farmWhy(c, kind, item) {
 
 /* ------------------------------------------------------------------ the order */
 function orderFarm(c, kind, item, auto) {
-  const why = farmWhy(c, kind, item); if (why) { if (!auto) log('Cannot farm ' + itemName(item) + ': ' + why + '.'); return false; }
+  const why = farmWhy(c, kind, item); if (why) { if (!auto) log('Cannot farm ' + farmItemName(item) + ': ' + why + '.'); return false; }
   const s = farmSpot(c, kind, item);
-  const o = { type: 'farm', kind, item, map: s.map, cx: s.x, cy: s.y, radius: farmNode(kind) ? 420 : 170, entries: s.entries, nodes: s.nodes, lvl: c.level,
-    label: itemName(item), where: (s.zone || 'out there'), have0: bagCount(c, item), banked: 0, t0: G.gameTime, wi: 0 };
+  const o = { type: 'farm', kind, item, map: s.map, cx: s.x, cy: s.y, radius: farmNode(kind) ? 420 : 170, span: s.span || 0, entries: s.entries, nodes: s.nodes, lvl: c.level,
+    label: farmItemName(item), where: (s.zone || 'out there'), have0: 0, banked: 0, t0: G.gameTime, wi: 0 };
+  o.have0 = farmCount(c, o);
   if (farmNode(kind)) o.pts = farmTour(s.pts, c);
   c.order = o; rt(c).mv = null; rt(c).tgt = null;
-  log('Order: farm ' + itemName(item) + ' - ' + (s.zone || 'the best place') + ' (' + s.names.join(', ') + (s.lo ? ', level ' + s.lo + (s.hi > s.lo ? '-' + s.hi : '') : '') + ').');
+  log('Order: farm ' + farmItemName(item) + ' - ' + (s.zone || 'the best place') + ' (' + s.names.join(', ') + (s.lo ? ', level ' + s.lo + (s.hi > s.lo ? '-' + s.hi : '') : '') + ').');
   save(); renderOrder(); return true;
 }
 /* the veins in a round, nearest next */
@@ -140,13 +155,13 @@ function updateFarm(c, o, dt) {
   const r = rt(c);
   // getting there: by flight path, boat or zeppelin when far
   if (o.trip) { const st = tripStep(c, o.trip); if (st === 'busy') return; if (st === 'fail') { log('Could not get to the farming place.'); c.order = null; renderOrder(); return; } o.trip = null; }
-  if (c.pos.map !== o.map || Math.hypot(o.cx - c.pos.x, o.cy - c.pos.y) > 700) {
+  if (c.pos.map !== o.map || Math.hypot(o.cx - c.pos.x, o.cy - c.pos.y) > Math.max(700, o.span || 0)) {
     const t = planTrip(c, { map: o.map, x: o.cx, y: o.cy }); if (!t) { log('No way to the farming place.'); c.order = null; renderOrder(); return; }
     o.trip = t; return;
   }
   if (r.bagFull || bagFree(c) <= 0) { farmBagsFull(c, o); return; }
   // a level up: maybe a better place now
-  if (o.lvl !== c.level) { o.lvl = c.level; const s = farmSpot(c, o.kind, o.item); if (s && (s.map !== o.map || Math.hypot(s.x - o.cx, s.y - o.cy) > 400)) { log('A better place to farm ' + itemName(o.item) + ' now: ' + (s.zone || 'elsewhere') + '.'); orderFarm(c, o.kind, o.item, true); if (c.order) { c.order.banked = o.banked; c.order.have0 = o.have0; } return; } }
+  if (o.lvl !== c.level) { o.lvl = c.level; const s = farmSpot(c, o.kind, o.item); if (s && (s.map !== o.map || Math.hypot(s.x - o.cx, s.y - o.cy) > 400)) { log('A better place to farm ' + farmItemName(o.item) + ' now: ' + (s.zone || 'elsewhere') + '.'); orderFarm(c, o.kind, o.item, true); if (c.order) { c.order.banked = o.banked; c.order.have0 = o.have0; } return; } }
   if (farmNode(o.kind)) {
     if (!(o._set instanceof Set)) o._set = new Set(o.nodes || []);
     if (gatherStep(c, o, 70)) return;
@@ -166,10 +181,10 @@ function farmBagsFull(c, o) {
 /* at the bank: the trade goods go in (the farmed ones first), then back to farming */
 function farmDeposit(c, o) {
   const back = o.resume; let n = 0, mine = 0;
-  const order = c.bags.map((s, i) => ({ s, i })).filter((x) => { const it = itemRow(x.s.id); return it && it.c === 7; }).sort((a, b) => (b.s.id === (back && back.item)) - (a.s.id === (back && back.item)) || b.i - a.i);
+  const order = c.bags.map((s, i) => ({ s, i })).filter((x) => { const it = itemRow(x.s.id); return it && it.c === 7; }).sort((a, b) => farmIsMine(back, b.s.id) - farmIsMine(back, a.s.id) || b.i - a.i);
   for (const x of order.sort((a, b) => b.i - a.i)) {
     const id = x.s.id, k = x.s.n; if (bankFree(c) <= 0 && !bankOf(c).items.some((y) => y.id === id && y.n < itemStack(id))) continue;
-    if (bankPut(c, x.i, true)) { n += k; if (back && id === back.item) mine += k; }
+    if (bankPut(c, x.i, true)) { n += k; if (farmIsMine(back, id)) mine += k; }
   }
   log(n ? 'Put ' + n + ' trade goods in the bank.' : 'The bank is full.');
   if (back && back.type === 'farm') back.banked = (back.banked || 0) + mine;
@@ -177,7 +192,7 @@ function farmDeposit(c, o) {
   rt(c).bagFull = bagFree(c) <= 0; renderOrder(); save();
 }
 function farmText(c, o) {
-  const got = Math.max(0, bagCount(c, o.item) - (o.have0 || 0) + (o.banked || 0));
+  const got = Math.max(0, farmCount(c, o) - (o.have0 || 0) + (o.banked || 0));
   return { t: 'Farm ' + o.label, d: (o.trip ? 'on the way to ' + o.where : o.where) + ' - ' + got + ' so far' + (o.banked ? ' (' + o.banked + ' in the bank)' : '') };
 }
 /* idle: start farming by itself (Automation), at most once a minute */
@@ -193,10 +208,10 @@ function farmCardHtml(c) {
   const f = farmOf(c); const K = FARM_KINDS[f.kind]; const why = farmWhy(c, f.kind, f.item); const s = !why && farmSpot(c, f.kind, f.item);
   let h = '<div class="aset farmset"><h5>Profession materials</h5><div class="farmrow"><select data-farm="kind">' +
     Object.entries(FARM_KINDS).map(([k, x]) => '<option value="' + k + '"' + (k === f.kind ? ' selected' : '') + '>' + x.n + '</option>').join('') + '</select><select data-farm="item">' +
-    K.items.map((id) => '<option value="' + id + '"' + (id === f.item ? ' selected' : '') + '>' + esc(itemName(id)) + '</option>').join('') + '</select></div>';
-  h += '<div class="small ' + (why ? 'bad' : 'muted') + '">' + (why ? esc(itemName(f.item)) + ': ' + esc(why) + '.' : 'Best place: ' + esc(s.zone || '?') + ' - ' + esc(s.names.join(', ')) + (s.lo ? ' (level ' + s.lo + (s.hi > s.lo ? '-' + s.hi : '') + ')' : '') + '.') + '</div>';
+    K.items.map((id) => '<option value="' + id + '"' + (id === f.item ? ' selected' : '') + '>' + esc(id ? itemName(id) : 'All herbs (every one I can pick there)') + '</option>').join('') + '</select></div>';
+  h += '<div class="small ' + (why ? 'bad' : 'muted') + '">' + (why ? esc(farmItemName(f.item)) + ': ' + esc(why) + '.' : 'Best place: ' + esc(s.zone || '?') + ' - ' + esc(s.names.join(', ')) + (s.lo ? ' (level ' + s.lo + (s.hi > s.lo ? '-' + s.hi : '') + ')' : '') + '.') + '</div>';
   h += '<label class="chk"><input type="checkbox" data-farm="idle"' + (f.idle ? ' checked' : '') + '> Farm it whenever there is nothing else to do</label>';
-  h += '<button class="mini" data-farm="go"' + (why ? ' disabled' : '') + '>Farm ' + esc(itemName(f.item)) + ' now</button></div>';
+  h += '<button class="mini" data-farm="go"' + (why ? ' disabled' : '') + '>Farm ' + esc(farmItemName(f.item)) + ' now</button></div>';
   return h;
 }
 function farmCardChange(e) {
