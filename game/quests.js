@@ -306,8 +306,14 @@ function interactStep(c, dt) {
   return true;
 }
 function goUsedKey(e, i) { return e + ':' + i; }
-function goFree(e, i) { return !(G.goUsed && G.goUsed[goUsedKey(e, i)] > G.gameTime); }
-function useGo(e, i) { G.goUsed = G.goUsed || {}; G.goUsed[goUsedKey(e, i)] = G.gameTime + GO_RESPAWN; }
+/* c given (quest objects): the one another character just used is still there for this one - like the game, where
+   everyone in a group takes their own book from the shelf */
+function goFree(e, i, c) { const k = goUsedKey(e, i); return !(G.goUsed && G.goUsed[k] > G.gameTime) || !!(c && G.goBy && G.goBy[k] && !G.goBy[k].includes(c.id)); }
+function useGo(e, i, c) {
+  const k = goUsedKey(e, i); G.goUsed = G.goUsed || {}; G.goBy = G.goBy || {};
+  if (c && G.goUsed[k] > G.gameTime && G.goBy[k]) { G.goBy[k].push(c.id); return; }
+  G.goUsed[k] = G.gameTime + GO_RESPAWN; G.goBy[k] = c ? [c.id] : null;
+}
 /* gather: a herb or ore node - its own herb / ore (the sure drop) comes 1 to 3 at a time */
 function lootGo(c, e, gather) {
   const o = G.d.go && G.d.go.objects[e]; const rows = o && o[2] ? G.d.go.loot[o[2]] || [] : []; const got = [];
@@ -315,6 +321,7 @@ function lootGo(c, e, gather) {
     if (quest && !questNeeds(c, item)) continue;
     if (Math.random() * 100 >= pct) continue;
     const n = gather && pct >= 100 ? irnd(Math.max(1, mn), Math.max(3, mx)) : irnd(mn, mx);
+    if (quest || questNeeds(c, item)) roomForQuestItem(c, item);
     if (addItem(c, item, n)) { got.push((n > 1 ? n + ' x ' : '') + itemName(item)); if (quest || questNeeds(c, item)) onItemGained(c, item); if (G.q.startBy[item]) itemStartsQuest(c, item); }
   }
   if (got.length) log('Took from ' + objName(e) + ': ' + got.join(', ')); else log(objName(e) + ' was empty.');
@@ -358,7 +365,7 @@ function workObjective(c, q, i, o) {
   if (G.gameTime - o.progT > 720) { o.progT = G.gameTime; o.wt = null; return 'blocked'; }
   let t = o.wt && o.wt.q === q.id && o.wt.i === i ? o.wt : null;
   const valid = (x) => x && (x.kind === 'mob' ? x.m.st === 'alive' && (x.m.banUntil || 0) < G.gameTime :
-    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? (typeof repItemOk !== 'function' || repItemOk(c, ob.id)) && c.gold >= vendorPrice(c, ob.id, x.e) * Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / buyCount(ob.id)) : goFree(x.e, x.i));
+    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? (typeof repItemOk !== 'function' || repItemOk(c, ob.id)) && c.gold >= vendorPrice(c, ob.id, x.e) * Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / buyCount(ob.id)) : goFree(x.e, x.i, c) && !(o.goBan && o.goBan[x.e + ':' + x.i] > G.gameTime));
   if (!valid(t)) {
     t = null;
     const opts = objectiveOptions(c, q, i); let bs = 1e18; let home = null, hd = 1e18; let strong = 0, soft = 0;
@@ -392,7 +399,7 @@ function workObjective(c, q, i, o) {
       if (strong && !soft && !opts.some((x) => x.kind !== 'mob' && valid(x))) {
         o.strongLvl = Math.max(c.level + 1, strong); o.where = ob.name + ' is too strong (back at level ' + o.strongLvl + ')'; return 'strong';
       }
-      o.where = ob.name + (opts.some((x) => x.kind === 'mob' && x.m.st === 'alive') ? ' (waiting for a safe moment)' : ' (waiting for respawn)');
+      o.where = ob.name + (opts.some((x) => x.kind === 'mob' && x.m.st === 'alive') || opts.some((x) => x.kind === 'go' && o.goBan && o.goBan[x.e + ':' + x.i] > G.gameTime) ? ' (waiting for a safe moment)' : ' (waiting for respawn)');
       if (home && Math.hypot(home.x - c.pos.x, home.y - c.pos.y) > 12) { goTo(c, home.x, home.y, 8); if (r.blocked) { r.blocked = false; return 'blocked'; } }
       return home ? 'busy' : 'none';
     }
@@ -413,11 +420,11 @@ function workObjective(c, q, i, o) {
   }
   const tx = t.kind === 'npc' ? t.m.x : t.x, ty = t.kind === 'npc' ? t.m.y : t.y;
   const arrived = goTo(c, tx, ty, 3);
-  if (!arrived) { if (r.blocked) { r.blocked = false; o.wt = null; if (t.m) t.m.banUntil = G.gameTime + 120; else useGo(t.e, t.i); } return 'busy'; }
+  if (!arrived) { if (r.blocked) { r.blocked = false; o.wt = null; if (t.m) t.m.banUntil = G.gameTime + 120; else { o.goBan = o.goBan || {}; o.goBan[t.e + ':' + t.i] = G.gameTime + 60; } } return 'busy'; }
   const label = t.kind === 'npc' ? 'Using ' + (q.start_item ? itemName(q.start_item) + ' on ' : 'on ') + (t.m.info ? t.m.info[1] : ob.name) : 'Using ' + objName(t.e);
   startInteract(c, label, () => {
     if (t.kind === 'npc') { t.m.usedUntil = G.gameTime + NPC_REUSE; credit(c, q, i); }
-    else { useGo(t.e, t.i); if (ob.type === 'Collect') lootGo(c, t.e); else credit(c, q, i); }
+    else { useGo(t.e, t.i, c); if (ob.type === 'Collect') lootGo(c, t.e); else credit(c, q, i); }
     o.wt = null;
   });
   return 'busy';
@@ -488,7 +495,15 @@ function questStep(c, q, o) {
   for (let i = 0; i < q.objectives.length; i++) {
     if (gObjDone(c, q, i)) continue;
     // done myself, the group not yet: kills and drops - keep going (they count for them too); their own objects - wait for them
-    if (objDone(c, q, i) && ownHandsObjective(q, i, c)) { o.phase = q.title; o.wobj = [q.id, i]; o.where = 'waiting for the group: ' + q.objectives[i].name; rt(c).mv = null; return 'busy'; }
+    if (objDone(c, q, i) && ownHandsObjective(q, i, c)) {
+      o.phase = q.title; o.wobj = [q.id, i]; o.where = 'waiting for the group: ' + q.objectives[i].name;
+      // stay by the thing they need (the object, the one to use the item on), so they do it with the group around them
+      const m = questGroup(c).find((x) => x.quests[q.id] && !objDone(x, q, i)); let best = null, bd = 1e9;
+      if (m) for (const x of objectiveOptions(m, q, i)) { const xx = x.m ? x.m.x : x.x, yy = x.m ? x.m.y : x.y; const d = Math.hypot(xx - c.pos.x, yy - c.pos.y); if (d < bd) { bd = d; best = { x: xx, y: yy }; } }
+      if (best && bd > 30) { goTo(c, best.x, best.y, 12); if (r.blocked) { r.blocked = false; return '!Cannot reach ' + q.objectives[i].name + ' safely.'; } }
+      else rt(c).mv = null;
+      return 'busy';
+    }
     const f = feederQuest(c, q, i, o); if (f) return { feeder: f };
     const dq = questDungeon(q); if (dq && c.pos.map !== dq.map && !objectiveOptions(c, q, i).length) return { dungeon: dq };
     o.phase = q.title;

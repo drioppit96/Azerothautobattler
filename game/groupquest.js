@@ -39,7 +39,7 @@ function groupQuestText(c, q) {
 }
 /* fights the character takes on because a group is with it */
 function groupFights(c, m) {
-  const p = rt(c).party; if (!p || p.length < 2 || (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) return false;
+  if (fightersWith(c) < 2 || (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) return false;
   return m.lvl <= c.level + (m.rank === 3 ? 1 : 3);
 }
 /* hostile elites close by (the group quest's area) */
@@ -60,7 +60,9 @@ function groupQuestReady(c, q, o) {
   if (!o.lfg || o.lfg.q !== q.id) { o.lfg = { q: q.id, t: G.gameTime }; log('"' + q.title + '" is a group quest - looking for a group of ' + need + '.'); }
   o.where = 'looking for a group (' + need + ' players) for "' + q.title + '"'; r.mv = null;
   if (G.gameTime - o.lfg.t < GQ_LFG_TIME) return false;
-  o.lfg = null; gqHire(c, q, hire + 1);
+  // the group's size in all (partyPlan leaves out the roles of the own characters in the group, near or not)
+  const g = typeof groupOf === 'function' ? groupOf(c) : null;
+  o.lfg = null; gqHire(c, q, g ? need + Math.max(0, g.members.length - 1 - own) : hire + 1);
   return true;
 }
 function gqHire(c, q, players) {

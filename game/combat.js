@@ -97,10 +97,18 @@ function aggroRadius(m, c) {
   if (c.pos && typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) return clamp(m.aggro - clamp(c.level - m.lvl, -25, 25), 5, 45) * (typeof masteryAggro === 'function' ? masteryAggro(c) : 1);
   return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_SCALE * (c.pos && typeof masteryAggro === 'function' ? masteryAggro(c) : 1), 4, 40);
 }
+/* how many fight alongside c out in the world: its hired group, its own characters grouped with it close by and their
+   hired group (a member of a group whose leader hired mercenaries is as safe as the leader). Counted once per tick. */
+function fightersWith(c) {
+  const r = rt(c); if (r.fwT === G.gameTime) return r.fwN;
+  let n = r.party ? r.party.filter((u) => !u.dead).length : 0;
+  if (typeof groupNear === 'function' && G.state && G.state.groups && G.state.groups.length) for (const o of groupNear(c, 60)) { n++; const op = rt(o).party; if (op) n += op.filter((u) => !u.dead).length; }
+  r.fwT = G.gameTime; r.fwN = n; return n;
+}
 function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
 function dangerous(m, c) {
   if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) return m.lvl - c.level >= (rt(c).party ? 8 : 5);      // dungeons are full of elites: only run from the far too strong
-  const p = rt(c).party; if (p && p.length >= 2) return m.lvl - c.level >= (m.rank === 3 ? 2 : p.length >= 3 ? 4 : 3);     // a group out in the world (group quests): elites of about the level are fine
+  const n = fightersWith(c); if (n >= 2) return m.lvl - c.level >= (m.rank === 3 ? 2 : n >= 3 ? 4 : 3);     // a group out in the world (group quests): elites of about the level are fine
   return effLevel(m) - c.level >= 4;
 }
 /* a creature some race is friendly with: a town guard or citizen of the other faction (not for grinding) */
@@ -210,6 +218,7 @@ function lootMob(c, m, questOnly, roll) {
     if (questOnly && !questNeeds(c, item)) continue;              // a group member: only its own quest drops
     if (roll && !quest && !questNeeds(c, item) && itemQuality(item) >= LOOT_ROLL_Q && roll.chars.length + roll.comps.length > 1) { rolls.push([item, n]); continue; }
     if (G.q.startBy[item] && (bagCount(c, item) || G.q.startBy[item].every((q) => c.done[q.id] || c.quests[q.id]))) continue;   // one quest starter is enough
+    if (quest || questNeeds(c, item)) roomForQuestItem(c, item);
     const before = c.bags.length;
     if (addItem(c, item, n)) {
       const inst = c.bags.length > before ? c.bags[c.bags.length - 1] : null;

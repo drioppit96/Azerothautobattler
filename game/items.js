@@ -83,6 +83,16 @@ function normInst(x) { if (x == null) return null; if (typeof x === 'number') re
 function bagCapacity(c) { let n = BACKPACK; for (const b of c.bagSlots || []) if (b) n += (itemRow(b.id) || {}).cs || 0; return n; }
 function bagCount(c, id) { let n = 0; for (const s of c.bags) if (s.id === id) n += s.n; return n; }
 function bagFree(c) { return bagCapacity(c) - c.bags.length; }
+/* full bags and a quest item to take: throw away the cheapest junk to make room (a player would do the same) */
+function roomForQuestItem(c, id) {
+  if (bagFree(c) > 0) return true;
+  const st = itemStack(id); if (st > 1 && c.bags.some((s) => s.id === id && s.n < st)) return true;
+  let k = -1, v = Infinity;
+  c.bags.forEach((s, i) => { if (!isJunk(c, s.id)) return; const val = itemSell(s.id) * (s.n || 1); if (val < v) { v = val; k = i; } });
+  if (k < 0) return false;
+  const s = c.bags.splice(k, 1)[0]; log('Threw away ' + itemName(s.id) + ' to make room for ' + itemName(id) + '.'); rt(c).bagFull = false;
+  return true;
+}
 /* add n of an item (optionally a prepared instance); returns true when everything fitted */
 function addItem(c, id, n, inst) {
   n = n || 1; const st = itemStack(id);

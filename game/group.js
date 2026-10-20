@@ -187,6 +187,10 @@ function memberQuestWork(c, L, o, dt) {
   const lo = L.order; const w = lo && lo.wobj; if (!w) return false;
   const q = G.q.byId[w[0]]; const i = w[1]; if (!q || !c.quests[q.id] || objDone(c, q, i) || !ownHandsObjective(q, i, c)) return false;
   if ((rt(L).threats || []).length) return false;
+  // only what is close to the leader: the group is there to keep it safe (going off alone among elites it gets stuck,
+  // and the leader waits for it to catch up)
+  let near = false; for (const x of objectiveOptions(c, q, i)) { const xx = x.m ? x.m.x : x.x, yy = x.m ? x.m.y : x.y; if (Math.hypot(xx - L.pos.x, yy - L.pos.y) <= 45) { near = true; break; } }
+  if (!near) return false;
   o.qw = o.qw || {}; const st = workObjective(c, q, i, o.qw);
   o.where = 'doing my part: ' + (o.qw.where || q.objectives[i].name);
   return st === 'busy';
