@@ -371,7 +371,25 @@ function nearestGraveyard(c) {
   return best;
 }
 function charDie(c, killer) {
-  const r = rt(c);
+  const r = rt(c); if (r.ghost) return;              // already dead
+  // in a dungeon with your own group: one who dies lies where it fell; when the fight is over a groupmate brings it
+  // back (like a healer's resurrection). Only when the last one falls is it a wipe: everyone back from the graveyard.
+  const grp = typeof groupOf === 'function' ? groupOf(c) : null;
+  if (grp && !G.dgWipe && typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) {
+    const alive = groupChars(grp).filter((o) => o !== c && o.pos.map === c.pos.map && !rt(o).ghost && o.hp > 0);
+    if (alive.length) {
+      log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + ' - lies there until the fight is over.');
+      fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30'); masteryDeath(c); durabilityLoss(c, 0.1);
+      const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) { const n = m.cThr && typeof mobRetarget === 'function' ? mobRetarget(m, W) : null; if (n) m.tgt = n; else evade(W, m); }
+      c.hp = 0; r.ghost = { inPlace: true, t: G.gameTime, corpse: { map: c.pos.map, x: c.pos.x, y: c.pos.y } };
+      r.cast = null; r.drinking = null; r.eating = null; r.absorb = null; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; r.mv = null; r.resting = false; c.form = null; c.energy = 0; c.rage = 0;
+      if (c.pet && c.pet.kind !== 'hunter') c.pet = null;
+      save(); renderOrder(); return;
+    }
+    // the last one: the ones lying in there go back with it
+    const lying = groupChars(grp).filter((o) => o !== c && rt(o).ghost && rt(o).ghost.inPlace);
+    if (lying.length) { log('The group wiped.'); G.dgWipe = true; try { for (const o of lying) { rt(o).ghost = null; o.hp = 0; withLog(o, () => charDie(o, null)); } } finally { G.dgWipe = false; } }
+  }
   const dgDeath = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && dungeonDeath(c);     // inside: the body is back at the entrance
   const corpse = { map: c.pos.map, x: c.pos.x, y: c.pos.y };
   if (!dgDeath) masteryDeath(c);
@@ -433,6 +451,7 @@ function revive(c, how) {
 }
 function ghostStep(c, dt) {
   const gh = rt(c).ghost; let left = charSpeed(c) * 1.25 * dt;
+  if (gh.inPlace) { inPlaceDeadStep(c, gh, dt); return; }
   if (!gh.spot) {
     const dc = Math.hypot(gh.corpse.x - c.pos.x, gh.corpse.y - c.pos.y);
     if (dc < 40) {
@@ -454,6 +473,18 @@ function ghostStep(c, dt) {
     if (!gh.spot) { gh.spot = safeSpot(c, gh.corpse.x, gh.corpse.y); if (gh.spot) { gh.path = [{ x: c.pos.x, y: c.pos.y }, gh.spot]; gh.idx = 1; return; } gh.wait = (gh.wait || 0) + dt; if (gh.wait > 20) { const gy = nearestGraveyard(c); if (gy) { c.pos.x = gy[3]; c.pos.y = gy[4]; } revive(c, 'spirit'); } return; }
     revive(c);
   }
+}
+/* dead on the spot in a dungeon (charDie): back on its feet a few seconds after the group's fight is over */
+function inPlaceDeadStep(c, gh, dt) {
+  const r = rt(c); const g = typeof groupOf === 'function' ? groupOf(c) : null;
+  const near = g ? groupChars(g).filter((o) => o !== c && o.pos.map === c.pos.map && !rt(o).ghost && o.hp > 0) : [];
+  if (!near.length) { r.ghost = null; c.hp = 0; G.dgWipe = true; try { charDie(c, null); } finally { G.dgWipe = false; } return; }            // nobody left to help: back from the graveyard
+  if (near.some((o) => (rt(o).threats || []).length)) { gh.calm = 0; return; }
+  gh.calm = (gh.calm || 0) + dt; if (gh.calm < 4) return;
+  const h = near.find((o) => typeof grpRole === 'function' && grpRole(o) === 'healer') || near[0];
+  const s = charStats(c); r.ghost = null; c.hp = Math.round(s.maxHp * 0.4); if (usesMana(c) && s.maxMana) c.mana = Math.max(c.mana || 0, Math.round(s.maxMana * 0.4));
+  r.resting = true; fx(c.pos.x, c.pos.y, 'Resurrected', '#9fe0ff'); log(h.name + ' brings ' + c.name + ' back to life.');
+  save(); renderOrder();
 }
 function resumeOrder(c, o) {
   if (o.type === 'travel') orderTravel(c, o.target, o.label);
