@@ -73,7 +73,7 @@ function ufFillChar(me, c) {
   ufSet(me, 'pw', pt + ':' + pv + '/' + pm, () => { me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv; });
   const cpn = r.cpTgt && r.cpTgt.st !== 'dead' ? r.cp || 0 : 0;
   ufSet(me, 'cp', cpn, (v) => { me._cp = me._cp || (() => { const d = document.createElement('div'); d.className = 'ufcp'; me.appendChild(d); return d; })(); me._cp.innerHTML = '<i class="on"></i>'.repeat(v) + (c.cls === 4 || c.form === 'cat' ? '<i></i>'.repeat(5 - v) : ''); });
-  const castOf = () => { const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null; return r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null) || (typeof wcBarOf === 'function' ? wcBarOf(c) : null) || ufSwingBar(c); };
+  const castOf = () => { const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null; return r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null) || (typeof wcBarOf === 'function' ? wcBarOf(c) : null) || (me._hud ? hudSwingBar(c) : ufSwingBar(c)); };
   ufCastBar(me, castOf(), castOf);
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufAuras(me, me._hud ? [] : ufPlayerAuras(c, r));
@@ -113,10 +113,10 @@ function ufCastBar(me, cb, get) {
   ufSet(me, 'cast', cb ? cb.name : '', () => {
     if (!me._cb) {
       const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); me._cb = d;
-      if (me.classList.contains('ufmate') || me.classList.contains('ufenemy')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
+      if ((me.classList.contains('ufmate') || me.classList.contains('ufenemy')) && !me._under) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
     }
     me._cb.hidden = !cb; if (cb) me._cb.lastChild.textContent = cb.name; me._cb.classList.toggle('swing', !!(cb && cb.swing));
-    if (me._hud) ufCastIcon(me, cb);
+    if (me._hudIcon) ufCastIcon(me, cb);
   });
   if (cb && me._cb) ufCastWidth(me, cb);
 }
@@ -130,7 +130,7 @@ function animateCastBars() {
     if (!el._cb || el._cb.hidden || !el._cbGet || el.style.display === 'none') continue;
     const k = el._cbGet();
     if (!k) { el._cb.hidden = true; el._vcast = ''; continue; }
-    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; el._cb.classList.toggle('swing', !!k.swing); if (el._hud) ufCastIcon(el, k); }
+    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; el._cb.classList.toggle('swing', !!k.swing); if (el._hudIcon) ufCastIcon(el, k); }
     ufCastWidth(el, k, extra);
   }
 }
@@ -150,7 +150,7 @@ function ufFillMob(e, m, c, isTgt, noAuras) {
   const hpPct = Math.max(0, Math.round(100 * m.hp / m.maxhp));
   ufSet(e, 'hp', hpPct, (v) => { e._hpi.style.width = v + '%'; e._hpt.textContent = v + '%'; });
   ufSet(e, 'tgt', isTgt, (v) => e.classList.toggle('target', v));
-  const mc = () => (m.cast && m.cast.u ? { name: m.cast.u.sp.n, t: m.cast.t, total: m.cast.total } : null);
+  const mc = () => (m.cast && m.cast.u ? { name: m.cast.u.sp.n, t: m.cast.t, total: m.cast.total } : e._under ? mobSwingBar(m) : null);
   ufCastBar(e, mc(), mc);       // what it is casting
   ufAuras(e, noAuras ? [] : ufMobAuras(m));
 }
@@ -324,7 +324,7 @@ function renderMapHud() {
   if (L._s !== sp) { L.innerHTML = ''; R.innerHTML = ''; L._s = R._s = sp; for (const k of ['_me', '_pet', '_tg']) { L[k] = null; R[k] = null; } R._sm = []; }
   // the character: at the bottom, the cast bar under it
   const me = hudFrame(L, '_me', () => { const f = ufMake(sp, true); f.classList.add('ufplayer'); f.onclick = (e) => { if (e.target.closest('.ufpor')) openCharSwitch(); else openSheet('char'); }; return f; });
-  me._hudC = c; ufFillChar(me, c);
+  me._hudC = c; me._hudIcon = true; ufFillChar(me, c);
   const meH = UF.h * sp, castH = 20;
   let yl = 0;
   // the pet: small, above the character
@@ -344,8 +344,32 @@ function renderMapHud() {
     const m = others[others.length - 1 - i]; f.style.display = m ? '' : 'none'; f._mob = m || null; if (!m) return;
     f.style.top = Math.round(yr) + 'px'; f._hudC = c; ufFillMob(f, m, c, false, true); yr += smH;
   });
-  const big = hudFrame(R, '_tg', () => { const f = ufMake(sp, false); f.classList.add('ufenemy'); f.onclick = () => { if (f._mob) { G.selected = { kind: 'mob', mob: f._mob }; renderInfo(G.selected); } }; return f; });
+  const big = hudFrame(R, '_tg', () => { const f = ufMake(sp, false); f.classList.add('ufenemy'); f._under = true; f.onclick = () => { if (f._mob) { G.selected = { kind: 'mob', mob: f._mob }; renderInfo(G.selected); } }; return f; });
   big.style.display = tg ? '' : 'none'; big._mob = tg;
   if (tg) { big.style.top = Math.round(yr) + 'px'; big._hudC = c; ufFillMob(big, tg, c, true); yr += UF.h * sp + castH; }
   R.style.height = Math.ceil(yr) + 'px'; R.style.display = tg ? '' : 'none';
+}
+
+/* the Android frames: when nothing is cast, the bar is the attack timer - the swing of the weapon in melee, Auto Shot
+   (or the wand) at range - with the weapon's icon */
+function hudSwingBar(c) {
+  const r = rt(c); if (!r.threats || !r.threats.length || r.ghost) return null;
+  const m = r.tgt && r.tgt.st !== 'dead' ? r.tgt : null; const d = m ? Math.hypot(m.x - c.pos.x, m.y - c.pos.y) : 99; const s = charStats(c);
+  const w = typeof rangedWeapon === 'function' ? rangedWeapon(c) : null;
+  if (w && m && d > MELEE_RANGE + 1 && d <= 35) {
+    const shooting = w.wand ? (c.mana < s.maxMana * ((c.cfg && c.cfg.wandAt) || 25) / 100 || r.noSpell) : c.cls === 3;
+    if (shooting) { const sp = w.speed / (1 + (s.haste || 0) / 100); const left = Math.max(0, Math.min(sp, r.rangeT || 0)); const it = c.equip[17] && itemRow(c.equip[17].id);
+      return { name: w.wand ? 'Shoot' : 'Auto Shot', t: sp - left, total: sp, swing: true, ic: it && it.ic }; }
+  }
+  if (!m || d > MELEE_RANGE + 1.5) return null;
+  const sp = s.mh && s.mh.speed ? s.mh.speed / (1 + (s.haste || 0) / 100) : 2; const left = Math.max(0, Math.min(sp, r.swingT || 0));
+  const mh = c.equip[15] && itemRow(c.equip[15].id);
+  return { name: 'Auto Attack', t: sp - left, total: sp, swing: true, ic: (mh && mh.ic) || 'inv_gauntlets_04' };
+}
+/* a creature's attack timer (the big frame of the target, when it is not casting) */
+function mobSwingBar(m) {
+  if (m.st !== 'chase' || !m.tgt || !m.atk) return null; const t = m.tgt.pos || m.tgt;
+  if (Math.hypot(t.x - m.x, t.y - m.y) > MELEE_RANGE + 1.5) return null;
+  const total = m.atk; const left = Math.max(0, Math.min(total, m.swing || 0));
+  return { name: 'Attack', t: total - left, total, swing: true };
 }

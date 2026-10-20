@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 o (combat effects, zoomed-in tokens)';
+const GAME_VERSION = '2026-10-21 p (melee spread out, app attack bars)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -654,13 +654,14 @@ function draw() {
   if ($('showmobs').checked && (!m.cont || G.scale > 1.6)) {
     const r = Math.max(2, Math.min(5, G.scale * 1.6));
     const tok = vfxTokenMode(m) ? Math.max(8, Math.min(16, vfxPpy(m) * 5)) : 0; const pad = tok ? tok + 12 : 12;
+    vfxLayout(m, tok ? tok + 2 : r + 3);          // units in melee pushed apart where they are drawn
     for (const mob of G.mobs) {
       const [x, y] = w2s(mob.x, mob.y);
       if (x < -pad || y < -pad || x > G.cw + pad || y > G.ch + pad) continue;
       vfxDrawMob(ctx, mob, x, y, r, tok);
     }
     ctx.globalAlpha = 1;
-  }
+  } else VFX.lay = null;
   // graveyards / flight masters
   ctx.font = '11px Segoe UI';
   for (const gy of G.d.graveyards) {

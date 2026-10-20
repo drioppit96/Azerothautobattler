@@ -63,6 +63,7 @@ function vfxSpell(c, m, sp, text, crit) {
 /* where to draw a unit (lunge / knockback added), in screen pixels */
 function vfxOff(e, sx, sy) {
   const now = vnow(); let ox = 0, oy = 0;
+  const lay = VFX.lay && VFX.lay.get(e); if (lay) { ox += lay[0]; oy += lay[1]; }          // pushed apart from what it stands on (vfxLayout)
   const L = e._ln; if (L) { const p = (now - L.t) / 180; if (p >= 1) e._ln = null; else { const [tx, ty] = w2s(L.x, L.y); const dx = tx - sx, dy = ty - sy, n = Math.hypot(dx, dy) || 1; const k = Math.sin(Math.PI * p) * Math.min(6, n * 0.45); ox += dx / n * k; oy += dy / n * k; } }
   const K = e._kb; if (K) { const p = (now - K.t) / 160; if (p >= 1) e._kb = null; else { const [tx, ty] = w2s(K.x, K.y); const dx = sx - tx, dy = sy - ty, n = Math.hypot(dx, dy) || 1; const k = Math.sin(Math.PI * Math.min(1, p * 1.4)) * 3; ox += dx / n * k; oy += dy / n * k; } }
   return [sx + ox, sy + oy];
@@ -108,13 +109,15 @@ function vfxDrawMob(ctx, mob, sx, sy, r, token) {
     const R = token; const px = Math.round(R * 2 * (G.dpr || 1)); const im = vfxRound(mobTokenSrc(mob), px);
     ctx.fillStyle = '#120e08'; ctx.beginPath(); ctx.arc(x, y, R + 1, 0, 6.3); ctx.fill();
     if (im) ctx.drawImage(im, x - R, y - R, R * 2, R * 2);
-    ctx.lineWidth = chase ? 2.5 : 2; ctx.strokeStyle = BEH_COLORS[mob.beh] || '#888'; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.3); ctx.stroke();
+    if (chase) { ctx.lineWidth = 5; ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, R + 0.5, 0, 6.3); ctx.stroke(); }          // in a fight: a dark edge so the rings stand apart
+    ctx.lineWidth = chase ? 3 : 2; ctx.strokeStyle = BEH_COLORS[mob.beh] || '#888'; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.3); ctx.stroke();
     if (mob.rank && mob.beh !== 'F') { ctx.strokeStyle = mob.rank === 2 || mob.rank === 4 ? '#e4e8f0' : '#ffc93a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, R + 2.5, 0, 6.3); ctx.stroke(); }
     if (fl) { ctx.globalAlpha = fl * 0.6; ctx.fillStyle = '#ff2a1a'; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1; }
     if (chase || mob.hp < mob.maxhp) vfxHpBar(ctx, x, y + R + 3, R * 2, mob.hp / mob.maxhp);
   } else {
     ctx.fillStyle = BEH_COLORS[mob.beh] || '#888'; ctx.globalAlpha = chase ? 1 : .85;
     ctx.beginPath(); ctx.arc(x, y, chase ? r + 1.5 : r, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
+    if (chase) { ctx.lineWidth = 1.5; ctx.strokeStyle = '#000'; ctx.stroke(); }
     if (fl) { ctx.globalAlpha = fl; ctx.fillStyle = '#ff2a1a'; ctx.beginPath(); ctx.arc(x, y, (chase ? r + 1.5 : r) + 1.5 * fl, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1; }
     if (mob.rank && mob.beh !== 'F') drawRankRing(ctx, mob.rank, x, y, chase ? r + 1.5 : r);
     if (chase || (mob.hp < mob.maxhp && mob.st !== 'alive')) vfxHpBar(ctx, x, y - r - 7, 20, mob.hp / mob.maxhp);
@@ -171,4 +174,33 @@ function vfxText(ctx, f, x, y) {
     ctx.strokeText(f.text, x, y); ctx.fillText(f.text, x, y); ctx.restore(); return;
   }
   ctx.strokeText(f.text, x, y); ctx.fillText(f.text, x, y);
+}
+
+/* -------------------------------------------------------------------- melee: not on top of each other
+   Units in a fight that overlap on the screen are pushed apart a little where they are drawn (only drawn: their
+   real positions do not change). The character the camera follows stays put; the others move. */
+function vfxLayout(m, mobR) {
+  const c = active(); const items = [];
+  const add = (ref, wx, wy, R, fixed, fight) => { const [x, y] = w2s(wx, wy); if (x < -40 || y < -40 || x > G.cw + 40 || y > G.ch + 40) return; items.push({ ref, x, y, R, fixed, fight, dx: 0, dy: 0 }); };
+  if (c && c.pos.map === m.map && !rt(c).ghost) add(c, c.pos.x, c.pos.y, 10, true, true);
+  for (const o of G.state.characters) if (o !== c && o.pos.map === m.map && !(o.rt && o.rt.ghost)) add(o, o.pos.x, o.pos.y, 8, false, !!(o.rt && o.rt.threats && o.rt.threats.length));
+  const p = typeof partyOf === 'function' && c ? partyOf(c) : null; if (p && c.pos.map === m.map) for (const u of p) if (!u.dead) add(u, u.x, u.y, 7, false, true);
+  if (c && typeof petAlive === 'function' && petAlive(c) && c.pos.map === m.map && rt(c).pet) { const P = rt(c).pet; add(P, P.x, P.y, 7, false, true); }
+  if ($('showmobs').checked) for (const mob of G.mobs) if (mob.st === 'chase') add(mob, mob.x, mob.y, mobR, false, true);
+  if (items.length < 2) { VFX.lay = null; return; }
+  for (let it = 0; it < 4; it++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+      const a = items[i], b = items[j]; if (a.fixed && b.fixed) continue;
+      let dx = (b.x + b.dx) - (a.x + a.dx), dy = (b.y + b.dy) - (a.y + a.dy); let d = Math.hypot(dx, dy); const need = (a.R + b.R) * 0.92;
+      if (d >= need) continue;
+      if (d < 0.01) { const ang = (i * 2.39996 + j * 1.3) % 6.283; dx = Math.cos(ang); dy = Math.sin(ang); d = 0.01; } else { dx /= d; dy /= d; }
+      const push = need - d; const wa = a.fixed ? 0 : b.fixed ? 1 : 0.5, wb = 1 - wa;
+      a.dx -= dx * push * wa; a.dy -= dy * push * wa; b.dx += dx * push * wb; b.dy += dy * push * wb; moved = true;
+    }
+    if (!moved) break;
+  }
+  const lay = new Map();
+  for (const t of items) { const L = Math.hypot(t.dx, t.dy); if (L < 0.3) continue; const k = Math.min(1, t.R * 2.2 / L); lay.set(t.ref, [t.dx * k, t.dy * k]); }
+  VFX.lay = lay.size ? lay : null;
 }

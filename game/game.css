@@ -682,3 +682,6 @@ html.app #mhudL .ufpet{left:4px}html.app #mhudL .ufpet .ufcast{display:none}
 /* the map buttons go to the top right, the zone name to the top left (the frames are at the bottom) */
 html.app #mapctl{top:10px!important;transform:none!important}
 html.app #hud{bottom:auto;top:6px}
+
+/* the Android frames: the target's cast / attack bar under its frame, no icon */
+.uf.hud.ufenemy .ufcast:not(.onname){left:5%;right:31%;bottom:-17px;height:13px}
