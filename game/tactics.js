@@ -143,6 +143,9 @@ function tacFight(c, tgt) {
   if (c.cfg.tac && c.cfg.tac.on === false) return;            // tactics disabled: only the behavior (auto attack)
   const s = charStats(c); const att = attackersOf(c);
   const x = { c, r, tgt, att, self: c, hpPct: c.hp / s.maxHp * 100, mpPct: usesMana(c) && s.maxMana ? c.mana / s.maxMana * 100 : c.cls === 4 || (c.cls === 11 && c.form === 'cat') ? (c.energy || 0) : 100, allies: null };
+  // low on mana with a wand (the "Shoot the wand below mana" setting): only heals, survival and interrupts - the wand does the damage
+  const rw = c.cls !== 1 && typeof rangedWeapon === 'function' ? rangedWeapon(c) : null;
+  const wandMode = !!(rw && rw.wand && usesMana(c) && x.mpPct < (c.cfg.wandAt == null ? 20 : c.cfg.wandAt));
   const slots = tacSlots(c); let fumbled = false; let wanted = false; let guard = 0;
   for (let i = 0; i < slots.length && guard++ < 120; i++) {
     const sl = slots[i]; if (!sl || sl.off || !sl.a) continue;
@@ -150,6 +153,7 @@ function tacFight(c, tgt) {
     if (cd.g === 'Ally' && !x.allies) x.allies = tacAllies(c);
     // the ability of the slot (its own buff / debuff is what the condition asks about)
     let sp = null; x.n = null; x.sp = null;
+    if (wandMode && sl.a[0] !== '#' && sl.a[0] !== '>' && !/^(self\.hp|self\.sur|self\.att|self\.melee|enemy\.cast|enemy\.loose|ally\.|self\.disp|self\.nobuff)/.test(sl.c) && tacOffensive(c, sl.a)) continue;
     if (sl.a[0] !== '#' && sl.a[0] !== '>') { const u = abilityUsable(c, sl.a); if (!u.ok) { if (c.cls === 11 && c.form && u.why && /not in/.test(u.why) && cd.g !== 'Enemy' && tacHealish(sl.a)) { leaveForm(c); } continue; } sp = u.sp; x.n = sl.a; x.sp = sp; }
     if (cd.g === 'Ally' && !x.allies) x.allies = tacAllies(c);
     const who = cd.f(x, sl.p != null ? sl.p : cd.p); if (!who) continue;
@@ -165,8 +169,9 @@ function tacFight(c, tgt) {
     if (res === 'wait') wanted = true;
     if (res === 'fumble' && !fumbled) { fumbled = true; continue; }
   }
-  if (c.cls !== 1 && r.gcdUntil <= G.gameTime) r.noSpell = wanted || !usesMana(c) || c.mana < s.maxMana * 0.1;
+  if (c.cls !== 1 && r.gcdUntil <= G.gameTime) r.noSpell = wandMode || wanted || !usesMana(c) || c.mana < s.maxMana * 0.1;
 }
+function tacOffensive(c, n) { const id = c.known && c.known[n]; const sp = id ? spellRow(id) : null; return !!(sp && (sp.ef || []).some((e) => e.k === 'enemy' || e.k === 'area_enemy')); }
 function tacHealish(n) { return /Heal|Regrowth|Rejuvenation|Touch|Tranquility|Barkskin|Innervate|Remove Curse|Abolish|Cure/.test(n); }
 /* use ability n (spell sp) on the condition's subject: 'done' | 'queued' | 'wait' (wanted, not ready) | 'fumble' | null */
 function tacUse(c, x, n, sp, who, g) {

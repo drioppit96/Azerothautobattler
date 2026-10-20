@@ -461,6 +461,24 @@ function leaveDungeon(c, msg) {
   if (isActive(c) && $('follow').checked) goToCharacter();
   save(); renderOrder();
 }
+/* the Quests card button: everyone of the group out of the dungeon at once (to the entrance outside) and the dungeon
+   reset - every creature back, as a new instance */
+function dungeonResetOut(c) {
+  const g = typeof groupOf === 'function' ? groupOf(c) : null; const L = g ? groupLeader(g) || c : c;
+  const d = dungeonByMap(L.pos.map) || dungeonByMap(c.pos.map); if (!d) return false;
+  const who = g ? groupChars(g).filter((m) => m.pos.map === d.map) : [c]; if (!who.includes(c) && c.pos.map === d.map) who.push(c);
+  const W = G.world[d.map]; if (W) for (const m of W.active) evade(W, m);
+  for (const m of who) {
+    const r = rt(m); if (r.ghost) { r.ghost = null; m.hp = Math.max(1, Math.round(charStats(m).maxHp * 0.5)); }
+    r.cast = null; r.interact = null; r.resting = false; r.trail = null;
+    if (m.order && m.order.type === 'dungeon') withLog(m, () => leaveDungeon(m, 'Teleported out of ' + d.name + '.'));
+    else { if (d.entrance) m.pos = { map: d.entrance.map, x: d.entrance.x + (Math.random() - 0.5) * 4, y: d.entrance.y + (Math.random() - 0.5) * 4, z: 0, o: m.pos.o }; r.party = null; r.mv = null; r.tgt = null; r.threats = []; r.danger = []; if (m.order && m.order.type !== 'follow') m.order = null; }
+  }
+  if (W) { for (const m of W.list) { initMob(m); m.gThr = null; m.cThr = null; } W.dead = []; W.active.clear(); }
+  log(d.name + ' is reset - everyone is at the entrance outside.');
+  if (isActive(c) && $('follow').checked) goToCharacter();
+  save(); renderOrder(); return true;
+}
 /* walking out: to the nearest way out (or the one given), then out through the portal to the entrance */
 function dungeonNearestExit(c, d) {
   let best = null, bd = Infinity;
