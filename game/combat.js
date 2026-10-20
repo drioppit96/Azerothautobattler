@@ -41,18 +41,50 @@ function ensureWorld(mapId) {
   if (G.world[mapId]) return G.world[mapId];
   if (typeof loadGrid === 'function') loadGrid(mapId);
   const list = [], grid = new Map(), W = { id: mapId, list, grid, active: new Set(), dead: [] };
-  for (const [e, lst] of G.spawnList) {
+  const dgMap = typeof isDungeonMap === 'function' && isDungeonMap(mapId);
+  for (const [e, lst0] of G.spawnList) {
     if (eventMob(e)) continue;
+    const h = G.d.hostility.creatures[e]; const rank = h ? h[6] : 0;
+    let lst = lst0.filter((s) => s[0] === mapId); if (!lst.length) continue;
+    // a rare (or rare elite) out in the world: ONE of it, at one of its spawn points, up only now and then (rarePool)
+    const pool = !dgMap && (rank === 2 || rank === 4) ? lst : null; if (pool) lst = [pool[(Math.random() * pool.length) | 0]];
     for (const s of lst) {
-      if (s[0] !== mapId) continue;
-      const m = { e, info: G.mobIdx[e] || null, hx: s[1], hy: s[2], z: s[3], rmin: s[7] || 300, rmax: s[8] || s[7] || 300 };
-      const h = G.d.hostility.creatures[e];
-      m.aggro = h && h[2] ? h[2] : 20; m.leash = h && h[3] ? h[3] : 45; m.help = h ? h[4] : 0; m.tmpl = h ? h[0] : 0; m.civ = h ? h[5] : 0; m.rank = h ? h[6] : 0;
+      const m = { e, wid: mapId, info: G.mobIdx[e] || null, hx: s[1], hy: s[2], z: s[3], rmin: s[7] || 300, rmax: s[8] || s[7] || 300 };
+      m.aggro = h && h[2] ? h[2] : 20; m.leash = h && h[3] ? h[3] : 45; m.help = h ? h[4] : 0; m.tmpl = h ? h[0] : 0; m.civ = h ? h[5] : 0; m.rank = rank;
       initMob(m); list.push(m);
       const k = gk(cell(m.hx), cell(m.hy)); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(m);
+      if (pool) rarePool(W, m, pool);
     }
   }
   G.world[mapId] = W; return W;
+}
+/* rare creatures: one at a time, at a random one of its spawn points, with its long respawn time (hours for most).
+   When the world is made, about 40% of them are up and the rest come some time later; the rares quests need
+   are always up at first and come back within 10 minutes. A dead rare is not shown on the map. */
+const RARE_UP = 0.4, RARE_QUEST_RESP = 600;
+function questMobs() {
+  if (G.questMobs) return G.questMobs;
+  const s = new Set(); if (!G.d.quests || !G.q || !G.q.itemSrc) return s;
+  for (const q of G.d.quests) for (const o of q.objectives || []) {
+    if (o.type === 'Kill' && o.id > 0) s.add(o.id);
+    else if (o.type === 'Collect') { const it = G.d.items.items[o.id]; if (it && it.c === 12) for (const [e, pc] of G.q.itemSrc[o.id] || []) if (pc >= 20) s.add(+e); }      // a quest item it surely drops
+  }
+  return (G.questMobs = s);
+}
+function rarePool(W, m, pool) {
+  m.pool = pool.map((s) => [s[1], s[2], s[3]]);
+  if (questMobs().has(m.e)) { m.rmin = Math.min(m.rmin, RARE_QUEST_RESP); m.rmax = Math.min(m.rmax, RARE_QUEST_RESP); return; }
+  if (Math.random() < RARE_UP) return;
+  m.st = 'dead'; m.hp = 0; m.deadAt = -1e9; m.respAt = G.gameTime + rnd(0.15, 1) * m.rmin; W.dead.push(m);
+}
+/* a rare comes back at another of its spawn points */
+function rareMove(W, m) {
+  if (!m.pool || m.pool.length < 2) return;
+  const p = m.pool[(Math.random() * m.pool.length) | 0];
+  const k0 = gk(cell(m.hx), cell(m.hy)); const a0 = W.grid.get(k0); if (a0) { const i = a0.indexOf(m); if (i >= 0) a0.splice(i, 1); }
+  m.hx = p[0]; m.hy = p[1]; m.z = p[2];
+  const k = gk(cell(m.hx), cell(m.hy)); let a = W.grid.get(k); if (!a) W.grid.set(k, a = []); a.push(m);
+  if (G.map && G.map.map === W.id && typeof buildMobsForMap === 'function') buildMobsForMap();       // the map shows it where it is now
 }
 function mobsNear(W, x, y, r, fn) {
   const c0 = cell(x - r), c1 = cell(x + r), r0 = cell(y - r), r1 = cell(y + r);
@@ -291,7 +323,7 @@ function worldTick(dt) {
     for (const m of W.active) mobTick(W, m, dt, now);
     if (W.dead.length && ((now * 4) | 0) % 4 === 0) {
       for (let i = W.dead.length - 1; i >= 0; i--) {
-        const m = W.dead[i]; if (now >= m.respAt) { W.dead.splice(i, 1); initMob(m); }
+        const m = W.dead[i]; if (now >= m.respAt) { W.dead.splice(i, 1); if (m.pool) rareMove(W, m); initMob(m); }
       }
     }
   }
@@ -299,8 +331,10 @@ function worldTick(dt) {
 
 /* ---------------------------------------------------------- kills / death */
 function killMob(c, m) {
-  const W = ensureWorld(c.pos.map);
-  const dg = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map);
+  // the creature's own world (a damage-over-time can finish it after the killer went elsewhere, into a dungeon even)
+  const wid = m.wid != null ? m.wid : c.pos.map; const W = ensureWorld(wid);
+  const dg = typeof isDungeonMap === 'function' && isDungeonMap(wid);
+  if (m.st === 'dead') return;
   m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = dg ? Infinity : G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime; W.active.delete(m); W.dead.push(m);
   const name = m.info ? m.info[1] : 'creature';
   if (dg) dungeonKill(c, m);
@@ -761,6 +795,39 @@ function updateGrind(c, o, dt) {
   if (st === 'gone') r.tgt = null;
 }
 
+/* ------------------------------------------------------------- kill order: one creature the player clicked */
+function orderKill(c, m) {
+  const name = m.info ? m.info[1] : 'creature';
+  c.order = { type: 'kill', label: name, e: m.e, wid: m.wid != null ? m.wid : c.pos.map, hx: m.hx, hy: m.hy, started: G.gameTime };
+  rt(c).killM = m; log('Order: kill ' + name + '.'); save(); renderOrder();
+}
+function killOrderMob(c, o) {
+  const r = rt(c); if (r.killM && r.killM.e === o.e) return r.killM;
+  const W = G.world[o.wid]; if (!W) return null;
+  return (r.killM = W.list.find((x) => x.e === o.e && x.hx === o.hx && x.hy === o.hy) || null);
+}
+function updateKill(c, o) {
+  const r = rt(c); const m = killOrderMob(c, o);
+  const end = (msg) => { if (msg) log(msg); r.killM = null; c.order = null; save(); renderOrder(); };
+  if (!m || c.pos.map !== o.wid) { end('The creature to kill is not here any more - order finished.'); return; }
+  if (m.st === 'dead') { end(o.hit || m.deadAt >= o.started ? null : o.label + ' is dead already.'); return; }
+  if (m.st === 'evade') { o.where = 'waiting - it is running back'; return; }
+  o.where = 'going for it';
+  const st = approach(c, m);
+  if (st === 'engaged') { o.hit = true; return; }
+  if (st !== 'gone') return;
+  // approach gave up on it (too strong, out of reach): the player said so - go anyway, unless there is no way there
+  m.banUntil = 0; r.tgt = m;
+  const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); const reach = c.cls === 1 ? MELEE_RANGE + 1 : Math.max(MELEE_RANGE + 1, combatRange(c, m) - 1);
+  if (d <= reach) { engage(m, c); o.hit = true; return; }
+  goTo(c, m.x, m.y, reach - 0.5, m.z);
+  if (r.blocked) { r.blocked = false; end('Cannot reach ' + o.label + ' - order finished.'); }
+}
+function killText(c, o) {
+  const m = killOrderMob(c, o);
+  return { t: 'Kill ' + o.label, d: m ? (m.st === 'chase' ? 'fighting it (' + Math.round(100 * m.hp / m.maxhp) + '%)' : (o.where || 'going for it') + ' - ' + Math.round(Math.hypot(m.x - c.pos.x, m.y - c.pos.y)) + ' yd') : '' };
+}
+
 /* ------------------------------------------------------------- char update */
 function updateChar(c, dt) {
   const r = rt(c);
@@ -775,7 +842,7 @@ function updateChar(c, dt) {
   const threats = typeof groupOf === 'function' && groupOf(c) ? groupThreats(c) : threatsOf(c); r.threats = threats;
   if (typeof meterTick === 'function' && isActive(c)) meterTick(c);
   if (threats.length && !r.inFight) { r.fightStart = G.gameTime; masteryFightRoll(c); } r.inFight = threats.length > 0;
-  const dg = threats.filter((m) => dangerous(m, c));
+  const dg = threats.filter((m) => dangerous(m, c) && !(r.killM && m === r.killM && c.order && c.order.type === 'kill'));      // the one the player ordered killed: no running away from it
   if (dg.length) { fleeStep(c, dt, dg); return; }
   if (c.pet || c.cls === 9) petStep(c, dt);
   if (r.party) { partyStep(c, dt); if (r.partyQ) groupQuestPartyStep(c, threats); }
@@ -823,6 +890,7 @@ function updateChar(c, dt) {
   else if (o.type === 'patrol') updatePatrol(c, o, dt);
   else if (o.type === 'dungeon') updateDungeon(c, o, dt);
   else if (o.type === 'farm') updateFarm(c, o, dt);
+  else if (o.type === 'kill') updateKill(c, o);
 }
 function replanTravel(c, o) {
   if (o.cross) return;

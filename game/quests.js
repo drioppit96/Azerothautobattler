@@ -361,25 +361,38 @@ function workObjective(c, q, i, o) {
     x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? (typeof repItemOk !== 'function' || repItemOk(c, ob.id)) && c.gold >= vendorPrice(c, ob.id, x.e) * Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / buyCount(ob.id)) : goFree(x.e, x.i));
   if (!valid(t)) {
     t = null;
-    const opts = objectiveOptions(c, q, i); let bs = 1e18; let home = null, hd = 1e18;
+    const opts = objectiveOptions(c, q, i); let bs = 1e18; let home = null, hd = 1e18; let strong = 0, soft = 0;
+    // a named creature with only one or two spawns (Serena Bloodfeather, Yarrog Baneshadow): one more level is allowed
+    const few = (x) => (ensureWorld(c.pos.map).byEntry || {})[x.m.e] && ensureWorld(c.pos.map).byEntry[x.m.e].length <= 2 ? 1 : 0;
     for (const x of opts) {
       const hx = x.m ? x.m.hx : x.x, hy = x.m ? x.m.hy : x.y; const dh = Math.hypot(hx - c.pos.x, hy - c.pos.y);
       if (dh < hd) { hd = dh; home = { x: hx, y: hy }; }
       if (!valid(x)) continue;
       if (x.kind === 'mob') {
-        if (!attackable(x.m, c) || dangerous(x.m, c) || x.m.lvl > c.level + (c.cfg.style === 'aggressive' ? 3 : c.cfg.style === 'safe' ? 1 : 2) + (groupFights(c, x.m) ? 1 : 0)) continue;
-        if (x.m.rank >= 1 && x.m.lvl > c.level - (x.m.rank === 1 ? 3 : 6) && !groupFights(c, x.m)) continue;      // elites only when well above them (or with a group)
+        if (!attackable(x.m, c)) continue;
+        const cap = (c.cfg.style === 'aggressive' ? 3 : c.cfg.style === 'safe' ? 1 : 2) + (groupFights(c, x.m) ? 1 : 0) + few(x);
+        const eGap = x.m.rank === 1 ? 3 : x.m.rank === 4 ? 2 : 6;          // elites only when well above them (or with a group), rares a little
+        const eliteOk = !(x.m.rank >= 1 && x.m.lvl > c.level - eGap && !groupFights(c, x.m));
+        if (dangerous(x.m, c) || x.m.lvl > c.level + cap || !eliteOk) {
+          // alive, but too strong for now: the level to come back at
+          const need = Math.max(x.m.lvl - cap, effLevel(x.m) - 3, eliteOk ? 0 : x.m.lvl + eGap);
+          if (!strong || need < strong) { strong = need; o.strongName = x.m.info ? x.m.info[1] + ' (level ' + x.m.lvl + ')' : ob.name; } continue;
+        }
         let blocked = false; for (const z of r.danger) if (!z.soft && Math.hypot(x.m.x - z.m.x, x.m.y - z.m.y) < z.R) { blocked = true; break; }
-        if (blocked) continue;
+        if (blocked) { soft++; continue; }
         const pack = packSize(ensureWorld(c.pos.map), x.m, c);
-        if (c.cfg.style === 'safe' && pack > 0 && (o.loneWait || 0) < 60) continue;
+        if (c.cfg.style === 'safe' && pack > 0 && (o.loneWait || 0) < 60) { soft++; continue; }
         const sc = (x.d + (c.cfg.style === 'aggressive' ? 0 : 40 * pack)) / (0.3 + x.w / 100);
         if (sc < bs) { bs = sc; t = x; }
       } else { const sc = x.d / (0.3 + x.w / 100); if (sc < bs) { bs = sc; t = x; } }
     }
     if (!t) {
       o.loneWait = (o.loneWait || 0) + 1;
-      o.where = ob.name + ' (waiting for respawn)';
+      // nothing to do but too strong ones (not dead ones): no point standing there - back to it at that level
+      if (strong && !soft && !opts.some((x) => x.kind !== 'mob' && valid(x))) {
+        o.strongLvl = Math.max(c.level + 1, strong); o.where = ob.name + ' is too strong (back at level ' + o.strongLvl + ')'; return 'strong';
+      }
+      o.where = ob.name + (opts.some((x) => x.kind === 'mob' && x.m.st === 'alive') ? ' (waiting for a safe moment)' : ' (waiting for respawn)');
       if (home && Math.hypot(home.x - c.pos.x, home.y - c.pos.y) > 12) { goTo(c, home.x, home.y, 8); if (r.blocked) { r.blocked = false; return 'blocked'; } }
       return home ? 'busy' : 'none';
     }
@@ -483,6 +496,7 @@ function questStep(c, q, o) {
     const st = workObjective(c, q, i, o);
     if (st === 'none') return '!No ' + q.objectives[i].name + ' on this map for "' + q.title + '".';
     if (st === 'blocked') return '!Cannot reach ' + q.objectives[i].name + ' safely.';
+    if (st === 'strong') { o.strongQ = q.id; return '!' + (o.strongName || q.objectives[i].name) + ' is too strong for now - "' + q.title + '" waits until level ' + o.strongLvl + '.'; }
     return 'busy';
   }
   const t = nearestOf(c, giverSpawns(q.turnin));
@@ -584,6 +598,7 @@ function updateQuesting(c, o, dt) {
       else if (res && res.feeder) { o.fq = res.feeder.id; o.wt = null; }
       else if (res && res.dungeon) { if (!questDungeonRun(c, res.dungeon, o, q)) { o.skip[q.id] = c.level; o.fq = null; o.wt = null; } }
       else if (typeof res === 'string' && res[0] === '!') {
+        if (o.strongQ === q.id) { o.strongQ = null; log(res.slice(1)); o.skip[q.id] = o.strongLvl - 1; o.fq = null; o.wt = null; return; }      // too strong: not given up, back at that level
         o.skipN = o.skipN || {}; o.skipN[q.id] = (o.skipN[q.id] || 0) + 1;
         if (o.skipN[q.id] >= 3 && c.quests[q.id] && !questDone(c, q)) { log(res.slice(1) + ' - giving up on it (abandoned).'); delete c.quests[q.id]; c.abandoned = c.abandoned || {}; c.abandoned[q.id] = 1; }
         else log(res.slice(1) + ' - skipping it until the next level.');

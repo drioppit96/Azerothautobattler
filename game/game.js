@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 h (guild bank tabs)';
+const GAME_VERSION = '2026-10-20 i (respawns, rares, kill)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -408,6 +408,7 @@ function orderText(c) {
   if (o.type === 'dungeon') return dungeonText(c, o);
   if (o.type === 'npc') return npcOrderText(c, o);
   if (o.type === 'farm') return farmText(c, o);
+  if (o.type === 'kill') return killText(c, o);
   if (o.type === 'follow') return followText(c, o);
   if (o.type === 'fish') return fishText(c, o);
   if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
@@ -499,6 +500,7 @@ function showMenu(sx, sy, sel) {
   }
   if (sel.kind === 'mob') {
     const i = sel.mob.info;
+    if (sel.mob.st !== 'dead' && (sel.mob.beh === 'A' || sel.mob.beh === 'N')) extra += '<button data-a="kill">Kill ' + esc(title) + ' (lvl ' + sel.mob.lvl + ')</button>';
     if (sel.mob.st !== 'dead' && (sel.mob.beh === 'A' || sel.mob.beh === 'N') && !sel.mob.civ) { extra += '<button data-a="grindtype">Grind this kind of creature (' + esc(title) + ')</button>'; }
     const qs = (G.q.byGiver[sel.mob.e] || []).filter((q) => questAvailable(c, q));
     for (const q of qs.slice(0, 5)) { const why = questSupport(q); extra += '<button data-a="quest:' + q.id + '"' + (why ? ' disabled title="' + esc(why) + '"' : '') + '>Quest: ' + esc(q.title) + ' (' + q.level + ')</button>'; }
@@ -525,6 +527,7 @@ function showMenu(sx, sy, sel) {
     else if (a === 'fish') orderFishing(c, false, target);
     else if (a === 'flyfrom') openFlightWindow(sel.id);
     else if (a === 'route' || a === 'kroute' || a === 'sroute') { const k = a === 'route' ? 'gather' : a === 'sroute' ? 'skin' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
+    else if (a === 'kill') orderKill(c, sel.mob);
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));
     else if (a === 'vendor') { const v = vendorList().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || vendorList().find((x) => x.e === sel.mob.e); if (v) orderVendor(c, v); }

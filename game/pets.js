@@ -524,7 +524,7 @@ function tameDone(c, m) {
   const r = rt(c); r.tame = null;
   if (!m || m.st === 'dead' || m.st === 'evade' || c.pet) return;
   const D = PETD(); const b = D.beasts[m.e]; if (!b) return;
-  const W = ensureWorld(c.pos.map);
+  const W = ensureWorld(m.wid != null ? m.wid : c.pos.map);
   m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime - 99; m.skinned = true; m.tamed = true; W.active.delete(m); W.dead.push(m);
   const name = m.info ? m.info[1] : PETD().fam[b[0]].n;
   c.pet = { kind: 'hunter', e: m.e, fam: b[0], name, level: m.lvl, xp: 0, loy: 1, lp: LOYAL_START[0], happy: 166500, abil: {}, auto: {}, atk: (b[1] || 2000) / 1000, out: true, dead: false, v: 2 };
