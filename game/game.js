@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 d (offline progress, background tab, farming materials)';
+const GAME_VERSION = '2026-10-20 e (enchanting scrolls)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -877,6 +877,7 @@ async function boot() {
     try { G.rmarksFile = await J('../gamedata/route_marks.json'); } catch (e) { G.rmarksFile = null; }          // routes marked by hand (routemarker.js)
     if (typeof rmApplyAll === 'function') rmApplyAll();
     try { G.d.prof = await J('../gamedata/professions.json'); } catch (e) { G.d.prof = null; console.warn('professions.json not found - no professions'); }
+    if (typeof enchantScrollsInit === 'function') enchantScrollsInit();          // the enchanting scrolls (items of their own)
     try { G.d.skinning = await J('../gamedata/skinning.json'); } catch (e) { G.d.skinning = null; }
     try { G.d.gathering = await J('../gamedata/gathering.json'); } catch (e) { G.d.gathering = null; }
     if (typeof fishingInit === 'function') fishingInit();

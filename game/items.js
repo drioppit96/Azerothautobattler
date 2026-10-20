@@ -108,6 +108,7 @@ function questWants(c, id) {
 }
 function isJunk(c, id) {
   if (typeof HEARTHSTONE !== 'undefined' && id === HEARTHSTONE) return false;
+  if (id >= 9000000) return false;                                 // enchanting scrolls (professions.js)
   if (questWants(c, id)) return false;
   if (c.prof && profKeeps(c, id)) return false;
   if (typeof petKeeps === 'function' && petKeeps(c, id)) return false;            // soul shards, the pet's food
@@ -673,6 +674,7 @@ function tooltipHtml(c, inst, opts) {
   if (it.il) h += '<div class="muted small">Item level ' + it.il + '</div>';
   if (typeof recipeTipLine === 'function') h += recipeTipLine(c, inst.id);
   if (typeof hearthTipLine === 'function') h += hearthTipLine(c, inst.id);
+  if (it.scroll && typeof scrollTipLine === 'function') h += scrollTipLine(c, inst.id);
   if (typeof ahTipLine === 'function' && !(opts && opts.noAh)) h += ahTipLine(c, inst);
   const sp = itemSell(id); h += sp ? '<div class="small">Sell price: ' + moneyHtml(sp * (inst.n || 1)) + '</div>' : '<div class="small muted">No sell price</div>';
   if (opts && opts.price) h += '<div class="small">Buy price: ' + moneyHtml(opts.price) + '</div>';

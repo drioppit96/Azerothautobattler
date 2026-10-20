@@ -154,6 +154,62 @@ function enchantBonus(name) {
   else if (/Haste|Agility|Dodge/.test(what)) b.st = [['agi', tier]];
   return b;
 }
+/* ------------------------------------------------------------------ enchanting scrolls
+   An enchant is made into a scroll ("Scroll of Enchant Bracer - Minor Health", with the formula's icon, stacks of 20):
+   in the bags, click it - "Use: enchant an item" - choose the item (worn or in the bags) and it is enchanted. Scrolls
+   can be traded, mailed, sold at the auction house and put in the (guild) bank like anything else. */
+const SCROLL_BASE = 9000000;
+function scrollId(sid) { return SCROLL_BASE + +sid; }
+/* the scroll items (not in items.json): made when the game data is loaded */
+function enchantScrollsInit() {
+  if (!PD() || !G.d.items) return; const I = G.d.items.items;
+  for (const sid in PD().recipes) {
+    const r = PD().recipes[sid]; r.sid = +sid; if (!r.ench) continue;
+    const fi = r.item && I[r.item]; let sp = 0; for (const [it, n] of r.re || []) sp += ((I[it] && I[it].sp) || 0) * n;
+    I[scrollId(sid)] = { n: 'Scroll of ' + r.ench, q: 1, c: 0, s: 8, ic: (fi && fi.ic) || 'inv_misc_note_01', sk: 20, sp, scroll: +sid };
+  }
+}
+function scrollRecipe(id) { const it = itemRow(id); return it && it.scroll && PD() ? PD().recipes[it.scroll] || null : null; }
+/* the item the enchant fits: the recipe's item class, subclass and inventory type (the spell's EquippedItem* fields) */
+function enchantFits(r, inst) {
+  const it = inst && itemRow(inst.id); const sl = r && r.slot; if (!it || !sl || !it.sl || !it.sl.length) return false;
+  if (it.c !== sl[0]) return false;
+  if (sl[1] && !(sl[1] & (1 << (it.s || 0)))) return false;
+  if (sl[2] && !(sl[2] & (1 << (it.t || 0)))) return false;
+  if (/2H Weapon/.test(r.ench) && it.t !== 17) return false;
+  return true;
+}
+/* what a scroll can go on: the worn items first, then the bags */
+function scrollTargets(c, r) {
+  const out = [];
+  for (const k in c.equip) if (enchantFits(r, c.equip[k])) out.push({ where: 'eq', slot: +k, inst: c.equip[k] });
+  c.bags.forEach((s, i) => { if (enchantFits(r, s)) out.push({ where: 'bag', idx: i, inst: s }); });
+  return out;
+}
+/* use the scroll at bag index si on the target ({where, slot | idx}) */
+function useScroll(c, si, t) {
+  const sc = c.bags[si]; const r = sc && scrollRecipe(sc.id); if (!r) return false;
+  const inst = t.where === 'eq' ? c.equip[t.slot] : c.bags[t.idx]; if (!inst || !enchantFits(r, inst)) { log('That item cannot take ' + r.ench + '.'); return false; }
+  const old = inst.ench && inst.ench.n;
+  inst.ench = enchantBonus(r.ench); if (t.where === 'eq') dirty(c);
+  sc.n--; if (sc.n <= 0) c.bags.splice(si, 1);
+  log('Enchanted ' + itemName(inst.id, inst) + ': ' + inst.ench.n + (old ? ' (was ' + old + ')' : '') + '.');
+  fx(c.pos.x, c.pos.y, inst.ench.n, '#b48cff'); save(); refreshGear(); return true;
+}
+function scrollTipLine(c, id) {
+  const r = scrollRecipe(id); if (!r) return '';
+  const n = scrollTargets(c, r).length;
+  return '<div class="tt-green">Use: ' + esc(r.ench.replace(/^Enchant /, 'enchants a ').replace(' - ', ' item: ')) + '.</div><div class="small' + (n ? ' muted"' : '" style="color:#ff7060"') + '>' + (n ? n + ' of your items can take it' : 'None of your items can take it') + '</div>';
+}
+/* the item menu: choosing the item to enchant */
+function scrollPickHtml(c, si) {
+  const sc = c.bags[si]; const r = sc && scrollRecipe(sc.id); if (!r) return '';
+  const ts = scrollTargets(c, r);
+  let h = '<div class="tt"><b>' + esc(r.ench) + '</b><div class="small muted">Choose the item to enchant:</div></div>';
+  if (!ts.length) h += '<div class="small" style="color:#ff7060;padding:4px 6px">None of your items can take it.</div>';
+  for (const t of ts) h += '<button data-ia="ench:' + t.where + ':' + (t.where === 'eq' ? t.slot : t.idx) + '"><span style="color:' + QUALITY_COLORS[itemQuality(t.inst.id)] + '">' + esc(itemName(t.inst.id, t.inst)) + '</span>' + (t.where === 'eq' ? ' <span class="muted">(worn)</span>' : '') + (t.inst.ench ? ' <span class="small muted">replaces ' + esc(t.inst.ench.n) + '</span>' : '') + '</button>';
+  return h + '<button data-ia="close">Cancel</button>';
+}
 function enchantSlot(r) {
   const sl = r.slot; if (!sl) return null;
   if (sl[0] === 2) return 15;
@@ -176,19 +232,17 @@ function craft(c, sid, times) {
   if (R.craftQ && R.craftQ.sid !== sid) craftFinish(c);          // something else was being made: it stops there
   R.craftQ = { sid, left: n, total: n, done: 0, made: {}, t: 0 };
   R.resting = false; R.eating = null; R.drinking = null; R.mv = null;
-  log((r.ench ? 'Enchanting: ' : 'Crafting ' + (n > 1 ? n + ' x ' : '')) + r.n + ' (' + fmtCraft(craftTime(r)) + (n > 1 ? ' each' : '') + ').');
+  log('Crafting ' + (n > 1 ? n + ' x ' : '') + (r.ench ? 'Scroll of ' : '') + r.n + ' (' + fmtCraft(craftTime(r)) + (n > 1 ? ' each' : '') + ').');
   return n;
 }
 function fmtCraft(s) { return s >= 60 ? Math.round(s / 60 * 10) / 10 + ' min' : (Math.round(s * 10) / 10) + ' s'; }
 /* one item of the recipe made: true when it worked */
 function craftOne(c, r, made) {
-  if (r.ench) {
-    const slot = enchantSlot(r); const inst = slot != null ? c.equip[slot] : null;
-    if (!inst) { log('Nothing to enchant: ' + r.n + ' needs an item in that slot.'); return false; }
-    if (/2H Weapon/.test(r.ench) && (itemRow(inst.id) || {}).t !== 17) { log(r.n + ' needs a two-handed weapon.'); return false; }
+  if (r.ench) {         // an enchant: a scroll to use on an item
+    const id = scrollId(r.sid);
+    if (bagFree(c) <= 0 && !c.bags.some((x) => x.id === id && x.n < itemStack(id))) { log('Bags are full.'); return false; }
     for (const [it, n] of r.re || []) removeItem(c, it, n);
-    inst.ench = enchantBonus(r.ench); dirty(c);
-    log('Enchanted ' + itemName(inst.id, inst) + ': ' + inst.ench.n + '.');
+    addItem(c, id, 1); made[id] = (made[id] || 0) + 1;
   } else if (r.cr) {
     if (bagFree(c) <= 0 && !c.bags.some((x) => x.id === r.cr[0] && x.n < itemStack(r.cr[0]))) { log('Bags are full.'); return false; }
     for (const [it, n] of r.re || []) removeItem(c, it, n);
@@ -657,11 +711,11 @@ function professionsHtml(c) {
     if (!all.length) b += '<div class="muted small">No recipes yet - visit a trainer.</div>';
     for (const sid of list) {
       const r = PD().recipes[sid]; const col = recipeColor(c, r); const n = craftCount(c, sid);
-      const it = r.cr ? itemRow(r.cr[0]) : null;
+      const pid = r.cr ? r.cr[0] : r.ench ? scrollId(sid) : null; const it = pid ? itemRow(pid) : null;
       b += '<div class="rrow">' + (it && it.ic ? '<img class="sic" src="../icons/' + it.ic.toLowerCase() + '.jpg" alt="">' : '<span class="sic"></span>') +
-        '<div class="rname"><b class="rc-' + col + '"' + (r.cr ? ' data-iid="' + r.cr[0] + '"' : '') + '>' + esc(r.n) + '</b>' + (n ? ' <span class="muted">[' + n + ']</span>' : '') + '<div class="small">' + reagHtml(c, r) + '</div></div>' +
-        '<button class="mini" data-pcraft="' + sid + '"' + (n ? '' : ' disabled') + '>' + (r.ench ? 'Enchant' : 'Craft') + '</button>' +
-        (r.ench ? '' : '<button class="mini" data-pcraftall="' + sid + '"' + (n > 1 ? '' : ' disabled') + '>All</button>') + '</div>';
+        '<div class="rname"><b class="rc-' + col + '"' + (pid ? ' data-iid="' + pid + '"' : '') + '>' + esc(r.n) + '</b>' + (n ? ' <span class="muted">[' + n + ']</span>' : '') + '<div class="small">' + reagHtml(c, r) + '</div></div>' +
+        '<button class="mini" data-pcraft="' + sid + '"' + (n ? '' : ' disabled') + (r.ench ? ' title="Makes a scroll: use it on an item from the bags"' : '') + '>Craft</button>' +
+        '<button class="mini" data-pcraftall="' + sid + '"' + (n > 1 ? '' : ' disabled') + '>All</button></div>';
     }
     const waiting = c.bags.filter((x) => { const rc = recipeOf(x.id); return rc && rc.r.skill === id && !profState(c).recipes[rc.sid]; });
     if (waiting.length) b += '<div class="small" style="margin:4px 0">Recipes in your bags (click one in the bags to learn it when the skill is high enough): ' + waiting.map((x) => '<span data-iid="' + x.id + '" style="color:#ff9a8a">' + esc(itemName(x.id)) + ' (' + recipeOf(x.id).r.learn + ')</span>').join(', ') + '</div>';

@@ -46,7 +46,6 @@ function gcMakeable(g, c, r) {
 function gcOrder(by, crafter, sid, n) {
   const g = guildOf(by); const r = PD().recipes[sid]; if (!g || !r || guildOf(crafter) !== g || !crafter.prof || !crafter.prof.recipes[sid]) return false;
   n = Math.max(1, Math.min(n, gcMakeable(g, by, r))); if (!gcMakeable(g, by, r)) { log('Not enough materials for ' + r.n + ' in the guild bank and the bags.'); return false; }
-  if (r.ench) { const slot = enchantSlot(r); if (slot == null || !by.equip[slot]) { log(r.n + ': ' + by.name + ' has nothing in that slot to enchant.'); return false; } n = 1; }
   const mats = [];
   for (const [it, k] of r.re || []) { let need = k * n; const fromBank = gbankRemove(g, it, need); need -= fromBank; if (need > 0) removeItem(by, it, need); mats.push([it, k * n]); }
   const o = { id: WC_ID++ + '-' + Math.floor(G.gameTime), crafter: crafter.id, by: by.id, sid: +sid, n, done: 0, t: 0, mats };
@@ -86,15 +85,13 @@ function wcTick(dt) {
   }
 }
 function gcMakeOne(g, o, crafter, by, r) {
-  if (r.ench) {
-    const slot = enchantSlot(r); const inst = slot != null ? by.equip[slot] : null;
-    if (inst) { inst.ench = enchantBonus(r.ench); dirty(by); withLog(by, () => log(crafter.name + ' enchanted your ' + itemName(inst.id, inst) + ': ' + inst.ench.n + '.')); }
-  } else if (r.cr) {
-    const n = irnd(r.cr[1] || 1, Math.max(r.cr[1] || 1, r.cr[2] || 1));
-    if (!addItem(by, r.cr[0], n)) {
-      const rest = gbankAdd(g, r.cr[0], n);
-      if (rest && typeof sendMail === 'function') sendMail(by.id, { from: crafter.name, sub: itemName(r.cr[0]), inst: makeInst(r.cr[0], rest, true), t: G.gameTime });
-      withLog(by, () => log('Bags full: ' + itemName(r.cr[0]) + ' from ' + crafter.name + ' went to the ' + (rest ? 'mailbox' : 'guild bank') + '.'));
+  const pid = r.ench ? scrollId(r.sid) : r.cr ? r.cr[0] : null;          // an enchant: a scroll (professions.js)
+  if (pid) {
+    const n = r.ench ? 1 : irnd(r.cr[1] || 1, Math.max(r.cr[1] || 1, r.cr[2] || 1));
+    if (!addItem(by, pid, n)) {
+      const rest = gbankAdd(g, pid, n);
+      if (rest && typeof sendMail === 'function') sendMail(by.id, { from: crafter.name, sub: itemName(pid), inst: makeInst(pid, rest, true), t: G.gameTime });
+      withLog(by, () => log('Bags full: ' + itemName(pid) + ' from ' + crafter.name + ' went to the ' + (rest ? 'mailbox' : 'guild bank') + '.'));
     }
   }
   withLog(crafter, () => skillUp(crafter, r.skill, recipeColor(crafter, r)));
@@ -148,8 +145,8 @@ function gcraftHtml(c) {
     h += '<div class="rrow">' + (it && it.ic ? '<img class="sic" src="../icons/' + it.ic.toLowerCase() + '.jpg" alt="">' : '<span class="sic"></span>') +
       '<div class="rname"><b class="rc-' + col + '"' + (r.cr ? ' data-iid="' + r.cr[0] + '"' : '') + ' title="' + ({ orange: 'Always raises ', yellow: 'Usually raises ', green: 'Rarely raises ', grey: 'Does not raise ' }[col] || '') + esc(cur.c.name) + '\'s skill">' + esc(r.n) + '</b>' + (mk ? ' <span class="muted">[' + mk + ']</span>' : '') +
       ' <span class="small muted">' + fmtCraft(craftTime(r)) + '</span><div class="small">' + gcReagHtml(g, c, r, 1) + '</div></div>' +
-      (r.ench ? '' : '<input type="number" class="gcn" data-gcn="' + sid + '" min="1" max="' + Math.max(1, mk) + '" value="1"' + (mk ? '' : ' disabled') + '>') +
-      '<button class="mini" data-gcord="' + sid + '"' + (mk ? '' : ' disabled') + '>' + (r.ench ? 'Enchant mine' : 'Order') + '</button></div>';
+      '<input type="number" class="gcn" data-gcn="' + sid + '" min="1" max="' + Math.max(1, mk) + '" value="1"' + (mk ? '' : ' disabled') + '>' +
+      '<button class="mini" data-gcord="' + sid + '"' + (mk ? '' : ' disabled') + (r.ench ? ' title="Scrolls: use them on an item from the bags"' : '') + '>Order</button></div>';
   }
   if (list.length > 120) h += '<div class="small muted">' + (list.length - 120) + ' more - search for them.</div>';
   return h + '</div></div>';

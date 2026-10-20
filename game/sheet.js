@@ -191,6 +191,7 @@ function showItemMenu(ev, ref) {
     if (it && it.c === 1 && it.cs) acts.push(['bag', 'Equip bag']);
     else if (it && it.sl && it.sl.length) { const why = canEquip(c, inst.id); acts.push(['equip', why ? 'Equip (' + why + ')' : 'Equip', !!why]); if (it.t === 13 && canDualWield(c)) { acts.push(['equip15', 'Equip in main hand']); acts.push(['equip16', 'Equip in off hand']); } }
     if (typeof disenchantable === 'function' && disenchantable(inst.id) && hasProf(c, ENCHANTING)) { const why = disenchantWhy(c, inst); acts.push(['dis', why ? 'Disenchant (' + why + ')' : 'Disenchant', !!why]); }
+    if (it && it.scroll) acts.unshift(['enchant', 'Use: enchant an item']);          // an enchanting scroll (professions.js)
     if (typeof recipeOf === 'function' && recipeOf(inst.id)) { const why = recipeLearnWhy(c, inst.id); acts.push(['learn', why ? 'Learn (' + why + ')' : 'Learn recipe', !!why]); }
     const u = useInfo(inst.id); const cu = typeof consInfo === 'function' && consInfo(inst.id);
     if (u && (u.kind !== 'other' || cu)) acts.push(['use', u.kind === 'potion' ? 'Drink potion' : u.kind === 'food' ? 'Eat' : cu && cu.kind === 'bandage' ? 'Apply bandage' : cu && cu.kind === 'weapon' ? 'Apply to weapon' : cu && cu.kind === 'bomb' ? 'Throw' : 'Use']);
@@ -209,7 +210,9 @@ function showItemMenu(ev, ref) {
   let x = ev.clientX + 8, y = ev.clientY + 8; if (x + r.width > W - 4) x = Math.max(4, W - r.width - 4); if (y + r.height > H - 4) y = Math.max(4, H - r.height - 4);
   m.style.left = x + 'px'; m.style.top = y + 'px';
   m.onclick = (e) => {
-    const a = e.target.dataset && e.target.dataset.ia; if (!a) return;
+    const bt = e.target.closest && e.target.closest('[data-ia]'); const a = bt && bt.dataset.ia; if (!a) return;
+    if (a === 'enchant') { m.innerHTML = scrollPickHtml(c, ref.idx); return; }          // choose the item, the menu stays open
+    if (a.indexOf('ench:') === 0) { const [, w, k] = a.split(':'); useScroll(c, ref.idx, w === 'eq' ? { where: 'eq', slot: +k } : { where: 'bag', idx: +k }); hideItemMenu(); renderSheet(); return; }
     if (a === 'equip') equipFromBag(c, ref.idx);
     else if (a === 'equip15') equipFromBag(c, ref.idx, 15);
     else if (a === 'equip16') equipFromBag(c, ref.idx, 16);
@@ -275,7 +278,9 @@ function bindSheet() {
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); if (SH.tab === 'vendor' && typeof shopInput === 'function') shopInput(e); if (SH.tab === 'gcraft' && typeof gcraftInput === 'function') gcraftInput(e); });
   sh.addEventListener('dblclick', (e) => {
     const el = e.target.closest('[data-idx],[data-slot]'); if (!el) return; const c = active();
-    if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id); if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }
+    if (el.dataset.idx != null) { const inst = c.bags[+el.dataset.idx]; if (!inst) return; const it = itemRow(inst.id);
+      if (it && it.scroll) { showItemMenu(e, { inst, where: 'bag', idx: +el.dataset.idx }); $('iact').innerHTML = scrollPickHtml(c, +el.dataset.idx); return; }          // a scroll: straight to choosing the item
+      if (it && it.sl && it.sl.length) equipFromBag(c, +el.dataset.idx); else if (useInfo(inst.id)) useItem(c, +el.dataset.idx); }
     else unequipSlot(c, +el.dataset.slot);
     hideItemMenu(); renderSheet();
   });
