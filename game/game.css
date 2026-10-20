@@ -511,3 +511,4 @@ label.chk.dim{opacity:.55}
 .rep .reprw{display:flex;align-items:center;flex-wrap:wrap;gap:3px}.rep .reprw>span:first-child{flex:0 0 70px}
 .rep .reprw .ico{position:relative;width:28px;height:28px;flex:none}
 .qgrp{color:#e6a23c}.q .qgrp.small{margin:2px 0}
+.q.qign{opacity:.55}.q.qign .qt{font-style:italic}

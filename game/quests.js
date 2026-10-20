@@ -197,7 +197,7 @@ function questAvailable(c, q) {
 /* a dropped item that starts a quest: take the quest */
 function itemStartsQuest(c, id) {
   for (const q of G.q.startBy[id] || []) {
-    if (!questAvailable(c, q) || questSupport(q)) continue;
+    if (!questAvailable(c, q) || questSupport(q) || questIgnored(c, q.id)) continue;
     log(itemName(id) + ' starts a quest.'); acceptQuest(c, q); return true;
   }
   return false;
@@ -497,8 +497,8 @@ function questStep(c, q, o) {
 function nextAfterQuest(c, q) {
   if (!cset(c, 'chainQuests')) { c.order = null; renderOrder(); return; }
   let next = null;
-  for (const n of G.q.byPrev[q.id] || []) if (questAvailable(c, n) && !questSupport(n)) { next = n; break; }
-  if (!next) for (const a of availableQuests(c, 20)) { if (a.d < 700 && a.q.level <= c.level + 2 && !questSupport(a.q)) { next = a.q; break; } }
+  for (const n of G.q.byPrev[q.id] || []) if (questAvailable(c, n) && !questSupport(n) && !questIgnored(c, n.id)) { next = n; break; }
+  if (!next) for (const a of availableQuests(c, 20)) { if (a.d < 700 && a.q.level <= c.level + 2 && !questSupport(a.q) && !questIgnored(c, a.q.id)) { next = a.q; break; } }
   if (next) { c.order = { type: 'quest', qid: next.id, label: next.title, phase: 'start', stack: [] }; log('Next quest: "' + next.title + '".'); }
   else { c.order = null; log('No further quests available nearby - order finished.'); }
   renderOrder();
@@ -534,7 +534,19 @@ function orderQuesting(c, zone) {
   c.order = { type: 'questing', zones, zi: 0, label: zones.join(', then '), skip: {} };
   log('Order: quest through ' + c.order.label + '.'); save(); renderOrder();
 }
-function skipped(c, o, id) { return !!(o.skip && o.skip[id] && o.skip[id] >= c.level); }
+function skipped(c, o, id) { return questIgnored(c, id) || !!(o && o.skip && o.skip[id] && o.skip[id] >= c.level); }
+/* quests the player put on ignore: at the bottom of the quest list, the automation leaves them alone (not picked up,
+   not worked on, not turned in, not abandoned); the player can take them back */
+function questIgnored(c, id) { return !!(c && c.qignore && c.qignore[id]); }
+function questIgnoreToggle(c, id) {
+  const q = G.q.byId[id]; c.qignore = c.qignore || {};
+  if (c.qignore[id]) { delete c.qignore[id]; log('"' + (q ? q.title : id) + '" is no longer ignored.'); }
+  else {
+    c.qignore[id] = 1; log('"' + (q ? q.title : id) + '" is ignored - the automation leaves it alone.');
+    const o = c.order; if (o) { if (o.fq === +id) { o.fq = null; o.wt = null; } if (o.wt && o.wt.q === +id) o.wt = null; if (o.type === 'quest' && o.qid === +id) { c.order = null; rt(c).mv = null; rt(c).tgt = null; } }
+  }
+  save(); renderQuests(); renderOrder();
+}
 function questLevelLimit(c) { return c.cfg.style === 'aggressive' ? 4 : c.cfg.style === 'safe' ? 1 : 2; }
 function questingWanted(c, q, o) {
   if (skipped(c, o, q.id)) return false;
@@ -636,16 +648,16 @@ function renderQuests() {
   h += '<div class="qauto"><select id="qzone">' + zl.map((z) => '<option value="' + esc(z.name) + '"' + (z.name === cur ? ' selected' : '') + '>' + esc(z.name) + ' (lvl ' + z.lo + '-' + z.hi + ', done ' + z.done + '/' + z.n + ')</option>').join('') + '</select>' +
     '<button class="act" id="qgo">Auto-quest</button></div>';
   /* the quests as fold-out lists: a line per quest (title, level, progress); click it for the objectives and buttons */
-  const act = Object.keys(c.quests).map((id) => G.q.byId[id]).filter(Boolean);
+  const act = Object.keys(c.quests).map((id) => G.q.byId[id]).filter(Boolean).sort((a, b) => questIgnored(c, a.id) - questIgnored(c, b.id));      // the ignored ones at the bottom
   const qOpen = (k) => !!(QUI.open[k]);
   const secOn = (k, def) => cardOpen('q' + k, def);
   h += '<div class="qhead qsec" data-card="qact"><span class="carr">' + (secOn('act', true) ? '&#9662;' : '&#9656;') + '</span> Active (' + act.length + ')</div>';
   if (secOn('act', true)) {
     if (!act.length) h += '<div class="muted small">None.</div>';
     for (const q of act) {
-      const done = questDone(c, q); const why = questSupport(q); const k = 'a' + q.id; const on = qOpen(k);
+      const done = questDone(c, q); const why = questSupport(q); const k = 'a' + q.id; const on = qOpen(k); const ign = questIgnored(c, q.id);
       const prog = q.objectives.length ? q.objectives.map((o, i) => progText(c, q, i)).join(', ') : 'deliver';
-      h += '<div class="q qfold' + (done ? ' ok' : '') + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + (questIsGroup(q) ? ' <span class="qgrp">(Group)</span>' : '') + ' <span class="muted small">' + (done ? '(ready)' : esc(prog)) + '</span></div>';
+      h += '<div class="q qfold' + (done ? ' ok' : '') + (on ? ' open' : '') + (ign ? ' qign' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + (questIsGroup(q) ? ' <span class="qgrp">(Group)</span>' : '') + ' <span class="muted small">' + (ign ? '(ignored) ' : '') + (done ? '(ready)' : esc(prog)) + '</span></div>';
       if (on) {
         q.objectives.forEach((o, i) => { h += '<div class="muted small">' + (o.type === 'Kill' ? (o.id < 0 ? 'Use ' : 'Kill ') : o.type === 'Collect' ? 'Collect ' : o.type + ' ') + esc(o.name) + ': ' + progText(c, q, i) + '</div>'; });
         if (!q.objectives.length) h += '<div class="muted small">Deliver to ' + esc(spotName(nearestOf(c, giverSpawns(q.turnin)))) + '</div>';
@@ -653,20 +665,21 @@ function renderQuests() {
         if (!why && questIsGroup(q)) h += '<div class="small qgrp">' + esc(groupQuestText(c, q)) + '</div>';
         if (why) h += '<div class="small" style="color:#e6b93c">' + esc(why) + '</div>';
         else if (questDungeon(q)) h += '<div class="small" style="color:#b28cff">Dungeon: ' + esc(questDungeon(q).name) + ' (level ' + questDungeon(q).lmin + '+)</div>';
-        h += '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>' + (done ? 'Turn in' : 'Do it') + '</button> <button class="mini" data-ab="' + q.id + '">Abandon</button>';
+        if (ign) h += '<div class="small muted">Ignored: the automation does not work on it or turn it in.</div>';
+        h += '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>' + (done ? 'Turn in' : 'Do it') + '</button> <button class="mini" data-ign="' + q.id + '" title="' + (ign ? 'Let the automation do this quest again' : 'The automation leaves this quest alone; it moves to the bottom of the list') + '">' + (ign ? 'Stop ignoring' : 'Ignore') + '</button> <button class="mini" data-ab="' + q.id + '">Abandon</button>';
       }
       h += '</div>';
     }
   }
-  const av = availableQuests(c, 24).filter((a) => !/holiday|battleground|profession|event|Darkmoon|war effort|reputation|raid|legendary|dungeon/.test(questSupport(a.q) || '')).slice(0, 10);
+  const av = availableQuests(c, 24).filter((a) => !/holiday|battleground|profession|event|Darkmoon|war effort|reputation|raid|legendary|dungeon/.test(questSupport(a.q) || '')).slice(0, 10).sort((a, b) => questIgnored(c, a.q.id) - questIgnored(c, b.q.id));
   h += '<div class="qhead qsec" data-card="qnear"><span class="carr">' + (secOn('near', true) ? '&#9662;' : '&#9656;') + '</span> Available nearby (' + av.length + ')</div>';
   if (secOn('near', true)) {
     if (!av.length) h += '<div class="muted small">No quests nearby for your level.</div>';
     for (const { q, d, s } of av) {
-      const why = questSupport(q); const dq = !why && questDungeon(q); const k = 'n' + q.id; const on = qOpen(k);
-      h += '<div class="q qfold' + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + (questIsGroup(q) ? ' <span class="qgrp">(Group)</span>' : '') + ' <span class="muted small">' + Math.round(d) + ' yd' + (dq ? ' - dungeon' : '') + '</span></div>';
+      const why = questSupport(q); const dq = !why && questDungeon(q); const k = 'n' + q.id; const on = qOpen(k); const ign = questIgnored(c, q.id);
+      h += '<div class="q qfold' + (on ? ' open' : '') + (ign ? ' qign' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + (questIsGroup(q) ? ' <span class="qgrp">(Group)</span>' : '') + ' <span class="muted small">' + (ign ? '(ignored) ' : '') + Math.round(d) + ' yd' + (dq ? ' - dungeon' : '') + '</span></div>';
       if (on) h += '<div class="muted small">' + esc(spotName(s)) + ' - ' + Math.round(d) + ' yd' + (why ? ' - <i>' + esc(why) + '</i>' : '') + (dq ? ' - <span style="color:#b28cff">dungeon: ' + esc(dq.short || dq.name) + '</span>' : '') + '</div>' +
-        '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>Do it</button>';
+        '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>Do it</button> <button class="mini" data-ign="' + q.id + '">' + (ign ? 'Stop ignoring' : 'Ignore') + '</button>';
       h += '</div>';
     }
   }
@@ -676,6 +689,7 @@ function renderQuests() {
     const f = t.closest('[data-qf]'); if (f) { QUI.open[f.dataset.qf] = !QUI.open[f.dataset.qf]; renderQuests(); return; }
     if (t.id === 'qlevel') { if (c.order && c.order.type === 'leveling') stopOrder(c); else orderLeveling(c); renderQuests(); return; }
     if (t.id === 'qgo') { const z = $('qzone').value; G.state.settings.questZone = z; orderQuesting(c, z); return; }
+    if (t.dataset.ign) { questIgnoreToggle(c, +t.dataset.ign); return; }
     if (t.dataset.do) orderQuest(c, +t.dataset.do);
     if (t.dataset.ab) { const q = G.q.byId[t.dataset.ab]; if (q && confirm('Abandon "' + q.title + '"?')) { delete c.quests[q.id]; if (c.order && c.order.type === 'quest' && c.order.qid === q.id) c.order = null; save(); renderQuests(); renderOrder(); } }
   };
@@ -685,7 +699,7 @@ function renderQuests() {
 /* "!" over quest givers with a quest for you, "?" where a finished quest waits */
 function questMarks(c) {
   const marks = [];
-  for (const { q, s } of availableQuests(c, 40, 1500)) if (!questSupport(q)) marks.push({ x: s.x, y: s.y, t: '!', map: s.map });
-  for (const id in c.quests) { const q = G.q.byId[id]; if (q && questDone(c, q)) { const t = nearestOf(c, giverSpawns(q.turnin)); if (t) marks.push({ x: t.x, y: t.y, t: '?', map: t.map }); } }
+  for (const { q, s } of availableQuests(c, 40, 1500)) if (!questSupport(q) && !questIgnored(c, q.id)) marks.push({ x: s.x, y: s.y, t: '!', map: s.map });
+  for (const id in c.quests) { const q = G.q.byId[id]; if (q && questDone(c, q) && !questIgnored(c, q.id)) { const t = nearestOf(c, giverSpawns(q.turnin)); if (t) marks.push({ x: t.x, y: t.y, t: '?', map: t.map }); } }
   G.qMarks = marks;
 }

@@ -121,10 +121,22 @@ function mercAuraStep(c, u) {
   if (G.gameTime - (u.auraT || -99) < 5) return; u.auraT = G.gameTime;
   for (const t of mercFolk(c)) if (Math.hypot(t.x - u.x, t.y - u.y) < 30) { if (t.merc) mercGiveBuff(c, null, t, n, s, 8); else if (!mercHasBuff(t, n, 3)) mercGiveBuff(c, null, t, n, s, 8); }
 }
+/* the blessing a paladin gives someone: Might for the melee and the tanks, Wisdom for the casters */
+function mercBlessingFor(t) { return MERC_MELEE_BLESS.has(t.cls) || t.role === 'tank' || (t.cls === 2 && t.role !== 'healer') ? 'Blessing of Might' : 'Blessing of Wisdom'; }
+/* everyone of the raid (any distance on the map): a group buff reaches them all */
+function mercRaidFolk(c) {
+  const out = mercFolk(c);
+  if (typeof raidMembers === 'function') { const R = raidMembers(c); for (const o of R.chars) if (!out.some((t) => t.c === o)) out.push({ c: o, cls: o.cls, x: o.pos.x, y: o.pos.y, role: typeof grpRole === 'function' ? grpRole(o) : 'dps' }); for (const u of R.mercs) if (!out.some((t) => t.merc === u)) out.push({ merc: u, cls: u.cls, x: u.x, y: u.y, role: u.role }); }
+  return out;
+}
 function mercCastBuff(c, u, due) {
   const [t, n, s] = due; const cost = mercCost(c, u, s); if (mercPower(u) < cost) return false;
   mercPay(u, cost); u.gcd = G.gameTime + 1.5;
-  if (t) mercGiveBuff(c, u, t, n, s);
+  const k = mercKit(u); const self = (k.self || []).includes(n);
+  if (t && !self) {      // a group buff: one cast and the whole raid has it (a blessing: everyone it is meant for)
+    const bless = /^Blessing of/.test(n);
+    for (const x of mercRaidFolk(c)) if (!bless || mercBlessingFor(x) === n || !mercSpell(u.cls, 'Blessing of Wisdom', mercLevel(c))) mercGiveBuff(c, x === t ? u : null, x, n, s);
+  } else if (t) mercGiveBuff(c, u, t, n, s);
   else {      // Battle Shout, a totem: the whole group near
     const dur = /Totem/.test(n) ? 120 : null;
     for (const x of mercFolk(c)) if (Math.hypot(x.x - u.x, x.y - u.y) < 30) mercGiveBuff(c, null, x, n, s, dur);

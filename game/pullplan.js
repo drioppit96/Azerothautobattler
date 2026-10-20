@@ -32,7 +32,7 @@ function dungeonPullPlan(d, tier) {
     const n = ms.length; const p = { members: ms, n, x: ms.reduce((s, m) => s + m.hx, 0) / n, y: ms.reduce((s, m) => s + m.hy, 0) / n, z: ms.reduce((s, m) => s + (m.z || 0), 0) / n,
       elites: ms.filter((m) => m.rank >= 1).length, boss: ms.some((m) => bossE.has(m.e)), lvl: [Math.min(...ms.map((m) => m.lvl)), Math.max(...ms.map((m) => m.lvl))], types: {} };
     for (const m of ms) p.types[m.info[5]] = (p.types[m.info[5]] || 0) + 1;
-    p.aggro = Math.max(...ms.map((m) => clamp((m.aggro - (L - m.lvl)) * AGGRO_SCALE, 4, 32)));
+    p.aggro = Math.max(...ms.map((m) => clamp(m.aggro - clamp(L - m.lvl, -25, 25), 5, 45)));          // the server's aggro range (dungeons)
     p.cc = CC_SPELLS.filter((s) => ms.some((m) => s.types.includes(m.info[5])) && !ms.every((m) => bossE.has(m.e))).map((s) => ({ cls: s.cls, n: s.n, ooc: !!s.ooc, k: ms.filter((m) => s.types.includes(m.info[5]) && !bossE.has(m.e)).length }));
     packs.push(p);
   }

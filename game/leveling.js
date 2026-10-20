@@ -180,7 +180,7 @@ function questPool(c) {
   return (G.qpool[k] = out);
 }
 function questOpenFor(c, q, o) {
-  if (c.done[q.id] || c.quests[q.id] || (c.abandoned && c.abandoned[q.id])) return false;
+  if (c.done[q.id] || c.quests[q.id] || (c.abandoned && c.abandoned[q.id]) || questIgnored(c, q.id)) return false;
   if (q.min_level > c.level || (q.prev > 0 && !c.done[q.prev]) || q.prev < 0) return false;
   if (o && skipped(c, o, q.id)) return false;
   if (q.exclusive_group > 0) { for (const id in c.done) { const x = G.q.byId[id]; if (x && x.exclusive_group === q.exclusive_group) return false; } }
@@ -199,7 +199,7 @@ function zoneChoices(c, o) {
   }
   // active quests count for the zone where their next step is (the turn-in for finished ones)
   for (const id in c.quests) {
-    const q = G.q.byId[id]; if (!q || questSupport(q) || (o && skipped(c, o, q.id))) continue;
+    const q = G.q.byId[id]; if (!q || questSupport(q) || skipped(c, o, q.id)) continue;
     const done = questDone(c, q) || !q.objectives.length;
     const spots = giverSpawns(done ? q.turnin : q.giver).filter((sp) => OPEN_WORLD[sp.map]); if (!spots.length) continue;
     spots.sort((a, b) => (a.map !== c.pos.map) - (b.map !== c.pos.map) || Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
@@ -326,12 +326,12 @@ function levelingIdle(c, o, dt) {
 function abandonStale(c) {
   const o = c.order;
   if (o && Object.keys(c.quests).length >= 18) {
-    for (const id in c.quests) { const q = G.q.byId[id]; if (q && !questDone(c, q) && skipped(c, o, q.id)) { log('Quest log is full - abandoned "' + q.title + '".'); delete c.quests[id]; } }
+    for (const id in c.quests) { const q = G.q.byId[id]; if (q && !questDone(c, q) && skipped(c, o, q.id) && !questIgnored(c, q.id)) { log('Quest log is full - abandoned "' + q.title + '".'); delete c.quests[id]; } }
   }
-  for (const id in c.quests) { const q = G.q.byId[id]; if (q && !questDone(c, q) && !questDoable(c, q, o)) { log('Abandoned "' + q.title + '" (its items cannot be had).'); delete c.quests[id]; c.abandoned = c.abandoned || {}; c.abandoned[id] = 1; } }
+  for (const id in c.quests) { const q = G.q.byId[id]; if (q && !questIgnored(c, q.id) && !questDone(c, q) && !questDoable(c, q, o)) { log('Abandoned "' + q.title + '" (its items cannot be had).'); delete c.quests[id]; c.abandoned = c.abandoned || {}; c.abandoned[id] = 1; } }
   for (const id in c.quests) {
     const q = G.q.byId[id]; if (!q) { delete c.quests[id]; continue; }
-    if (questDone(c, q)) continue;
+    if (questDone(c, q) || questIgnored(c, q.id)) continue;
     if (c.level - q.level >= 8 || questSupport(q)) { log('Abandoned "' + q.title + '" (' + (questSupport(q) || 'too low level now') + ').'); delete c.quests[id]; }
   }
 }

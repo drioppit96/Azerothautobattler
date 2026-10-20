@@ -360,6 +360,7 @@ function finishSpell(c, name, sp, tgt) {
   if (pt === -2) c.hp -= cost; else addPower(c, pt, -cost);
   startCooldown(c, name, sp);
   if (pt === 0 && cost > 0) r.lastCast = G.gameTime;
+  if (groupBuffable(name, sp) && raidBuff(c, name, sp)) return;                     // grouped: the buff goes on the whole group
   if (tgt && tgt !== c && tgt.equip && tgt.pos) { buffOther(c, tgt, sp); return; }      // a buff on another character
   if (tgt && tgt.merc) { mercGiveBuff(c, null, tgt, name, sp); fx(tgt.merc.x, tgt.merc.y, name, '#9fe0ff'); return; }      // on a mercenary
   const mob = tgt && tgt !== c ? tgt : (sp.ef || []).some((e) => e.k === 'enemy' || e.k === 'area_enemy') ? r.tgt : null;
@@ -738,23 +739,35 @@ function conjureFor(c, item) {
   }
   return out;
 }
-/* buffs worth putting on the other members of the group: 9 minutes or longer and castable on a friend */
+/* buffs worth putting on the other members of the group: 9 minutes or longer (blessings: 5) and castable on a friend;
+   grouped, one cast puts them on everyone (raidBuff) */
 const GROUP_BUFF_SKIP = /Amplify Magic|Dampen Magic|Unending Breath|Detect|Water Walking|Levitate/;
 function groupBuffable(name, sp) {
-  if (GROUP_BUFF_SKIP.test(name) || !(sp.dur >= 540000)) return false;
+  if (GROUP_BUFF_SKIP.test(name) || !(sp.dur >= 540000 || (/^Blessing of/.test(name) && sp.dur >= 300000))) return false;      // the paladin's 5-minute blessings too
   const au = (sp.ef || []).filter((e) => e.t === 6 || e.t === 35); return au.length > 0 && au.every((e) => e.k === 'friend');
 }
 function groupBuffTarget(c, name, sp) {
   if (!groupBuffable(name, sp)) return null;
-  if (rt(c).party && typeof mercBuffTarget === 'function') { const u = mercBuffTarget(c, name); if (u) return u; }     // the mercenaries
-  if (typeof groupOf !== 'function' || !groupOf(c)) return null;
-  const g = groupOf(c);
-  for (const o of groupChars(g)) {
-    if (o === c || o.pos.map !== c.pos.map || o.hp <= 0 || rt(o).ghost || hasBuff(o, name)) continue;
-    if (name === 'Thorns' && (g.members.find((m) => m.id === o.id) || {}).role !== 'tank') continue;     // Thorns: on the tank
-    if (Math.hypot(o.pos.x - c.pos.x, o.pos.y - c.pos.y) <= 30) return o;
-  }
+  // grouped, one cast reaches the whole group (raidBuff): cast again when anyone of it is missing the buff
+  const R = raidMembers(c);
+  for (const u of R.mercs) if (!mercHasBuff({ merc: u }, name, 3)) return { merc: u, x: u.x, y: u.y };      // the mercenaries (anyone's)
+  for (const o of R.chars) if (o !== c && !hasBuff(o, name)) return o;
   return null;
+}
+/* everyone of the group / raid: your characters grouped with c on the same map and every mercenary with them */
+function raidMembers(c) {
+  const chars = [c]; const mercs = [];
+  if (typeof groupOf === 'function' && groupOf(c)) for (const o of groupChars(groupOf(c))) if (o !== c && o.pos.map === c.pos.map && o.hp > 0 && !rt(o).ghost) chars.push(o);
+  for (const o of chars) for (const u of (rt(o).party || [])) if (!u.dead && !mercs.includes(u)) mercs.push(u);
+  return { chars, mercs };
+}
+/* a long buff cast while grouped lands on the whole group (raid-wide); false when alone */
+function raidBuff(c, name, sp) {
+  const R = raidMembers(c); if (R.chars.length + R.mercs.length <= 1) return false;
+  for (const o of R.chars) { if (o === c) applySpell(c, sp, null, { name }); else { for (const e of sp.ef || []) if ((e.t === 6 || e.t === 35) && (e.k === 'friend' || e.k === 'self')) addBuff(o, sp, e); if (o !== c) withLog(o, () => log(c.name + ' casts ' + sp.n + ' on the group.')); } }
+  for (const u of R.mercs) mercGiveBuff(c, null, { merc: u }, name, sp);
+  fx(c.pos.x, c.pos.y, name + ' (group)', '#9fe0ff');
+  return true;
 }
 /* the aura of a friendly buff goes on another character */
 function buffOther(c, to, sp) {

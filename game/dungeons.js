@@ -472,7 +472,7 @@ function dgTargetKey(x) { return x.key || (x.go ? x.e + ':' + x.i : 'm' + x.e); 
 function dungeonQuestTargets(c, d) {
   const mobs = new Map(), gos = new Map();
   for (const qid in c.quests) {
-    const q = G.q.byId[qid]; if (!q) continue;
+    const q = G.q.byId[qid]; if (!q || questIgnored(c, q.id)) continue;
     q.objectives.forEach((ob, i) => {
       if (objDone(c, q, i)) return;
       if (ob.type === 'Kill' || ob.type === 'Use/Interact') { if (ob.id < 0) gos.set(-ob.id, [q.id, i, 'use']); else mobs.set(ob.id, [q.id, i]); }
@@ -484,11 +484,11 @@ function dungeonQuestTargets(c, d) {
   // quest givers and turn-ins in here (an NPC or an object, like a corpse or a tablet)
   const at = (s) => { if (s.obj) { const o = objSpawns(s.e)[s.i]; return o ? o[3] : null; } const m = W.list.find((x) => x.e === s.e && Math.hypot(x.hx - s.x, x.hy - s.y) < 3); return m ? m.z : null; };
   for (const qid in c.quests) {
-    const q = G.q.byId[qid]; if (!q || !questDone(c, q)) continue;
+    const q = G.q.byId[qid]; if (!q || !questDone(c, q) || questIgnored(c, q.id)) continue;
     for (const s of giverSpawns(q.turnin)) if (s.map === d.map) { out.push({ npc: 'turn', q, x: s.x, y: s.y, z: at(s), st: 'alive', info: [0, spotName(s)], key: 't' + q.id }); break; }
   }
   if (Object.keys(c.quests).length < 20) for (const { q, s } of (G.q.giverPts && G.q.giverPts[d.map]) || []) {
-    if (out.some((x) => x.npc === 'pick' && x.q === q) || !questAvailable(c, q) || questSupport(q) || q.level > c.level + 4 || !dungeonQuestOk(c, q, false) || !questDoable(c, q, {})) continue;
+    if (out.some((x) => x.npc === 'pick' && x.q === q) || !questAvailable(c, q) || questSupport(q) || questIgnored(c, q.id) || q.level > c.level + 4 || !dungeonQuestOk(c, q, false) || !questDoable(c, q, {})) continue;
     out.push({ npc: 'pick', q, x: s.x, y: s.y, z: at(s), st: 'alive', info: [0, spotName(s)], key: 'p' + q.id });
   }
   for (const [e, qi] of gos) objSpawns(e).forEach((s, idx) => { if (s[0] === d.map && goFree(e, idx)) out.push({ go: true, e, i: idx, x: s[1], y: s[2], z: s[3], st: 'alive', info: [0, objName(e)], qi }); });
