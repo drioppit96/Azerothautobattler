@@ -69,7 +69,10 @@ function groundAt(mapId, x, y) {
   if (c < 0 || r < 0 || c >= g.w || r >= g.h) return 0;
   return g.data[r * g.w + c];
 }
-function passable(mapId, x, y) { const k = groundAt(mapId, x, y); return k === -1 || k === 1 || k === 2; }
+function passable(mapId, x, y) {
+  if (typeof dgExactFloor === 'function' && typeof isDungeonMap === 'function' && isDungeonMap(mapId)) { const f = dgExactFloor(mapId, x, y, null); return !f || walkAt(f, x, y); }      // dungeons with exact walls
+  const k = groundAt(mapId, x, y); return k === -1 || k === 1 || k === 2;
+}
 /* straight walk between two points over passable ground only */
 function lineWalkable(mapId, a, b) {
   const g = gridOf(mapId); if (!g) return true;

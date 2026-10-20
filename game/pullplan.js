@@ -155,7 +155,8 @@ function drawPullPlan(ctx, map) {
   ctx.textAlign = 'center'; ctx.font = 'bold 11px Segoe UI';
   // where the run is on the route
   if (running && c.order.gi != null && plan.route[c.order.gi]) { const q = plan.route[c.order.gi]; if (dungeonFloorAt(map.dungeon, q.x, q.y, q.z) === f) { const [x, y] = w2s(q.x, q.y); ctx.fillStyle = 'rgba(255,210,90,.9)'; ctx.beginPath(); ctx.arc(x, y, 4, 0, 6.3); ctx.fill(); } }
-  if (!packsToo) { ctx.restore(); return; }
+  // (the circles around every pack are not drawn any more: too much on the map)
+  if (!packsToo || !G.state.settings.showPackCircles) { ctx.restore(); return; }
   for (const p of plan.packs) {
     if (dungeonFloorAt(map.dungeon, p.x, p.y, p.z) !== f) continue;
     const [x, y] = w2s(p.x, p.y); const R = Math.max(6, p.aggro * G.scale * 0.9);
@@ -167,5 +168,5 @@ function drawPullPlan(ctx, map) {
 function pullPlanHtml(d) {
   const c = active(); const tier = dungeonTier(c, d); const p = dungeonPullPlan(d, tier); const tk = tier && dungeonTank(c, d);
   return '<div class="sgroup"><h5>Pull plan</h5><div class="small">' + (tier ? 'Route: <b>' + ROUTE_TIERS[tier] + '</b>' + (tk ? ' - ' + esc(tk.name) + ' knows it ' + stars(tk.k) + '/10' : ' - depends on who tanks') + ' (' + p.length + ' yd). ' : p.guide ? 'Route from the guides: ' + esc(p.guide.join(', ')) + '. ' : '') + (p.pulls + p.bosses) + ' fights on the way (' + p.bosses + ' bosses), ' + p.careful + ' packs close to the way (a careless group pulls them), ' + p.skip + ' off the way. ' + p.ccPacks + ' big packs where crowd control helps.</div>' +
-    '<label class="chk"><input type="checkbox" data-dgset="showPullPlan"' + (G.state.settings.showPullPlan ? ' checked' : '') + '> Show it on the dungeon map <span class="small" style="color:' + PACK_COLOR.pull + '">on the way</span> <span class="small" style="color:' + PACK_COLOR.careful + '">careful</span> <span class="small" style="color:' + PACK_COLOR.skip + '">off the way</span></label></div>';
+    '<label class="chk"><input type="checkbox" data-dgset="showPullPlan"' + (G.state.settings.showPullPlan ? ' checked' : '') + '> Show the route on the dungeon map</label></div>';
 }

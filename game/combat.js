@@ -605,7 +605,11 @@ function fightStep(c, m, dt) {
   const dx = m.x - c.pos.x, dy = m.y - c.pos.y, d = Math.hypot(dx, dy);
   c.pos.o = Math.atan2(dx, dy);
   const want = c.cls === 1 ? MELEE_RANGE : combatRange(c, m);
-  if (d > want) { if (r.cast) return; const step = Math.min(d - want + 0.5, charSpeed(c) * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return; }
+  if (d > want) {
+    if (r.cast) return;
+    if (typeof dgStraight === 'function' && isDungeonMap(c.pos.map) && !dgStraight(c.pos.map, c.pos, m)) { goTo(c, m.x, m.y, want - 0.5, m.z); if (r.blocked) { r.blocked = false; r.mv = null; } return; }      // a wall between: around it
+    const step = Math.min(d - want + 0.5, charSpeed(c) * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return;
+  }
   useAbilities(c, m);
   if (m.hp <= 0 || m.st === 'dead' || r.cast) return;
   if (d > MELEE_RANGE + 0.5) { if (c.cls !== 1) rangedStep(c, m, dt, d); return; }

@@ -172,17 +172,35 @@ function dungeonGraph(mapId) {
   for (const [, l] of G.spawnList) for (const s of l) if (s[0] === mapId) add(s[1], s[2], s[3]);
   const ob = G.d.objects && G.d.objects.objects; if (ob) for (const e in ob) for (const s of ob[e]) if (s[0] === mapId) add(s[1], s[2], s[3]);
   const d = dungeonByMap(mapId); if (d) { for (const en of d.enter) add(en.x, en.y, en.z); for (const b of d.bosses) add(b.x, b.y, b.z); }
+  // floors with exact walls (script/dungeon_walls.py): a point every 6 yards on the floor too, so paths go along the
+  // corridors and never through a wall or over lava
+  const exact = d ? d.floors.filter((f) => f.walk && f.walk.exact && floorWalk(f)) : [];
+  const nSpawn = pts.length; const gridPts = [];
+  if (exact.length) {
+    const base = pts.slice();
+    for (const f of exact) {
+      const w = floorWalk(f); const step = 4; const cy = (f.xt - f.xb) / w.H, cx = (f.yl - f.yr) / w.W;
+      for (let r = 0; r < w.H; r += step) for (let q = 0; q < w.W; q += step) {
+        if (!w.a[r * w.W + q]) continue;
+        const x = f.xt - (r + 0.5) * cy, y = f.yl - (q + 0.5) * cx;
+        let z = null, bz = 60; for (const b of base) { const dd = Math.hypot(b.x - x, b.y - y); if (dd < bz) { bz = dd; z = b.z; } }
+        if (z == null) continue;
+        gridPts.push(pts.length); pts.push({ x, y, z, nb: [], g: true, gf: f });
+      }
+    }
+  }
   const CELLG = 25; const grid = new Map(); pts.forEach((p, i) => { const k = Math.floor(p.x / CELLG) + ',' + Math.floor(p.y / CELLG); (grid.get(k) || grid.set(k, []).get(k)).push(i); });
-  if (d) pts.forEach((p) => { p.f = dungeonFloorAt(d, p.x, p.y, p.z); });
+  if (d) pts.forEach((p) => { p.f = p.gf || dungeonFloorAt(d, p.x, p.y, p.z); });
+  const exactF = (p) => p.f && p.f.walk && p.f.walk.exact;
   const link = (i, j, w) => { const p = pts[i]; if (p.nb.some((x) => x[0] === j)) return; p.nb.push([j, w]); pts[j].nb.push([i, w]); };
   pts.forEach((p, i) => {
     const cx = Math.floor(p.x / CELLG), cy = Math.floor(p.y / CELLG); const near = [], far = [];
     for (let a = -6; a <= 6; a++) for (let b = -6; b <= 6; b++) for (const j of grid.get((cx + a) + ',' + (cy + b)) || []) {
       if (j <= i) continue; const q = pts[j]; const dd = Math.hypot(q.x - p.x, q.y - p.y); const dz = Math.abs(q.z - p.z);
-      if (dd <= 22 && dz <= Math.max(4, dd * 0.7)) near.push([dd + dz * 1.5, j]);
-      else if (dd <= 150 && p.f && p.f === q.f && dz <= Math.max(6, dd * 0.35) && walkLine(p.f, p, q)) far.push([dd + dz, j]);    // a straight walk on the drawn floor
+      if (dd <= 22 && dz <= Math.max(4, dd * 0.7)) { if (exactF(p) && p.f === q.f && !walkLine(p.f, p, q)) continue; near.push([dd + dz * 1.5, j]); }
+      else if (!p.g && !q.g && dd <= 150 && p.f && p.f === q.f && dz <= Math.max(6, dd * 0.35) && walkLine(p.f, p, q)) far.push([dd + dz, j]);    // a straight walk on the drawn floor
     }
-    near.sort((a, b) => a[0] - b[0]); for (const [w, j] of near.slice(0, 6)) link(i, j, w);
+    near.sort((a, b) => a[0] - b[0]); for (const [w, j] of near.slice(0, p.g ? 8 : 6)) link(i, j, w);
     far.sort((a, b) => a[0] - b[0]); for (const [w, j] of far.slice(0, 8)) link(i, j, w);
   });
   // join the separate pieces (stairs and ramps between floors have few creatures on them): the closest pair each time
@@ -196,7 +214,9 @@ function dungeonGraph(mapId) {
       for (let i = 0; i < pts.length; i++) {
         if (comp[i] !== k) continue; const p = pts[i]; const cx = Math.floor(p.x / CELLG), cy = Math.floor(p.y / CELLG);
         for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) for (const j of grid.get((cx + a) + ',' + (cy + b)) || []) {
-          if (comp[j] === k) continue; const q = pts[j]; const dd = Math.hypot(q.x - p.x, q.y - p.y) + Math.abs(q.z - p.z) * 1.5; if (dd < bd) { bd = dd; best = [i, j]; }
+          if (comp[j] === k) continue; const q = pts[j]; const dd = Math.hypot(q.x - p.x, q.y - p.y) + Math.abs(q.z - p.z) * 1.5;
+          if (dd < bd && exactF(p) && p.f === q.f && !walkLine(p.f, p, q)) continue;          // never join through a wall
+          if (dd < bd) { bd = dd; best = [i, j]; }
         }
       }
       if (best) { link(best[0], best[1], bd * 1.5); done.add(k); done.add(comp[best[1]]); merged++; }
@@ -221,22 +241,43 @@ function walkAt(f, x, y) {
 }
 function walkLine(f, p, q) {
   const w = floorWalk(f); if (!w) return false;
-  const cell = Math.min((f.yl - f.yr) / w.W, (f.xt - f.xb) / w.H); const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / Math.max(1, cell));
+  const cell = Math.min((f.yl - f.yr) / w.W, (f.xt - f.xb) / w.H); const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / Math.max(0.5, cell * 0.8));
   for (let k = 1; k < n; k++) { const t = k / n; if (!walkAt(f, p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t)) return false; }
   return true;
 }
-function dgNearest(g, x, y, z) {
-  let best = -1, bd = 1e18; const cx = Math.floor(x / g.CELLG), cy = Math.floor(y / g.CELLG);
-  for (let rad = 1; rad <= 6 && best < 0; rad += 2) for (let a = -rad; a <= rad; a++) for (let b = -rad; b <= rad; b++) for (const j of g.grid.get((cx + a) + ',' + (cy + b)) || []) {
-    const p = g.pts[j]; const dd = Math.hypot(p.x - x, p.y - y) + (z != null ? Math.abs(p.z - z) * 2 : 0); if (dd < bd) { bd = dd; best = j; }
+/* exact walls on this spot of a dungeon (null: not known there) */
+function dgExactFloor(mapId, x, y, z) { const d = dungeonByMap(mapId); if (!d) return null; const f = dungeonFloorAt(d, x, y, z); return f && f.walk && f.walk.exact && floorWalk(f) ? f : null; }
+/* exact walls: can one walk straight from a to b */
+function dgStraight(mapId, a, b) { const f = dgExactFloor(mapId, a.x, a.y, a.z); return !f || walkLine(f, a, b); }
+/* the walls on the dungeon map (Map view - Dungeon walls): what cannot be walked on, in dark red */
+function drawDungeonWalls(ctx, m) {
+  const f = m.floor; if (!f || !floorWalk(f)) return;
+  if (!f._wallImg) {
+    const w = floorWalk(f); const cv = document.createElement('canvas'); cv.width = w.W; cv.height = w.H; const x = cv.getContext('2d'); const id = x.createImageData(w.W, w.H);
+    for (let i = 0; i < w.W * w.H; i++) { const o = i * 4; if (!w.a[i]) { id.data[o] = 120; id.data[o + 1] = 10; id.data[o + 2] = 10; id.data[o + 3] = 150; } }
+    x.putImageData(id, 0, 0); f._wallImg = cv;
   }
-  return best;
+  const img = G.img[m.name]; if (!img) return;
+  ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(f._wallImg, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); ctx.restore();
+}
+function dgNearest(g, x, y, z, f) {
+  const cand = []; const cx = Math.floor(x / g.CELLG), cy = Math.floor(y / g.CELLG);
+  for (let rad = 1; rad <= 6 && !cand.length; rad += 2) for (let a = -rad; a <= rad; a++) for (let b = -rad; b <= rad; b++) for (const j of g.grid.get((cx + a) + ',' + (cy + b)) || []) {
+    const p = g.pts[j]; cand.push([Math.hypot(p.x - x, p.y - y) + (z != null ? Math.abs(p.z - z) * 2 : 0), j]);
+  }
+  if (!cand.length) return -1;
+  cand.sort((a, b) => a[0] - b[0]);
+  // exact walls: the nearest one that can be walked to straight (not the one behind the wall)
+  if (f) for (const [, j] of cand.slice(0, 16)) if (walkLine(f, { x, y }, g.pts[j])) return j;
+  return cand[0][1];
 }
 /* path from the character to target {x, y, z?} along the graph; points carry z */
 function dungeonPath(c, from, to) {
   const g = dungeonGraph(c.pos.map); const direct = { pts: [{ x: from.x, y: from.y }, { x: to.x, y: to.y, z: to.z }], total: Math.hypot(to.x - from.x, to.y - from.y), via: 'straight' };
   if (!g.pts.length) return direct;
-  const s = dgNearest(g, from.x, from.y, c.pos.z), e = dgNearest(g, to.x, to.y, to.z);
+  const ef = dgExactFloor(c.pos.map, from.x, from.y, c.pos.z);
+  if (ef && dungeonFloorAt(ef && dungeonByMap(c.pos.map), to.x, to.y, to.z) === ef && walkLine(ef, from, to)) return direct;          // in plain sight on the floor
+  const s = dgNearest(g, from.x, from.y, c.pos.z, ef), e = dgNearest(g, to.x, to.y, to.z, dgExactFloor(c.pos.map, to.x, to.y, to.z));
   if (s < 0 || e < 0 || s === e) return direct;
   const N = g.pts.length; const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1); dist[s] = 0;
   const heap = [[0, s]]; const push = (it) => { heap.push(it); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };

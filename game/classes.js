@@ -751,6 +751,7 @@ function oocStep(c) {
       const dur = sp.dur || 0;
       go = (dur < 0 || dur >= 60000 || /Seal|Aspect|Weapon$|Totem|Form$|Shadowform/.test(rule.n)) && !hasBuff(c, rule.n) && !(/Totem/.test(rule.n) && !r.threats.length);
       if (/^Seal of/.test(rule.n)) go = false;          // seals are put on in the fight
+      if (/ Weapon$/.test(rule.n) && (r.buffs || []).some((b) => b.imbue && b.imbue !== rule.n && b.until > G.gameTime + 60)) go = false;          // one weapon imbue is up: not another one over it
       if (/Aspect of the Monkey/.test(rule.n) && c.known['Aspect of the Hawk']) go = false;
       if (c.cls === 11 && formOk(c, rule.n) === false) go = false;
     } else if (rule.mode === 'conjure') {
