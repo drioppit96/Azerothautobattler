@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 s (enhancement shaman)';
+const GAME_VERSION = '2026-10-20 t (Lightning Strike, swing bar)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -898,6 +898,7 @@ async function boot() {
     const names = ['races', 'hostility', 'spawns', 'xp', 'taxi', 'navgraph', 'items', 'spells', 'quests', 'vendors', 'loot'];
     const res = await Promise.all(names.map((n) => J('../gamedata/' + n + '.json')));
     names.forEach((n, i) => { G.d[n] = res[i]; });
+    if (typeof lightningStrikeInit === 'function') lightningStrikeInit();          // Lightning Strike: ranks made from Lightning Bolt (classes.js)
     try { G.d.cstats = await J('../gamedata/creature_stats.json'); } catch (e) { G.d.cstats = null; console.warn('creature_stats.json not found - using estimated creature health and damage'); }
     try { G.d.vendorItems = await J('../gamedata/vendor_items.json'); } catch (e) { G.d.vendorItems = null; }
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }

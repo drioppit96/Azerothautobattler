@@ -106,6 +106,7 @@ Object.assign(CLASS_META, {
     'Flame Shock': R('', ['off', 'debuff'], { mode: 'debuff' }),
     'Earth Shock': R('', ['off', 'spam'], { mode: 'spam' }),
     'Lightning Bolt': R('', ['off', 'opener', 'spam'], { mode: 'opener' }),
+    'Lightning Strike': R('', ['off', 'spam'], { mode: 'spam' }),
     'Chain Lightning': R('', ['off', 'multi'], { mode: 'off', p: 2 }),
   },
   8: {   // Mage
@@ -240,20 +241,34 @@ function talentAuras(c) {
       const sp = spellRow(t.ranks[rank - 1]); if (!sp) continue;
       for (const e of sp.ef || []) {
         if (e.t !== 6 && e.t !== 35) continue;
-        if (e.au === 107 || e.au === 108) out.mods.push({ op: e.mi, v: e.lo, pct: e.au === 108, fam: (sp.fam || [0])[0], mask: e.it || 0 });
+        if (e.au === 107 || e.au === 108) {
+          // the game data lost the spell masks of some talents: which spells they change, by name
+          const names = !e.it && TALENT_SPELLS[t.name] ? TALENT_SPELLS[t.name] : null;
+          out.mods.push({ op: e.mi || 0, v: e.lo, pct: e.au === 108, fam: (sp.fam || [0])[0], mask: e.it || 0, names });
+        }
         else out.auras.push([e.au, e.mi, e.lo]);
       }
     }
   }
   r.talAura = out; return out;
 }
+/* talents whose spell masks are missing from the data: the spells they work on (Lightning Strike with Lightning Bolt) */
+const SH_SHOCKS = ['Earth Shock', 'Flame Shock', 'Frost Shock'];
+const TALENT_SPELLS = {
+  'Concussion': new Set(['Lightning Bolt', 'Chain Lightning', 'Lightning Strike', ...SH_SHOCKS]),
+  'Convection': new Set(['Lightning Bolt', 'Chain Lightning', 'Lightning Strike', ...SH_SHOCKS]),
+  'Call of Thunder': new Set(['Lightning Bolt', 'Chain Lightning', 'Lightning Strike']),
+  'Elemental Fury': new Set(['Lightning Bolt', 'Chain Lightning', 'Lightning Strike', ...SH_SHOCKS, 'Searing Totem', 'Magma Totem', 'Fire Nova Totem']),
+};
 /* apply talent spell modifiers (op: 0 damage, 1 duration, 7 crit chance, 10 cast time, 11 cooldown, 14 cost, 15 crit bonus) */
 function spellMod(c, sp, op, base) {
   if (!sp || !sp.fam || c.cls === 1) return base;
   const m = talentAuras(c).mods; if (!m.length) return base;
   let flat = 0, pct = 0;
   for (const x of m) {
-    if (x.op !== op || x.fam !== sp.fam[0] || !x.mask || !((sp.fam[1] >>> 0) & (x.mask >>> 0))) continue;
+    if (x.op !== op) continue;
+    if (x.names) { if (!x.names.has(sp.n)) continue; }
+    else if (x.fam !== sp.fam[0] || !x.mask || !((sp.fam[1] >>> 0) & (x.mask >>> 0))) continue;
     if (x.pct) pct += x.v; else flat += x.v;
   }
   return (base + flat) * (1 + pct / 100);
@@ -374,6 +389,36 @@ function finishSpell(c, name, sp, tgt) {
   const mob = tgt && tgt !== c ? tgt : (sp.ef || []).some((e) => e.k === 'enemy' || e.k === 'area_enemy') ? r.tgt : null;
   applySpell(c, sp, mob, { name });
   fx(c.pos.x, c.pos.y, name, '#ffe9a8');
+  if (sp.lstrike) lightningStrikeSwing(c, mob);
+}
+/* Lightning Strike - an ability of this game for Enhancement shamans: a Lightning Bolt in melee. Every rank is the
+   rank of Lightning Bolt with half its mana cost and half its damage (and spell power), the same cast time; it is the
+   same kind of spell (spell family and mask of Lightning Bolt), so every talent for Lightning Bolt and for nature damage
+   works on it too (Concussion, Convection, Call of Thunder, Lightning Mastery, Elemental Fury ...). When it lands the
+   shaman also swings its weapon - both weapons when dual wielding - and these swings can trigger the weapon imbues. */
+const LSTRIKE_BASE = 9100000, LSTRIKE_LEVEL = 10;
+function lightningStrikeInit() {
+  const S = G.d.spells && G.d.spells.spells; if (!S) return;
+  for (const id of Object.keys(S)) {
+    const sp = S[id]; if (+id >= LSTRIKE_BASE || sp.n !== 'Lightning Bolt' || !(sp.cls || []).includes(7) || !(sp.src || []).includes('class')) continue;
+    const ls = JSON.parse(JSON.stringify(sp));
+    ls.n = 'Lightning Strike'; ls.lv = Math.max(LSTRIKE_LEVEL, sp.lv || 1); ls.rng = [0, 5]; ls.ic = 'spell_lightning_lightningbolt01'; ls.src = ['class']; ls.lstrike = true;
+    if (ls.first) ls.first = LSTRIKE_BASE + ls.first;
+    if (ls.pw) ls.pw[1] = Math.max(1, Math.round((ls.pw[1] || 0) / 2));
+    for (const e of ls.ef || []) if (e.t === 2) { e.lo /= 2; e.hi /= 2; if (e.ppl) e.ppl /= 2; if (e.coef != null) e.coef /= 2; if (e.die) e.die = Math.max(1, Math.round(e.die / 2)); }
+    if (ls.s) { if (ls.s.direct) ls.s.direct = ls.s.direct.map((v) => Math.round(v / 2)); if (ls.s.cd_direct) ls.s.cd_direct /= 2; }
+    S[LSTRIKE_BASE + +id] = ls;
+  }
+  if (G.abilCache) delete G.abilCache[7];
+}
+/* only Enhancement shamans have it */
+function lightningStrikeOk(c) { return c.cls === 7 && typeof rotationSpec === 'function' && rotationSpec(c) === 'enh'; }
+/* the weapon swings that come with it (white hits: weapon imbues, procs, the off hand) */
+function lightningStrikeSwing(c, m) {
+  if (!m || m.st === 'dead' || m.hp <= 0 || !inMelee(c, m)) return;
+  const s = charStats(c);
+  playerSwing(c, m, s, s.mh, {}); if (m.hp <= 0) { killMob(c, m); return; }
+  if (s.oh) { playerSwing(c, m, s, s.oh, { off: true }); if (m.hp <= 0) killMob(c, m); }
 }
 /* returns true while casting (the character does nothing else) */
 function castStep(c, dt) {
@@ -432,7 +477,8 @@ function classEffect(c, sp, e, tgt, ctx) {
       if (addItem(c, e.it, n)) log('Conjured ' + n + ' x ' + itemName(e.it) + '.');
       return true;
     }
-    case 54: addBuff(c, Object.assign({}, sp, { dur: 1800000 }), { au: 0, mi: 0, lo: 0 }); { const b = r.buffs.find((x) => x.name === name); if (b) b.imbue = name; } dirty(c); return true;
+    case 54: r.buffs = (r.buffs || []).filter((b) => !b.imbue || b.name === name);          // one weapon imbue at a time
+      addBuff(c, Object.assign({}, sp, { dur: 1800000 }), { au: 0, mi: 0, lo: 0 }); { const b = r.buffs.find((x) => x.name === name); if (b) b.imbue = name; } dirty(c); return true;
     case 56: petSummonSpell(c, name, sp); return true;               // Summon Imp ... / Call Pet
     case 109: petRevive(c, sp, e); return true;
     case 80: if (tgt) { if (r.cpTgt !== tgt) { r.cp = 0; r.cpTgt = tgt; } r.cp = Math.min(5, (r.cp || 0) + Math.max(1, e.lo || 1)); } return true;

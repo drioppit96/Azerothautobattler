@@ -62,7 +62,7 @@ const ROTATIONS = {
       aoe: [['Holy Nova', 'multi', 3], ['Shadow Word: Pain', 'debuffAll'], ['Holy Fire', 'opener'], ['Smite', 'spam']] },
   },
   7: {
-    enh: { st: [['Windfury Weapon', 'buff'], ['Rockbiter Weapon', 'buff'], ['Stormstrike', 'spam'], ['Flame Shock', 'debuff'], ['Earth Shock', 'spam'], ['Searing Totem', 'elite']],
+    enh: { st: [['Windfury Weapon', 'buff'], ['Rockbiter Weapon', 'buff'], ['Stormstrike', 'spam'], ['Flame Shock', 'debuff'], ['Earth Shock', 'spam'], ['Lightning Strike', 'spam'], ['Searing Totem', 'elite']],
       aoe: [['Windfury Weapon', 'buff'], ['Rockbiter Weapon', 'buff'], ['Magma Totem', 'multi', 3], ['Fire Nova Totem', 'multi', 3], ['Chain Lightning', 'multi', 2], ['Stormstrike', 'spam'], ['Flame Shock', 'debuffAll'], ['Earth Shock', 'spam']] },
     ele: { st: [['Flametongue Weapon', 'buff'], ['Elemental Mastery', 'elite'], ['Flame Shock', 'debuff'], ['Chain Lightning', 'spam'], ['Lightning Bolt', 'spam'], ['Earth Shock', 'spam']],
       aoe: [['Flametongue Weapon', 'buff'], ['Chain Lightning', 'spam'], ['Magma Totem', 'multi', 3], ['Fire Nova Totem', 'multi', 3], ['Flame Shock', 'debuffAll'], ['Lightning Bolt', 'spam']] },

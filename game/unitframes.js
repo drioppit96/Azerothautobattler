@@ -68,7 +68,7 @@ function ufFillChar(me, c) {
   ufSet(me, 'pw', pt + ':' + pv + '/' + pm, () => { me._pwi.style.width = (100 * pv / pm) + '%'; me._pwi.className = 'p' + pt; me._pwt.textContent = pt === 0 ? pv + ' / ' + pm : powerName(pt) + ' ' + pv; });
   const cpn = r.cpTgt && r.cpTgt.st !== 'dead' ? r.cp || 0 : 0;
   ufSet(me, 'cp', cpn, (v) => { me._cp = me._cp || (() => { const d = document.createElement('div'); d.className = 'ufcp'; me.appendChild(d); return d; })(); me._cp.innerHTML = '<i class="on"></i>'.repeat(v) + (c.cls === 4 || c.form === 'cat' ? '<i></i>'.repeat(5 - v) : ''); });
-  const castOf = () => { const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null; return r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null) || (typeof wcBarOf === 'function' ? wcBarOf(c) : null); };
+  const castOf = () => { const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null; return r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null) || (typeof wcBarOf === 'function' ? wcBarOf(c) : null) || ufSwingBar(c); };
   ufCastBar(me, castOf(), castOf);
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
   ufAuras(me, ufPlayerAuras(c, r));
@@ -92,6 +92,14 @@ function ufFillComp(me, u, lvl) {
   if (u.drinking) au.push({ n: 'Drink', ic: 'inv_drink_07', left: null, k: 'buff' });
   ufAuras(me, u.dead ? [] : au);
 }
+/* melee characters (warriors, rogues, paladins, Enhancement shamans, druids in cat or bear form): when nothing is
+   being cast, the bar is the swing timer of the main hand while they fight */
+function ufMelee(c) { return c.cls === 1 || c.cls === 4 || c.cls === 2 || (c.cls === 7 && c.level >= 10) || (c.cls === 11 && (c.form === 'cat' || c.form === 'bear')); }
+function ufSwingBar(c) {
+  const r = rt(c); if (!ufMelee(c) || !r.threats || !r.threats.length || r.ghost) return null;
+  const s = charStats(c); const sp = s.mh && s.mh.speed ? s.mh.speed / (1 + (s.haste || 0) / 100) : 2; const left = Math.max(0, Math.min(sp, r.swingT || 0));
+  return { name: 'Auto Attack', t: sp - left, total: sp, swing: true };
+}
 /* the cast bar: under the player's frame; on the small frames of the group over the name. get() gives what is cast
    right now ({name, t, total}): the bar itself moves every frame (animateCastBars), smoothly, not with the 4 redraws
    a second of the frames */
@@ -102,7 +110,7 @@ function ufCastBar(me, cb, get) {
       const d = document.createElement('div'); d.className = 'ufcast'; d.innerHTML = '<i></i><span></span>'; me.appendChild(d); me._cb = d;
       if (me.classList.contains('ufmate') || me.classList.contains('ufenemy')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
     }
-    me._cb.hidden = !cb; if (cb) me._cb.lastChild.textContent = cb.name;
+    me._cb.hidden = !cb; if (cb) me._cb.lastChild.textContent = cb.name; me._cb.classList.toggle('swing', !!(cb && cb.swing));
   });
   if (cb && me._cb) ufCastWidth(me, cb);
 }
@@ -116,7 +124,7 @@ function animateCastBars() {
     if (!el._cb || el._cb.hidden || !el._cbGet || el.style.display === 'none') continue;
     const k = el._cbGet();
     if (!k) { el._cb.hidden = true; el._vcast = ''; continue; }
-    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; }
+    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; el._cb.classList.toggle('swing', !!k.swing); }
     ufCastWidth(el, k, extra);
   }
 }

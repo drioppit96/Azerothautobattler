@@ -153,7 +153,7 @@ const TAC_CLASS = {
         T('enemy.elite', null, 'Searing Totem'), T('enemy.clus>', 3, 'Magma Totem'), T('enemy.clus>', 3, 'Fire Nova Totem'),
         T('self.att>', 1, 'Strength of Earth Totem'), T('enemy.elite', null, 'Grace of Air Totem'),
         T('enemy.tgt', null, 'Stormstrike'),
-        T('self.mp>', 45, 'Earth Shock'), T('enemy.elite', null, 'Flame Shock'),
+        T('self.mp>', 45, 'Earth Shock'), T('enemy.elite', null, 'Flame Shock'), T('self.mp>', 30, 'Lightning Strike'),
         T('enemy.far', null, 'Lightning Bolt'),
       ]);
       // Elemental (and Restoration alone): the spells

@@ -98,6 +98,7 @@ function classAbilityList(cls) {
 }
 function knownRank(c, name) {
   const l = classAbilityList(c.cls)[name]; if (!l) return null;
+  if (name === 'Lightning Strike' && !lightningStrikeOk(c)) return null;          // Enhancement shamans only (classes.js)
   if (typeof classTalents === 'function' && classTalents(c.cls).abil[name] && !talentRank(c, name)) return null;
   let b = null; for (const s of l) if (s.lv <= c.level || (s.talent && talentRank(c, name))) { if (!b || s.lv >= b.lv) b = s; } return b;
 }
