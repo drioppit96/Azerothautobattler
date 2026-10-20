@@ -112,7 +112,7 @@ function followText(c, o) { const g = groupOf(c); const L = g && groupLeader(g);
 function groupHold(c, o) {
   if (!isLeader(c) || !o || o.type === 'follow') return false; const g = groupOf(c); const r = rt(c);
   if (g.hold && !(typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) g.hold = false;          // out of the dungeon: no more resting
-  if (g.hold && !(r.threats && r.threats.length)) { o.where = g.restSat ? 'resting - press Continue dungeon' : 'back to the route to rest'; if (typeof dgHoldStep === 'function') dgHoldStep(c, g); else r.mv = null; return true; }          // the Rest button (dungeons.js)
+  if (g.hold && o.type === 'dungeon' && !(r.threats && r.threats.length)) { o.where = g.restSat ? 'resting - press Continue dungeon' : 'back to the route to rest'; if (typeof dgHoldStep === 'function') dgHoldStep(c, g); else r.mv = null; return true; }          // the Rest button (dungeons.js)
   if (r.threats && r.threats.length) return false;
   const tripping = (o.trip && o.trip.legs && o.trip.legs[o.trip.i] && o.trip.legs[o.trip.i].kind !== 'walk') || (o.mode === 'travel');
   for (const m of groupChars(g)) {
@@ -197,12 +197,21 @@ function ownHandsObjective(q, i, c) {
   if (ob.type === 'Collect') return !!(G.q.goSrc[ob.id] && G.q.goSrc[ob.id].length);                                                   // picked up from objects
   return false;
 }
-/* the leader took a quest: everyone near who can take it, takes it too */
+/* the leader took a quest: everyone of the group near who can take it, takes it too */
+function groupMatesNear(c, range) { const g = groupOf(c); if (!g || g.leader !== c.id) return []; return groupChars(g).filter((m) => m !== c && m.pos.map === c.pos.map && !rt(m).ghost && Math.hypot(m.pos.x - c.pos.x, m.pos.y - c.pos.y) <= range); }
 function groupShareQuest(c, q) {
-  for (const m of questGroup(c)) { if (Math.hypot(m.pos.x - c.pos.x, m.pos.y - c.pos.y) > GROUP_RANGE || m.pos.map !== c.pos.map) continue; if (!m.quests[q.id] && questAvailable(m, q)) withLog(m, () => acceptQuest(m, q)); }
+  for (const m of groupMatesNear(c, 100)) if (!m.quests[q.id] && questAvailable(m, q)) withLog(m, () => acceptQuest(m, q));
 }
+/* the leader turned a quest in: the others of the group near who have it turn it in too - done or not (the group did it) */
 function groupTurnIn(c, q) {
-  for (const m of questGroup(c)) { if (m.pos.map !== c.pos.map || Math.hypot(m.pos.x - c.pos.x, m.pos.y - c.pos.y) > 40) continue; if (m.quests[q.id] && questDone(m, q)) withLog(m, () => turnInQuest(m, q)); }
+  for (const m of groupMatesNear(c, 100)) {
+    if (!m.quests[q.id]) continue;
+    if (!questDone(m, q)) {
+      const a = m.quests[q.id];
+      q.objectives.forEach((ob, i) => { if (ob.type === 'Collect') { const have = bagCount(m, ob.id); if (have < ob.count) addItem(m, ob.id, ob.count - have); } else a.prog[i] = ob.count; });
+    }
+    withLog(m, () => { if (!turnInQuest(m, q)) log('Bags are too full to turn in "' + q.title + '" with the group.'); });
+  }
 }
 /* a member does its own part of the leader's current objective (objects, items used on someone) */
 function memberQuestWork(c, L, o, dt) {
