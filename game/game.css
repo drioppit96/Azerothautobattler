@@ -615,48 +615,51 @@ label.chk.dim{opacity:.55}
 .sheet-head .sharr{padding:1px 6px;margin:0 4px;font-size:11px}
 #sheetTitle{flex:0 1 auto}#sheetNext{margin-right:auto}
 
-/* ---------------------------------------------------------------- phones: map buttons, touch sized controls */
+/* ---------------------------------------------------------------- phones: map buttons, touch sized controls - the Android app only (html.app) */
 #mapctl{display:none}
 @media (max-width: 900px), (pointer: coarse) and (max-width: 1100px) {
-  #mapctl{display:flex;flex-direction:column;gap:8px;position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:4}
-  #mapctl button{width:46px;height:46px;border-radius:50%;border:2px solid var(--gold2);background:#1d1810e6;color:var(--gold);font:600 22px/1 "Segoe UI",sans-serif;box-shadow:0 2px 8px #000a;padding:0;touch-action:manipulation}
-  #mapctl button.on{background:var(--gold2);color:#1a1409}
-  #mapctl button:active{transform:scale(.92)}
-  #app{grid-template-rows:auto 1fr 56px}
-  #left,#right{bottom:56px}
-  #mnav button{font-size:14px;touch-action:manipulation}
-  #top{scrollbar-width:none}#top::-webkit-scrollbar{display:none}
-  #top .mini,#top .ddb{min-height:36px;padding:6px 12px}
-  #maptabs button{min-height:36px}
-  .dd .ddm{left:8px!important;right:8px;min-width:0}
-  .dd .ddm .chk{padding:6px 2px;font-size:15px}
-  .dd .ddm .seg button{padding:10px 12px;font-size:15px}
+  html.app #mapctl{display:flex;flex-direction:column;gap:8px;position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:4}
+  html.app #mapctl button{width:46px;height:46px;border-radius:50%;border:2px solid var(--gold2);background:#1d1810e6;color:var(--gold);font:600 22px/1 "Segoe UI",sans-serif;box-shadow:0 2px 8px #000a;padding:0;touch-action:manipulation}
+  html.app #mapctl button.on{background:var(--gold2);color:#1a1409}
+  html.app #mapctl button:active{transform:scale(.92)}
+  html.app #app{grid-template-rows:auto 1fr 56px}
+  html.app #left,html.app #right{bottom:56px}
+  html.app #mnav button{font-size:14px;touch-action:manipulation}
+  html.app #top{scrollbar-width:none}html.app #top::-webkit-scrollbar{display:none}
+  html.app #top .mini,html.app #top .ddb{min-height:36px;padding:6px 12px}
+  html.app #maptabs button{min-height:36px}
+  html.app .dd .ddm{left:8px!important;right:8px;min-width:0}
+  html.app .dd .ddm .chk{padding:6px 2px;font-size:15px}
+  html.app .dd .ddm .seg button{padding:10px 12px;font-size:15px}
   /* the ability bar: from the left, wrapping, clear of the map buttons */
-  #abar{left:6px;transform:none;right:64px;flex-wrap:wrap-reverse;bottom:40px}
-  #abar .ab{width:32px;height:32px}
-  #hud{font-size:11px;max-width:calc(100% - 70px)}
+  html.app #abar{left:6px;transform:none;right:64px;flex-wrap:wrap-reverse;bottom:40px}
+  html.app #abar .ab{width:32px;height:32px}
+  html.app #hud{font-size:11px;max-width:calc(100% - 70px)}
   /* the character window: arrows, title and close on one row, the tabs scrolling under them */
-  .sheet-head{flex-wrap:wrap;gap:6px;padding:6px 8px;border-radius:0}
-  #sheetTabs{order:5;flex:1 0 100%;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
-  #sheetTabs::-webkit-scrollbar{display:none}
-  #sheetTabs button{white-space:nowrap;padding:9px 14px;font-size:14px}
-  .sheet-head .sharr{padding:8px 14px;font-size:15px;margin:0}
-  #sheetTitle{font-size:16px}
-  #sheetClose{margin-left:auto;padding:8px 16px;font-size:17px}
-  #sheetGroup{order:4}
+  html.app .sheet-head{flex-wrap:wrap;gap:6px;padding:6px 8px;border-radius:0}
+  html.app #sheetTabs{order:5;flex:1 0 100%;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  html.app #sheetTabs::-webkit-scrollbar{display:none}
+  html.app #sheetTabs button{white-space:nowrap;padding:9px 14px;font-size:14px}
+  html.app .sheet-head .sharr{padding:8px 14px;font-size:15px;margin:0}
+  html.app #sheetTitle{font-size:16px}
+  html.app #sheetClose{margin-left:auto;padding:8px 16px;font-size:17px}
+  html.app #sheetGroup{order:4}
   /* touch sized form controls */
-  select,input[type=number],input[type=text],input[type=search],textarea{font-size:16px!important;min-height:36px}
-  input[type=checkbox],input[type=radio]{width:20px;height:20px;vertical-align:middle}
-  .chk{min-height:32px;display:inline-flex;align-items:center;gap:6px}
-  .card h3{padding-top:4px;padding-bottom:4px}
-  button{touch-action:manipulation}
-  .mini{min-height:34px}
-  #tip{max-width:calc(100vw - 16px)}
+  html.app select,html.app input[type=number],html.app input[type=text],html.app input[type=search],html.app textarea{font-size:16px!important;min-height:36px}
+  html.app input[type=checkbox],html.app input[type=radio]{width:20px;height:20px;vertical-align:middle}
+  html.app .chk{min-height:32px;display:inline-flex;align-items:center;gap:6px}
+  html.app .card h3{padding-top:4px;padding-bottom:4px}
+  html.app button{touch-action:manipulation}
+  html.app .mini{min-height:34px}
+  html.app #tip{max-width:calc(100vw - 16px)}
   /* the map menu: a sheet along the bottom, big rows */
-  #menu{left:4px!important;right:4px;top:auto!important;bottom:4px;max-width:none!important;max-height:58%;overflow-y:auto;z-index:20;font-size:15px}
-  #menu button{padding:12px 10px}
-  #coords{display:none}#hud:has(#zonehint:empty){display:none}
+  html.app #menu{left:4px!important;right:4px;top:auto!important;bottom:4px;max-width:none!important;max-height:58%;overflow-y:auto;z-index:20;font-size:15px}
+  html.app #menu button{padding:12px 10px}
+  html.app #coords{display:none}html.app #hud:has(#zonehint:empty){display:none}
 }
 
 /* the class icon on the name plate of the character frames */
 .uf .ufcls{position:absolute;z-index:7;border-radius:50%;box-shadow:0 0 0 1px #000,0 0 3px #000;pointer-events:auto}
+
+/* things only the Android app has */
+.apponly{display:none!important}html.app .apponly{display:inline-flex!important}

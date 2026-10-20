@@ -70,7 +70,7 @@ function makeMob(W, e, s, pool) {
    them; blocks nobody has been near for 2 minutes are dropped again. A quest's creatures elsewhere on the map are
    brought in when the quest needs them (lwEnsureEntry). On by default in the Android app (Map view: Light world). */
 const LW_BLOCK = 800, LW_KEEP = 120;
-function lightWorld() { if (G.lightWorld == null) { const st = G.state && G.state.settings; const v = st && st.lightWorld != null ? !!st.lightWorld : /AzerothApp/.test(navigator.userAgent); if (!G.state) return v; G.lightWorld = v; } return G.lightWorld; }
+function lightWorld() { if (G.lightWorld == null) { const st = G.state && G.state.settings; const v = IS_APP && (st && st.lightWorld != null ? !!st.lightWorld : true); /* the Android app only */ if (!G.state) return v; G.lightWorld = v; } return G.lightWorld; }
 function lwKey(x, y) { return Math.floor(x / LW_BLOCK) + ',' + Math.floor(y / LW_BLOCK); }
 function lwIndex(mapId) {
   G.lwIdx = G.lwIdx || {}; if (G.lwIdx[mapId]) return G.lwIdx[mapId];

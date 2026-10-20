@@ -9,6 +9,7 @@ const BEH_COLORS = {A:'#e0453a', N:'#e6b93c', F:'#4fc26b', X:'#8a8f9c'};
 const RACE_NAMES = {1:'Human',2:'Orc',3:'Dwarf',4:'Night Elf',5:'Undead',6:'Tauren',7:'Gnome',8:'Troll'};
 const CLASS_NAMES = {1:'Warrior',2:'Paladin',3:'Hunter',4:'Rogue',5:'Priest',7:'Shaman',8:'Mage',9:'Warlock',11:'Druid'};
 const SAVE_KEY = 'wow_auto_battler_save_v1';
+const IS_APP = /AzerothApp/.test(navigator.userAgent);          // the Android app: light world, phone controls, the lighter map drawing
 const RUN_SPEED = 7;            // yards per second
 const STEP = 0.05;              // simulation step (seconds of game time)
 
@@ -82,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 j (smooth zoomed-in map on phones)';
+const GAME_VERSION = '2026-10-21 k (phone changes only in the Android app)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -105,6 +106,7 @@ function mapSprite(src) { if (!(src in MAP_SPR)) { MAP_SPR[src] = null; const im
    for every creature on the screen was slow on phones */
 const SPR_SIZED = new Map();
 function spriteSized(im, key, w, h, round) {
+  if (!IS_APP) return im;          // the browser draws the picture itself
   const dpr = G.dpr || 1; const pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(h * dpr)); const k = key + '|' + pw + 'x' + ph + (round ? 'o' : '');
   let cv = SPR_SIZED.get(k);
   if (!cv) {
@@ -117,6 +119,7 @@ function spriteSized(im, key, w, h, round) {
 }
 /* a picture laid over the map (dx, dy, dw, dh: where all of it would be): only the part on the screen is drawn */
 function drawOnScreen(ctx, im, dx, dy, dw, dh) {
+  if (!IS_APP) { ctx.drawImage(im, dx, dy, dw, dh); return; }
   const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height; if (!iw || !ih || !dw || !dh) return;
   let x0 = Math.max(dx, 0), y0 = Math.max(dy, 0), x1 = Math.min(dx + dw, G.cw), y1 = Math.min(dy + dh, G.ch);
   if (dw < 0 || dh < 0) { ctx.drawImage(im, dx, dy, dw, dh); return; }
@@ -604,6 +607,12 @@ function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, G.cw, G.ch);
   const img = G.img[G.map.name]; const m = G.map;
   if (img) {
+    if (!IS_APP) {
+    ctx.imageSmoothingQuality = 'high';
+    const hd = hdOn() && G.imgHd && G.imgHd[m.name];
+    if (hd) { const cr = (G.hdCal && G.hdCal[m.name] && G.hdCal[m.name].crop) || [0, 0, hd.naturalWidth, hd.naturalHeight]; ctx.drawImage(hd, cr[0], cr[1], cr[2], cr[3], G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); }
+    else ctx.drawImage(img, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale);
+    } else {
     // only the part of the map on the screen is drawn (zoomed in, the whole picture blown up tens of thousands of
     // pixels wide every frame made phones crawl); smoothing: the expensive kind only when the picture is made smaller
     const hd = hdOn() && G.imgHd && G.imgHd[m.name];
@@ -615,6 +624,7 @@ function draw() {
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = S * G.dpr / Math.max(kx, ky) < 1 ? 'high' : 'low';
       ctx.drawImage(src, cr[0] + x0 * kx, cr[1] + y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, G.ox + x0 * S, G.oy + y0 * S, (x1 - x0) * S, (y1 - y0) * S);
       ctx.imageSmoothingQuality = 'low';
+    }
     }
   }
   if (!img) { ctx.fillStyle = '#9a8f77'; ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText('Loading map ...', G.cw / 2, G.ch / 2); ctx.textAlign = 'start'; }
@@ -767,7 +777,7 @@ function drawTerrain(ctx, m) {
   ctx.save(); ctx.imageSmoothingEnabled = false; drawOnScreen(ctx, t.cv, ax, ay, bx - ax, by - ay); ctx.restore();
 }
 function resize() {
-  const wrap = $('mapwrap'); const dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 2 : 4);          // phones: at most 2 canvas pixels per screen pixel (3x screens: less than half the pixels to fill)
+  const wrap = $('mapwrap'); const dpr = IS_APP ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1;          // phones: at most 2 canvas pixels per screen pixel (3x screens: less than half the pixels to fill)
   const cw = wrap.clientWidth, ch = wrap.clientHeight;
   if (cw === G.cw && ch === G.ch && dpr === G.dpr) return;
   const first = !G.cw; const ocx = G.cw / 2, ocy = G.ch / 2;
@@ -818,7 +828,7 @@ function bindInput() {
       const [W, H] = mapSize(G.map); const minS = Math.min(G.cw / W, G.ch / H) * 0.8;
       const ns = Math.max(minS, Math.min(12, pinch.s * dd / Math.max(1, pinch.d))); const k = ns / pinch.s;
       const cx = (p1.x + p2.x) / 2, cy = (p1.y + p2.y) / 2;
-      G.ox = cx - (pinch.cx - pinch.ox) * k; G.oy = cy - (pinch.cy - pinch.oy) * k; G.scale = ns; return;          // zooming keeps following (the map stays on the character)
+      G.ox = cx - (pinch.cx - pinch.ox) * k; G.oy = cy - (pinch.cy - pinch.oy) * k; G.scale = ns; if (!IS_APP) $('follow').checked = false; return;          // the app: zooming keeps following
     }
     if (G.drag) {
       if (Math.abs(sx - G.drag.x) + Math.abs(sy - G.drag.y) > (G.drag.touch ? 10 : 5)) G.drag.moved = true;
@@ -853,7 +863,7 @@ function bindInput() {
     const f = e.deltaY < 0 ? 1.2 : 1 / 1.2; const ns = Math.max(minS, Math.min(12, G.scale * f));
     const k = ns / G.scale; G.ox = e.offsetX - (e.offsetX - G.ox) * k; G.oy = e.offsetY - (e.offsetY - G.oy) * k; G.scale = ns;
   }, { passive: false });
-  bindMapCtl();
+  if (IS_APP) bindMapCtl();
   $('mnav').addEventListener('click', (e) => {
     const p = e.target.dataset && e.target.dataset.p; if (!p) return;
     if (p === 'sheet') { openSheet('char'); return; }
@@ -877,7 +887,7 @@ function bindInput() {
   $('btnChars').onclick = () => openCharSwitch();
   $('btnMeter').onclick = () => toggleMeter();
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
-  if ($('lightworld')) { $('lightworld').checked = lightWorld(); $('lightworld').onchange = () => { G.state.settings.lightWorld = $('lightworld').checked; save(); location.reload(); }; }
+  if ($('lightworld') && IS_APP) { $('lightworld').checked = lightWorld(); $('lightworld').onchange = () => { G.state.settings.lightWorld = $('lightworld').checked; save(); location.reload(); }; }
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
