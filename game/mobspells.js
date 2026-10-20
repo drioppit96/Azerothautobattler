@@ -278,9 +278,10 @@ function msHurt(c, f, m, v, school, name, phys, dot) {
     d = v * (1 - Math.min(0.75, res / Math.max(1, m.lvl * 5) * 0.75)) * s.dmgTaken;
   }
   d = Math.max(1, Math.round(d));
-  if (o.cls !== 1 && typeof absorbDamage === 'function') { d = absorbDamage(o, d); if (d <= 0) { fx(o.pos.x, o.pos.y, 'absorb', '#9fe0ff'); return; } }
+  if (o.cls !== 1 && typeof absorbDamage === 'function') { d = absorbDamage(o, d); if (d <= 0) { fx(o.pos.x, o.pos.y, 'Absorbed', '#ffffff'); return; } }
   o.hp -= d; meterTaken(o, d); if (r.party) (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
-  fx(o.pos.x, o.pos.y, '-' + d + (dot ? '' : ' ' + name), '#ff6a5a');
+  o._hit = performance.now();
+  if (!dot && typeof vfxShot === 'function' && m && Math.hypot(m.x - o.pos.x, m.y - o.pos.y) > 6) vfxShot(m, o, school, '-' + d + ' ' + name, '#ff6a5a', false, !school); else fx(o.pos.x, o.pos.y, '-' + d + (dot ? '' : ' ' + name), '#ff6a5a');          // its spell flies at you (vfx.js)
   if (o.cls === 1 || (o.cls === 11 && o.form === 'bear')) o.rage = Math.min(100, (o.rage || 0) + 2.5 * d / rageConv(o.level));
   if (r.cast && !r.cast.ch && o.cls !== 1 && !dot) r.cast.t = Math.max(0, r.cast.t - 0.5);
   if (o.hp <= 0) { o.hp = 0; charDie(o, m); return; }

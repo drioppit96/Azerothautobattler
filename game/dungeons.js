@@ -338,8 +338,8 @@ function compTakeHit(c, u, m, d) {
   d = Math.max(1, Math.round(d * (1 - u.armorRed)));
   if (Math.random() < (u.role === 'tank' ? 0.25 : 0.08)) { fx(u.x, u.y, u.role === 'tank' ? 'parry' : 'dodge', '#cfc6b0'); return; }
   mercOnHit(u);
-  if (u.absorb && u.absorb.until > G.gameTime && u.absorb.v > 0) { const a = Math.min(d, u.absorb.v); u.absorb.v -= a; d -= a; if (a) fx(u.x, u.y, 'absorb ' + a, '#9fe0ff'); if (u.absorb.v <= 0) { u.absorb = null; const b = mercBuff(u, 'Power Word: Shield'); if (b) b.until = 0; } if (!d) return; }
-  u.hp -= d; meterGroup(c, u, 'taken', d); fx(u.x, u.y, '-' + d, '#ff9a8a'); const r = rt(c); (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
+  if (u.absorb && u.absorb.until > G.gameTime && u.absorb.v > 0) { const a = Math.min(d, u.absorb.v); u.absorb.v -= a; d -= a; if (a) fx(u.x, u.y, 'Absorbed', '#ffffff'); if (u.absorb.v <= 0) { u.absorb = null; const b = mercBuff(u, 'Power Word: Shield'); if (b) b.until = 0; } if (!d) return; }
+  u.hp -= d; u._hit = performance.now(); meterGroup(c, u, 'taken', d); fx(u.x, u.y, '-' + d, '#ff9a8a'); const r = rt(c); (r.dmgLog = r.dmgLog || []).push([G.gameTime, d]);
   if (u.hp <= 0) { u.hp = 0; u.dead = true; u.deadAt = G.gameTime; u.cb = null; u.buffs = []; u.absorb = null; log(u.name + ' (' + u.role + ') has died.'); for (const x of threatsOf(c)) if (x.gThr) delete x.gThr[u.id]; }
 }
 function partyStep(c, dt) {
@@ -391,6 +391,7 @@ function partyStep(c, dt) {
     const diff = m.lvl - c.level; if (Math.random() < 0.05 + Math.max(0, diff) * 0.02) { fx(m.x, m.y, 'miss', '#cfc6b0'); return; }
     const arm = Math.max(0, m.armor + mobMods(m).armor); const red = 1 - clamp(arm / (arm + 400 + 85 * c.level), 0, 0.75);
     let v = u.dps * 2.0 * rnd(0.85, 1.15) * red; if (Math.random() < 0.08) v *= 2;
+    if (typeof vfxLunge === 'function') vfxLunge(u, m);
     v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m, v); gThreat(m, u, v); mercOnSwing(u, v); meterGroup(c, u, 'dmg', v, u.role === 'tank' ? 'Tanking attacks' : 'Attacks'); fx(m.x, m.y, '' + v, '#e8d8b8');
     if (m.st === 'alive') engage(m, c);
     if (m.hp <= 0) killMob(c, m);
@@ -401,8 +402,9 @@ function drawParty(ctx, m) {
   ctx.save(); ctx.font = '10px Segoe UI'; ctx.textAlign = 'center';
   for (const u of p) {
     if (m.dmap && dungeonFloorAt(m.dungeon, u.x, u.y, c.pos.z) !== m.floor) continue;
-    const [x, y] = w2s(u.x, u.y); ctx.globalAlpha = u.dead ? 0.35 : 1;
+    const [x, y] = typeof vfxOff === 'function' ? vfxOff(u, ...w2s(u.x, u.y)) : w2s(u.x, u.y); ctx.globalAlpha = u.dead ? 0.35 : 1;
     if (!(u.cls && drawClassIcon(ctx, u.cls, x, y, 7))) { ctx.fillStyle = DG_ROLE_COLOR[u.role]; ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke(); }
+    if (typeof vfxUnitFlash === 'function') vfxUnitFlash(ctx, u, x, y, 7);
     ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 11, 18, 3); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 9, y - 11, 18 * u.hp / u.maxhp, 3);
   }
   ctx.restore();

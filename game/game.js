@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 n (app: unit frames on the map)';
+const GAME_VERSION = '2026-10-21 o (combat effects, zoomed-in tokens)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -607,6 +607,7 @@ function draw() {
   const cv = $('map'); const ctx = cv.getContext('2d');
   ctx.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, G.cw, G.ch);
+  if (typeof vfxShake === 'function') vfxShake(ctx);          // a crit shakes the screen a little (vfx.js)
   const img = G.img[G.map.name]; const m = G.map;
   if (img) {
     if (!IS_APP) {
@@ -649,24 +650,14 @@ function draw() {
     }
     ctx.stroke();
   }
-  // creatures
+  // creatures: dots, or zoomed in far enough portrait tokens with health bars (vfx.js: flashes, "!", fading out)
   if ($('showmobs').checked && (!m.cont || G.scale > 1.6)) {
     const r = Math.max(2, Math.min(5, G.scale * 1.6));
+    const tok = vfxTokenMode(m) ? Math.max(8, Math.min(16, vfxPpy(m) * 5)) : 0; const pad = tok ? tok + 12 : 12;
     for (const mob of G.mobs) {
       const [x, y] = w2s(mob.x, mob.y);
-      if (x < -5 || y < -5 || x > G.cw + 5 || y > G.ch + 5) continue;
-      if (mob.st === 'dead') {
-        if (G.gameTime - mob.deadAt < CORPSE_SHOW) { ctx.strokeStyle = '#8a8f9c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke(); }
-        continue;
-      }
-      ctx.fillStyle = BEH_COLORS[mob.beh] || '#888'; ctx.globalAlpha = mob.st === 'chase' ? 1 : .85;
-      ctx.beginPath(); ctx.arc(x, y, mob.st === 'chase' ? r + 1.5 : r, 0, 6.3); ctx.fill();
-      if (mob.rank && mob.beh !== 'F') { ctx.globalAlpha = 1; drawRankRing(ctx, mob.rank, x, y, mob.st === 'chase' ? r + 1.5 : r); }
-      if (mob.st === 'chase' || (mob.hp < mob.maxhp && mob.st !== 'alive')) {
-        ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(x - 10, y - r - 7, 20, 4); ctx.fillStyle = '#e0453a'; ctx.fillRect(x - 10, y - r - 7, 20 * Math.max(0, mob.hp / mob.maxhp), 4);
-        if (mob.auras) { let k = 0; for (const a of mob.auras) if (a.until > G.gameTime) { ctx.fillStyle = a.au === 3 ? '#ff9a3c' : a.au === 12 || a.au === 7 ? '#ffffff' : '#a07cff'; ctx.fillRect(x - 10 + k * 5, y - r - 12, 4, 4); k++; } }
-        if (mob.fleeing) { ctx.fillStyle = '#ffb36b'; ctx.font = '10px Segoe UI'; ctx.fillText('flee', x + 6, y + 3); }
-      }
+      if (x < -pad || y < -pad || x > G.cw + pad || y > G.ch + pad) continue;
+      vfxDrawMob(ctx, mob, x, y, r, tok);
     }
     ctx.globalAlpha = 1;
   }
@@ -712,15 +703,16 @@ function draw() {
   if (typeof drawRouteMarks === 'function') drawRouteMarks(ctx, m);
   // the pet
   if (petAlive(c) && c.pos.map === m.map && !rt(c).ghost && !rt(c).flying && !rt(c).riding) {
-    const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
+    const P = rt(c).pet; const [x, y] = vfxOff(P, ...w2s(P.x, P.y));
     const ic = petMapIcon(c.pet);
     if (ic && ic.complete && ic.naturalWidth) { ctx.drawImage(spriteSized(ic, ic.src, 14, 14, true), x - 7, y - 7, 14, 14); ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.stroke(); }
     else { ctx.fillStyle = '#7fbf5a'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke(); }
+    vfxUnitFlash(ctx, P, x, y, 7);
     ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 13, 18, 3); ctx.fillStyle = '#5ec06a'; ctx.fillRect(x - 9, y - 13, 18 * Math.max(0, c.pet.hp / petStats(c).maxhp), 3);
   }
   // the character
   if (c.pos.map === m.map && inMap(m, c.pos.x, c.pos.y)) {
-    const [x, y] = w2s(c.pos.x, c.pos.y);
+    const [x, y] = vfxOff(c, ...w2s(c.pos.x, c.pos.y));
     ctx.save(); ctx.translate(x, y);
     if (rt(c).ghost) ctx.globalAlpha = .55;
     if (!drawClassIcon(ctx, c.cls, 0, 0, 10)) { ctx.fillStyle = rt(c).ghost ? '#8fd0ff' : '#c0662a'; ctx.strokeStyle = '#fff3d0'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 6.3); ctx.fill(); ctx.stroke(); }
@@ -728,14 +720,15 @@ function draw() {
     const ang = Math.atan2(-Math.sin(c.pos.o), -Math.cos(c.pos.o));
     const dx = -Math.sin(c.pos.o), dy = -Math.cos(c.pos.o);
     ctx.fillStyle = '#fff3d0'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(dx * 17, dy * 17); ctx.lineTo(dx * 10 - dy * 5, dy * 10 + dx * 5); ctx.lineTo(dx * 10 + dy * 5, dy * 10 - dx * 5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.restore();
+    ctx.restore(); vfxUnitFlash(ctx, c, x, y, 10);
     const hm = charStats(c).maxHp; ctx.fillStyle = '#000'; ctx.fillRect(x - 14, y - 19, 28, 5); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 14, y - 19, 28 * Math.max(0, c.hp / hm), 5);
   }
   // the other characters (running in the background, or waiting where they were left)
   for (const o of G.state.characters) {
     if (o === c || o.pos.map !== m.map || !inMap(m, o.pos.x, o.pos.y)) continue;
-    const live = o.bg || (typeof sameGroup === 'function' && sameGroup(c, o)); const [x, y] = w2s(o.pos.x, o.pos.y); ctx.globalAlpha = live ? 1 : 0.6;
+    const live = o.bg || (typeof sameGroup === 'function' && sameGroup(c, o)); const [x, y] = vfxOff(o, ...w2s(o.pos.x, o.pos.y)); ctx.globalAlpha = live ? 1 : 0.6;
     if (!drawClassIcon(ctx, o.cls, x, y, 8)) { ctx.fillStyle = CLASS_COLOR[o.cls] || '#9fc7ff'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke(); }
+    vfxUnitFlash(ctx, o, x, y, 8); if (live && vfxTokenMode(m)) vfxHpBar(ctx, x, y - 14, 18, o.hp / charStats(o).maxHp, '#3fae5a');
     if (!live) { ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#cfe3ff'; ctx.strokeText('paused', x, y - 11); ctx.fillText('paused', x, y - 11); ctx.textAlign = 'start'; }
     ctx.globalAlpha = 1;
   }
@@ -749,10 +742,11 @@ function draw() {
   if (ghost && ghost.corpse.map === m.map) {
     const [cx, cy] = w2s(ghost.corpse.x, ghost.corpse.y); ctx.strokeStyle = '#8fd0ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 8, 0, 6.3); ctx.moveTo(cx - 5, cy - 5); ctx.lineTo(cx + 5, cy + 5); ctx.moveTo(cx + 5, cy - 5); ctx.lineTo(cx - 5, cy + 5); ctx.stroke();
   }
+  if (typeof vfxDraw === 'function') vfxDraw(ctx);          // spells and arrows in flight, bursts (vfx.js)
   ctx.font = 'bold 13px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000';
   for (const f of G.fx) {
     const [fx_, fy_] = w2s(f.x, f.y); const yy = fy_ - 26 - f.t * 28; ctx.globalAlpha = Math.max(0, 1 - f.t / 1.2);
-    ctx.fillStyle = f.color; ctx.strokeText(f.text, fx_, yy); ctx.fillText(f.text, fx_, yy);
+    ctx.fillStyle = f.color; vfxText(ctx, f, fx_, yy);
   }
   ctx.globalAlpha = 1; ctx.textAlign = 'start';
 }

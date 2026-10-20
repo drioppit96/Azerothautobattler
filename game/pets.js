@@ -858,6 +858,7 @@ function petPhys(c, P, m, base, name) {
   let crit = false; if ((r -= st.crit - Math.max(0, diff)) < 0) { v *= 2; crit = true; }
   const arm = Math.max(0, m.armor + mobMods(m).armor); v *= 1 - clamp(arm / (arm + 400 + 85 * L), 0, 0.75);
   if (P.prowl) { v *= 1.2; P.prowl = false; }
+  if (typeof vfxLunge === 'function') vfxLunge(P, m);
   petHitMob(c, P, m, Math.max(1, Math.round(v)), name, crit);
   if (crit && petTalent(c, 'Frenzy') && Math.random() < 0.2 * petTalent(c, 'Frenzy')) { petAddBuff(P, { name: 'Frenzy', ic: 'inv_misc_monsterclaw_03', until: G.gameTime + 8 }); fx(P.x, P.y, 'Frenzy', '#ffb36b'); }
 }
@@ -915,7 +916,7 @@ function petTakeHit(c, m, d, o) {
   const sh = petBuff(P, 'Shell Shield'); if (sh) d *= sh.taken;
   if (p.kind === 'voidwalker' && phys) d *= 1 - 0.02 * petTalent(c, 'Master Demonologist');
   d = Math.max(1, Math.round(d));
-  p.hp -= d; fx(P.x, P.y, '-' + d, '#ff9a8a');
+  p.hp -= d; P._hit = performance.now(); fx(P.x, P.y, '-' + d, '#ff9a8a');
   if (phys && !o.dot && m && m.st === 'chase') { const tb = petBuff(P, 'Tainted Blood'); if (tb && tb.taint) { const t2 = spellRow(tb.taint); const e = t2 && (t2.ef || []).find((x) => x.au === 99); if (e) addMobAura(c, m, { n: t2.n, dur: t2.dur || 10000, stack: t2.stack || 5 }, { au: 99, lo: e.lo }); } }
   if (P.cast && !P.cast.ch && !o.dot) P.cast.t = Math.max(0, P.cast.t - 0.5);          // pushback
   if (p.hp <= 0) petDie(c);

@@ -179,6 +179,7 @@ function mobAuraTick(W, m, dt) {
 /* a hit on a creature (dmg: its size; none for damage over time): it breaks fear, and it can break a root early like in
    the game (Frost Nova, Entangling Roots): chance = damage / (30 x level - 100), 50 below level 9 */
 function onMobDamaged(m, dmg) {
+  m._hit = performance.now();          // flashes red on the map (vfx.js)
   if (!m.auras) return; const now = G.gameTime;
   for (const a of m.auras) {
     if (a.until <= now) continue;

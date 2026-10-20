@@ -221,7 +221,11 @@ function gainXp(c, xp, why) {
 }
 
 /* --------------------------------------------------------------- effects */
-function fx(x, y, text, color) { G.fx.push({ x, y, text, color: color || '#fff', t: 0 }); if (G.fx.length > 60) G.fx.shift(); }
+function fx(x, y, text, color) {
+  // a crit (a number with '!'): shown big and bouncy without the '!' (vfx.js)
+  let crit = false; if (typeof text === 'string' && /^-?\d+!/.test(text)) { crit = true; text = text.replace('!', ''); }
+  G.fx.push({ x, y, text, color: color || '#fff', t: 0, crit }); if (G.fx.length > 60) G.fx.shift();
+}
 
 /* ----------------------------------------------------------------- loot */
 function questNeeds(c, id) {
@@ -308,6 +312,7 @@ function lootMob(c, m, questOnly, roll) {
 function engage(m, c) {
   if (m.st !== 'alive' || (typeof mobCCd === 'function' && mobCCd(m))) return;          // crowd-controlled: stays out of it
   if (c && c.id && rt(c).stealthed) stealthBreak(c);
+  if (typeof vfxAggro === 'function') vfxAggro(m);          // a "!" over it (vfx.js)
   m.st = 'chase'; m.tgt = c; m.engT = G.gameTime; ensureWorld(c.pos.map).active.add(m);
   if (c.id && typeof groupOf === 'function' && groupOf(c)) { m.cThr = m.cThr || {}; m.cThr[c.id] = Math.max(m.cThr[c.id] || 0, 1); }
 }
@@ -363,16 +368,16 @@ function mobTick(W, m, dt, now) {
       const step = Math.min(d - want + 0.3, 7 * mods.snare * dt); m.x += (vx - m.x) / d * step; m.y += (vy - m.y) / d * step; m.swing = Math.max(m.swing, 0.4);
     } else if (d <= MELEE_RANGE + 0.5) {
       m.swing -= dt;
-      if (m.swing <= 0 && vu) { m.swing += m.atk / mods.haste; compTakeHit(c, vu, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + mods.dmg) * mods.dmgPct * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { u: vu, x: vu.x, y: vu.y }); }
-      else if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + (mods.dmg || 0)) * (mods.dmgPct || 1) * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { pet: true, x: rt(c).pet.x, y: rt(c).pet.y }); }
+      if (m.swing <= 0 && vu) { m.swing += m.atk / mods.haste; if (typeof vfxLunge === 'function') vfxLunge(m, vu); compTakeHit(c, vu, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + mods.dmg) * mods.dmgPct * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { u: vu, x: vu.x, y: vu.y }); }
+      else if (m.swing <= 0 && onPet) { m.swing += m.atk / mods.haste; if (typeof vfxLunge === 'function') vfxLunge(m, rt(c).pet); petTakeHit(c, m, Math.max(1, rnd(m.dmin, m.dmax) + mods.ap / 14 * m.atk + (mods.dmg || 0)) * (mods.dmgPct || 1) * (mods.disarm ? 0.5 : 1)); if (m.auras && typeof msOnMobHit === 'function') msOnMobHit(W, m, c, { pet: true, x: rt(c).pet.x, y: rt(c).pet.y }); }
       else if (m.swing <= 0) {
-        m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods);
+        m.swing += m.atk / mods.haste; const s = charStats(c); const h = mobDamage(m, c, s, mods); if (typeof vfxLunge === 'function') vfxLunge(m, c);
         const r = rt(c);
         if (h.t === 'hit' && c.cls !== 1) { h.d = absorbDamage(c, h.d); damageShield(c, m); if (m.hp <= 0) { killMob(c, m); return; } if (h.d <= 0) { h.t = 'absorb'; } }
         if (h.t === 'dodge' || h.t === 'parry' || h.t === 'block' || h.blocked) r.revWindow = now + 5;
         if (h.t === 'hit') {
           hitTakenTalents(c, h);
-          c.hp -= h.d; meterTaken(c, h.d); if (r.party) (r.dmgLog = r.dmgLog || []).push([now, h.d]); fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
+          c.hp -= h.d; c._hit = performance.now(); meterTaken(c, h.d); if (r.party) (r.dmgLog = r.dmgLog || []).push([now, h.d]); fx(c.pos.x, c.pos.y, '-' + h.d + (h.crit ? '!' : '') + (h.blocked ? ' (' + h.blocked + ' blocked)' : ''), '#ff6a5a');
           if (c.cls === 1 || (c.cls === 11 && c.form === 'bear')) c.rage = Math.min(100, c.rage + 2.5 * h.d / rageConv(c.level) * 2.0);
           if (r.cast && !r.cast.ch && c.cls !== 1) r.cast.t = Math.max(0, r.cast.t - 0.5);      // spell pushback
           if (c.hp <= 0) { c.hp = 0; charDie(c, m); return; }
@@ -421,6 +426,7 @@ function stealthStep(c) {
 function stealthBreak(c) { const r = rt(c); if (!r.stealthed) return; r.stealthed = false; r.stealthCd = G.gameTime + 10; dirty(c); }
 /* ---------------------------------------------------------- kills / death */
 function killMob(c, m) {
+  m._die = performance.now();          // it fades away on the map (vfx.js)
   // the creature's own world (a damage-over-time can finish it after the killer went elsewhere, into a dungeon even)
   const wid = m.wid != null ? m.wid : c.pos.map; const W = ensureWorld(wid);
   const dg = typeof isDungeonMap === 'function' && isDungeonMap(wid);
@@ -669,6 +675,7 @@ function threatsOf(c) {
 function playerSwing(c, m, s, w, opts) {
   /* one melee hit with weapon info w. opts: {bonus, off (off-hand), yellow (ability), normalized, pct, name} */
   opts = opts || {}; const r = rt(c);
+  if (typeof vfxLunge === 'function' && !opts.extra) vfxLunge(c, m);          // the swing (vfx.js)
   const spd = opts.normalized ? (w.it && w.it.t === 17 ? 3.3 : w.it && w.it.s === 15 ? 1.7 : 2.4) : w.speed;
   let d = rnd(w.min, w.max) + (s.ap + apVs(s, m)) / 14 * spd;
   if (opts.pct) d *= opts.pct / 100;
@@ -689,7 +696,7 @@ function playerSwing(c, m, s, w, opts) {
   d = Math.max(1, Math.round(d));
   m.hp -= d; onMobDamaged(m, d); if (c.cls !== 1) addThreat(m, c, d); meterDmg(c, d, opts.name || (opts.off ? 'Off hand' : 'Melee'));
   if (m.auras && typeof msThorns === 'function') msThorns(c, m);          // a damage shield on it (Fire Shield)
-  fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff');
+  fx(m.x, m.y, '' + d + (crit ? '!' : ''), crit ? '#ffd23a' : opts.off ? '#ddd' : '#fff'); if (crit && typeof vfxCrit === 'function') vfxCrit(c);
   if (c.cls !== 1 && !opts.yellow) classMeleeHit(c, m, s, w, d, crit, opts);
   if (c.cls === 11 && c.form === 'bear' && !opts.yellow) c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level));
   if (c.cls === 1 && !opts.yellow) { c.rage = Math.min(100, c.rage + 7.5 * d / rageConv(c.level)); if (Math.random() < 0.08 * talentRank(c, 'Unbridled Wrath')) c.rage = Math.min(100, c.rage + 1); }

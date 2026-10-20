@@ -206,7 +206,7 @@ function mercApplyDebuff(c, u, n, sp, mobs) {
     if (m.st === 'dead') continue; m.auras = (m.auras || []).filter((a) => a.until > now);
     const dur = sp.dur > 0 ? sp.dur / 1000 : 15; let did = false;
     for (const e of sp.ef || []) {
-      if (e.t === 2) { const v = Math.max(1, Math.round(u.dps * 0.9 * rnd(0.9, 1.1))); m.hp -= v; onMobDamaged(m, v); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, n); fx(m.x, m.y, '' + v, '#ffd27a'); did = true; continue; }
+      if (e.t === 2) { const v = Math.max(1, Math.round(u.dps * 0.9 * rnd(0.9, 1.1))); m.hp -= v; onMobDamaged(m, v); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, n); if (typeof vfxShot === 'function' && !NO_FLY.test(n || '')) { const sc = schoolOfName(n); vfxShot(u, m, sc, '' + v, SCHOOL_COL[sc] || '#ffd27a'); } else fx(m.x, m.y, '' + v, '#ffd27a'); did = true; continue; }
       if (e.t !== 6 || !MERC_DEBUFF_AU.has(e.au)) continue;
       let a = m.auras.find((x) => x.key === n && x.au === e.au);
       if (!a) { a = { key: n, au: e.au, val: 0, stacks: 0, src: c, cu: u, t: 0 }; m.auras.push(a); }
@@ -353,7 +353,7 @@ function mercNukeStep(c, u, m, wandOnly) {
     if (m.st === 'dead') return; mercPay(u, cost);
     const diff = m.lvl - c.level; if (Math.random() < 0.04 + Math.max(0, diff) * 0.02) { fx(m.x, m.y, 'resist', '#cfc6b0'); return; }
     let v = u.dps * ct * (wand ? 0.45 : 1) * rnd(0.9, 1.1); if (Math.random() < 0.1) v *= 1.5;
-    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m, v); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, sp.n); fx(m.x, m.y, '' + v, '#ffd27a');
+    v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m, v); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, sp.n); if (typeof vfxShot === 'function' && !NO_FLY.test(sp.n || '')) vfxShot(u, m, sp.sc || 0, '' + v, SCHOOL_COL[sp.sc || 0] || '#ffd27a'); else fx(m.x, m.y, '' + v, '#ffd27a');
     if (m.st === 'alive') engage(m, c);
     if (m.hp <= 0) killMob(c, m);
   });

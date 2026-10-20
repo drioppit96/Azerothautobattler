@@ -326,7 +326,7 @@ function spellHit(c, sp, e, m, opts) {
   let crit = false; if (Math.random() * 100 < spellMod(c, sp, 7, spellCritChance(c))) { v *= 1.5 + spellMod(c, sp, 15, 0) / 100; crit = true; }
   v = Math.max(1, Math.round(v));
   m.hp -= v; onMobDamaged(m, v); addThreat(m, c, v); meterDmg(c, v, sp.n);
-  fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#ffe58a');
+  if (typeof vfxSpell === 'function') vfxSpell(c, m, sp, v + (crit ? '!' : ''), crit); else fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#ffe58a');          // flies there, school colours (vfx.js)
   if (m.st === 'alive') engage(m, c);
   if (m.hp <= 0) killMob(c, m);
   return v;
@@ -664,11 +664,13 @@ function rangedStep(c, m, dt, d) {
     v += (s.rap + (mark ? mark.val : 0)) / 14 * w.speed;
     if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level) - s.hit) { fx(m.x, m.y, 'miss', '#cfc6b0'); return true; }
     v *= 1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75);
-    if (Math.random() * 100 < s.crit) v *= 2;
+    if (Math.random() * 100 < s.crit) { v *= 2; r.shotCrit = true; }
   } else { if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level)) { fx(m.x, m.y, 'miss', '#cfc6b0'); return true; } }
   if (w.wand) { const ws = (typeof talentRank === 'function') ? talentRank(c, 'Wand Specialization') : 0; if (ws) v *= 1 + (c.cls === 5 ? 0.05 : 0.125) * ws; }
   v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m, v); addThreat(m, c, v); meterDmg(c, v, w.wand ? 'Shoot (wand)' : 'Auto Shot');
-  fx(m.x, m.y, '' + v, '#fff'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
+  const sc0 = r.shotCrit; r.shotCrit = false; if (sc0 && typeof vfxCrit === 'function') vfxCrit(c);
+  if (typeof vfxShot === 'function') vfxShot(c, m, w.wand ? (w.school || 6) : 0, '' + v + (sc0 ? '!' : ''), sc0 ? '#ffd23a' : '#fff', sc0, !w.wand); else fx(m.x, m.y, '' + v, '#fff');          // the arrow / the wand bolt flies (vfx.js)
+  if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
   return true;
 }
 
@@ -681,7 +683,9 @@ function rangedHit(c, m, bonus, pct, name) {
   v *= 1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75);
   let crit = false; if (Math.random() * 100 < s.crit) { v *= 2; crit = true; }
   v = Math.max(1, Math.round(v * s.dmgDone)); m.hp -= v; onMobDamaged(m, v); addThreat(m, c, v); meterDmg(c, v, name || 'Shot');
-  fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#fff'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
+  if (crit && typeof vfxCrit === 'function') vfxCrit(c);
+  if (typeof vfxShot === 'function') vfxShot(c, m, 0, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#fff', crit, true); else fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#fff');
+  if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m);
   return v;
 }
 
@@ -835,7 +839,7 @@ function hasBuff(c, name) { const r = rt(c); return (r.buffs || []).some((b) => 
 function absorbDamage(c, d) {
   const r = rt(c);
   if (c.cls === 9 && typeof soulLinkSplit === 'function') d = soulLinkSplit(c, d);           // Soul Link: part of it goes to the demon
-  if (r.absorb && r.absorb.until > G.gameTime && r.absorb.v > 0) { const a = Math.min(d, r.absorb.v); r.absorb.v -= a; d -= a; if (r.absorb.v <= 0) { r.absorb = null; const b = (r.buffs || []).find((x) => x.name === 'Power Word: Shield' || x.name === 'Ice Barrier'); if (b) b.until = 0; } if (a) fx(c.pos.x, c.pos.y, 'absorb ' + a, '#9fe0ff'); }
+  if (r.absorb && r.absorb.until > G.gameTime && r.absorb.v > 0) { const a = Math.min(d, r.absorb.v); r.absorb.v -= a; d -= a; if (r.absorb.v <= 0) { r.absorb = null; const b = (r.buffs || []).find((x) => x.name === 'Power Word: Shield' || x.name === 'Ice Barrier'); if (b) b.until = 0; } if (a) fx(c.pos.x, c.pos.y, 'Absorbed', '#ffffff'); }
   if (d > 0 && r.manaShield && r.manaShield.until > G.gameTime && r.manaShield.v > 0) { const a = Math.min(d, r.manaShield.v, (c.mana || 0) / 2); r.manaShield.v -= a; c.mana -= a * 2; d -= a; }
   return Math.round(d);
 }
