@@ -675,7 +675,8 @@ function rangedStep(c, m, dt, d) {
 /* one shot of a hunter ability with the ranged weapon (Multi-Shot, Aimed Shot) */
 function rangedHit(c, m, bonus, pct, name) {
   const w = rangedWeapon(c); if (!w || !m || m.st === 'dead') return 0; const s = charStats(c);
-  let v = (rnd(w.min, w.max) + s.rap / 14 * w.speed) * (pct || 100) / 100 + (bonus || 0);
+  const am = w.wand ? null : ammoEquipped(c); if (!w.wand && !am) return 0;          // the ammo slot: its damage goes into every shot
+  let v = (rnd(w.min, w.max) + (am ? (am.dps || 0) * w.speed : 0) + s.rap / 14 * w.speed) * (pct || 100) / 100 + (bonus || 0);
   if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level) - s.hit) { fx(m.x, m.y, 'miss', '#cfc6b0'); if (m.st === 'alive') engage(m, c); return 0; }
   v *= 1 - clamp(m.armor / (m.armor + 400 + 85 * c.level), 0, 0.75);
   let crit = false; if (Math.random() * 100 < s.crit) { v *= 2; crit = true; }

@@ -218,6 +218,7 @@ function abilityUsable(c, name) {
   if (c.cls !== 1) {
     if (!formOk(c, name)) return { ok: false, why: c.form ? 'not in ' + c.form + ' form' : 'needs ' + (/Maul|Swipe|Roar|Frenzied|Enrage|Bash/.test(name) ? 'bear' : 'cat') + ' form' };
     if ((sp.fl || []).includes('ranged') && c.cls === 3 && !rangedWeapon(c)) return { ok: false, why: 'needs a bow, gun or crossbow' };
+    if ((sp.fl || []).includes('ranged') && c.cls === 3 && typeof ammoEquipped === 'function' && !ammoEquipped(c)) return { ok: false, why: 'needs ' + (ammoKind(c) === 3 ? 'bullets' : 'arrows') + ' in the ammo slot' };
     if (name === 'Judgement' && !(rt(c).buffs || []).some((b) => /^Seal of/.test(b.name) && b.until > G.gameTime)) return { ok: false, why: 'needs a seal' };
   }
   return { ok: true, sp };

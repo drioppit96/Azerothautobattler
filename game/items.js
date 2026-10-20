@@ -83,6 +83,7 @@ function moneyHtml(cp) {
 
 /* ----------------------------------------------------------- instances */
 function makeInst(id, n, rollSuffix) {
+  if (isAmmo(itemRow(id))) n = 1;
   const o = { id, n: n || 1 }; const r = itemRow(id);
   if (r && r.du) o.dur = r.du;
   if (rollSuffix && r && r.rp && G.d.items.random_tmpl[r.rp]) {
@@ -109,6 +110,7 @@ function roomForQuestItem(c, id) {
 /* add n of an item (optionally a prepared instance); returns true when everything fitted */
 function addItem(c, id, n, inst) {
   n = n || 1; const st = itemStack(id);
+  if (!inst && isAmmo(itemRow(id))) { if (c.bags.some((x) => x.id === id) || (c.equip[AMMO_SLOT] && c.equip[AMMO_SLOT].id === id)) return true; n = 1; }      // ammo: one is all one ever needs (200 arrows from a quest or a drop were 200 bag slots)
   if (inst) { if (c.bags.length >= bagCapacity(c)) { rt(c).bagFull = true; return false; } c.bags.push(inst); return true; }
   if (st > 1) for (const s of c.bags) { if (s.id === id && s.n < st) { const k = Math.min(st - s.n, n); s.n += k; n -= k; if (!n) return true; } }
   while (n > 0) {
@@ -579,6 +581,7 @@ function ammoMigrate(c) {
   const fix = (arr) => { if (!arr) return arr; const seen = new Set(); return arr.filter((x) => { const it = x && itemRow(x.id); if (!isAmmo(it)) return true; x.n = 1; if (seen.has(x.id)) return false; seen.add(x.id); return true; }); };
   c.bags = fix(c.bags); if (c.bank && c.bank.items) c.bank.items = fix(c.bank.items);
   if (c.equip[AMMO_SLOT]) c.equip[AMMO_SLOT].n = 1;
+  if (c.rt && c.bags.length < bagCapacity(c)) c.rt.bagFull = false;
   const k = ammoKind(c); if (!k) return;
   let bi = -1, bv = c.equip[AMMO_SLOT] && itemRow(c.equip[AMMO_SLOT].id) && itemRow(c.equip[AMMO_SLOT].id).s === k ? itemRow(c.equip[AMMO_SLOT].id).dps || 0 : -1;
   c.bags.forEach((x, i) => { const it = itemRow(x.id); if (isAmmo(it) && it.s === k && (it.rl || 0) <= c.level && (it.dps || 0) > bv) { bv = it.dps || 0; bi = i; } });
