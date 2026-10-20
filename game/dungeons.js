@@ -258,7 +258,7 @@ function drawDungeonWalls(ctx, m) {
     x.putImageData(id, 0, 0); f._wallImg = cv;
   }
   const img = G.img[m.name]; if (!img) return;
-  ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(f._wallImg, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); ctx.restore();
+  ctx.save(); ctx.imageSmoothingEnabled = false; drawOnScreen(ctx, f._wallImg, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); ctx.restore();
 }
 function dgNearest(g, x, y, z, f) {
   const cand = []; const cx = Math.floor(x / g.CELLG), cy = Math.floor(y / g.CELLG);

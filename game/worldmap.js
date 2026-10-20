@@ -124,7 +124,7 @@ function drawNavOverlay(ctx) {
   if (m.cont && h.kind === 'zone') {
     const sh = zoneShape(m.map, h.zone.i); if (!sh) return;
     const [ax, ay] = w2s(sh.x0, sh.y0), [bx, by] = w2s(sh.x1, sh.y1);
-    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = h.def ? 1 : 0.5; ctx.drawImage(sh.cv, ax, ay, bx - ax, by - ay); ctx.restore();
+    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = h.def ? 1 : 0.5; drawOnScreen(ctx, sh.cv, ax, ay, bx - ax, by - ay); ctx.restore();
   }
 }
 function navTip(h) {

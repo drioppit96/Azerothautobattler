@@ -82,7 +82,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 i (melee keep their way in group fights, class icons)';
+const GAME_VERSION = '2026-10-21 j (smooth zoomed-in map on phones)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -101,16 +101,41 @@ async function listDir(url, ext) {
 /* class icons (game/img/class/<class>.png) and the dragon borders of elite and rare creatures, drawn on the map */
 const MAP_SPR = {};
 function mapSprite(src) { if (!(src in MAP_SPR)) { MAP_SPR[src] = null; const im = new Image(); im.onload = () => { MAP_SPR[src] = im; }; im.src = src; } return MAP_SPR[src]; }
+/* a picture made at the exact size it is drawn at (in screen pixels), once: drawing the big picture smaller every frame
+   for every creature on the screen was slow on phones */
+const SPR_SIZED = new Map();
+function spriteSized(im, key, w, h, round) {
+  const dpr = G.dpr || 1; const pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(h * dpr)); const k = key + '|' + pw + 'x' + ph + (round ? 'o' : '');
+  let cv = SPR_SIZED.get(k);
+  if (!cv) {
+    if (SPR_SIZED.size > 400) SPR_SIZED.clear();
+    cv = document.createElement('canvas'); cv.width = pw; cv.height = ph; const x = cv.getContext('2d'); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    if (round) { x.beginPath(); x.arc(pw / 2, ph / 2, Math.min(pw, ph) / 2, 0, 6.3); x.clip(); }
+    x.drawImage(im, 0, 0, pw, ph); SPR_SIZED.set(k, cv);
+  }
+  return cv;
+}
+/* a picture laid over the map (dx, dy, dw, dh: where all of it would be): only the part on the screen is drawn */
+function drawOnScreen(ctx, im, dx, dy, dw, dh) {
+  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height; if (!iw || !ih || !dw || !dh) return;
+  let x0 = Math.max(dx, 0), y0 = Math.max(dy, 0), x1 = Math.min(dx + dw, G.cw), y1 = Math.min(dy + dh, G.ch);
+  if (dw < 0 || dh < 0) { ctx.drawImage(im, dx, dy, dw, dh); return; }
+  if (x1 <= x0 || y1 <= y0) return;
+  const kx = iw / dw, ky = ih / dh;
+  // whole source pixels (no smoothing: the edges stay where they are)
+  let sx = Math.floor((x0 - dx) * kx), sy = Math.floor((y0 - dy) * ky), ex = Math.min(iw, Math.ceil((x1 - dx) * kx)), ey = Math.min(ih, Math.ceil((y1 - dy) * ky));
+  ctx.drawImage(im, sx, sy, ex - sx, ey - sy, dx + sx / kx, dy + sy / ky, (ex - sx) / kx, (ey - sy) / ky);
+}
 function drawClassIcon(ctx, cls, x, y, rad) {
-  const im = mapSprite('img/class/' + cls + '.png'); if (!im) return false;
-  ctx.drawImage(im, x - rad, y - rad, rad * 2, rad * 2); return true;
+  const src = 'img/class/' + cls + '.png'; const im = mapSprite(src); if (!im) return false;
+  ctx.drawImage(spriteSized(im, src, rad * 2, rad * 2), x - rad, y - rad, rad * 2, rad * 2); return true;
 }
 /* rank 1 elite, 2 rare elite, 3 boss, 4 rare (not friendly ones): a gold / silver ring around the dot, and the dragon of
    the target frame around it when the map is zoomed in enough to see it */
 function drawRankRing(ctx, rank, x, y, r) {
   const silver = rank === 2 || rank === 4; const col = silver ? '#e4e8f0' : '#ffc93a';
   const im = r >= 3.5 ? mapSprite('img/' + (silver ? 'rare' : 'elite') + '_ring.png') : null;
-  if (im) { const k = (r + 2.5) / 24; ctx.drawImage(im, x - 51 * k, y - 44.5 * k, im.width * k, im.height * k); }
+  if (im) { const k = (r + 2.5) / 24; ctx.drawImage(spriteSized(im, silver ? 'rare' : 'elite', im.width * k, im.height * k), x - 51 * k, y - 44.5 * k, im.width * k, im.height * k); }
   ctx.strokeStyle = '#000'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 6.3); ctx.stroke();
   ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 6.3); ctx.stroke();
 }
@@ -579,10 +604,18 @@ function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, G.cw, G.ch);
   const img = G.img[G.map.name]; const m = G.map;
   if (img) {
-    ctx.imageSmoothingQuality = 'high';
+    // only the part of the map on the screen is drawn (zoomed in, the whole picture blown up tens of thousands of
+    // pixels wide every frame made phones crawl); smoothing: the expensive kind only when the picture is made smaller
     const hd = hdOn() && G.imgHd && G.imgHd[m.name];
-    if (hd) { const cr = (G.hdCal && G.hdCal[m.name] && G.hdCal[m.name].crop) || [0, 0, hd.naturalWidth, hd.naturalHeight]; ctx.drawImage(hd, cr[0], cr[1], cr[2], cr[3], G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale); }
-    else ctx.drawImage(img, G.ox, G.oy, img.naturalWidth * G.scale, img.naturalHeight * G.scale);
+    const W = img.naturalWidth, H = img.naturalHeight, S = G.scale;
+    const x0 = Math.max(0, -G.ox / S), y0 = Math.max(0, -G.oy / S), x1 = Math.min(W, (G.cw - G.ox) / S), y1 = Math.min(H, (G.ch - G.oy) / S);
+    if (x1 > x0 && y1 > y0) {
+      const cr = hd ? (G.hdCal && G.hdCal[m.name] && G.hdCal[m.name].crop) || [0, 0, hd.naturalWidth, hd.naturalHeight] : [0, 0, W, H];
+      const kx = cr[2] / W, ky = cr[3] / H; const src = hd || img;
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = S * G.dpr / Math.max(kx, ky) < 1 ? 'high' : 'low';
+      ctx.drawImage(src, cr[0] + x0 * kx, cr[1] + y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, G.ox + x0 * S, G.oy + y0 * S, (x1 - x0) * S, (y1 - y0) * S);
+      ctx.imageSmoothingQuality = 'low';
+    }
   }
   if (!img) { ctx.fillStyle = '#9a8f77'; ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText('Loading map ...', G.cw / 2, G.ch / 2); ctx.textAlign = 'start'; }
   if (m.world) { drawNavOverlay(ctx); return; }
@@ -669,7 +702,7 @@ function draw() {
   if (petAlive(c) && c.pos.map === m.map && !rt(c).ghost && !rt(c).flying && !rt(c).riding) {
     const P = rt(c).pet; const [x, y] = w2s(P.x, P.y);
     const ic = petMapIcon(c.pet);
-    if (ic && ic.complete && ic.naturalWidth) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.clip(); ctx.drawImage(ic, x - 7, y - 7, 14, 14); ctx.restore(); ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.stroke(); }
+    if (ic && ic.complete && ic.naturalWidth) { ctx.drawImage(spriteSized(ic, ic.src, 14, 14, true), x - 7, y - 7, 14, 14); ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.stroke(); }
     else { ctx.fillStyle = '#7fbf5a'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.3); ctx.fill(); ctx.stroke(); }
     ctx.fillStyle = '#000'; ctx.fillRect(x - 9, y - 13, 18, 3); ctx.fillStyle = '#5ec06a'; ctx.fillRect(x - 9, y - 13, 18 * Math.max(0, c.pet.hp / petStats(c).maxhp), 3);
   }
@@ -731,10 +764,10 @@ function drawTerrain(ctx, m) {
     t = G.terrainImg[m.name] = { cv, x0: g.origin - R0 * cs, y0: g.origin - C0 * cs, x1: g.origin - (R1 + 1) * cs, y1: g.origin - (C1 + 1) * cs };
   }
   const [ax, ay] = w2s(t.x0, t.y0), [bx, by] = w2s(t.x1, t.y1);
-  ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(t.cv, ax, ay, bx - ax, by - ay); ctx.restore();
+  ctx.save(); ctx.imageSmoothingEnabled = false; drawOnScreen(ctx, t.cv, ax, ay, bx - ax, by - ay); ctx.restore();
 }
 function resize() {
-  const wrap = $('mapwrap'); const dpr = window.devicePixelRatio || 1;
+  const wrap = $('mapwrap'); const dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 2 : 4);          // phones: at most 2 canvas pixels per screen pixel (3x screens: less than half the pixels to fill)
   const cw = wrap.clientWidth, ch = wrap.clientHeight;
   if (cw === G.cw && ch === G.ch && dpr === G.dpr) return;
   const first = !G.cw; const ocx = G.cw / 2, ocy = G.ch / 2;
