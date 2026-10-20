@@ -677,12 +677,6 @@ function renderQuests() {
   h += '<div class="qlevel"><button class="act' + (lv ? ' red' : '') + '" id="qlevel">' + (lv ? 'Stop leveling' : 'Level up to 60 (auto)') + '</button><div class="muted small">Quests zone by zone across the world, travels by flight path, zeppelin and boat, grinds when needed.</div></div>';
   h += '<div class="qauto"><select id="qzone">' + zl.map((z) => '<option value="' + esc(z.name) + '"' + (z.name === cur ? ' selected' : '') + '>' + esc(z.name) + ' (lvl ' + z.lo + '-' + z.hi + ', done ' + z.done + '/' + z.n + ')</option>').join('') + '</select>' +
     '<button class="act" id="qgo">Auto-quest</button></div>';
-  { const g = typeof groupOf === 'function' ? groupOf(c) : null; const L = g ? groupLeader(g) || c : c; const dn = isDungeonMap(c.pos.map) ? dungeonByMap(c.pos.map) : isDungeonMap(L.pos.map) ? dungeonByMap(L.pos.map) : null;
-    if (dn) {
-      const held = (g && g.hold) || (L.order && L.order.hold);
-      h += '<div class="qauto"><button class="act" id="qdgrest"' + (held ? ' disabled' : '') + ' title="Everyone sits down and the group stays put until Continue">' + (held ? 'Resting...' : 'Rest') + '</button><button class="act" id="qdgcont" title="On with the run now: nobody waits, the ones far off come to the leader, the leader finds the way on again">Continue dungeon</button></div>' +
-        '<div class="qauto"><button class="act red" id="qdgreset" title="Everyone out to the entrance at once; the dungeon starts over (every creature back)">Teleport out and reset ' + esc(dn.name) + '</button></div>';
-    } }
   /* the quests as fold-out lists: a line per quest (title, level, progress); click it for the objectives and buttons */
   const act = Object.keys(c.quests).map((id) => G.q.byId[id]).filter(Boolean).sort((a, b) => questIgnored(c, a.id) - questIgnored(c, b.id));      // the ignored ones at the bottom
   const qOpen = (k) => !!(QUI.open[k]);
@@ -723,9 +717,6 @@ function renderQuests() {
   el.onclick = (ev) => {
     const t = ev.target; if (!t.dataset) return;
     const f = t.closest('[data-qf]'); if (f) { QUI.open[f.dataset.qf] = !QUI.open[f.dataset.qf]; renderQuests(); return; }
-    if (t.id === 'qdgrest') { dungeonRest(c); renderQuests(); return; }
-    if (t.id === 'qdgcont') { dungeonContinue(c); renderQuests(); return; }
-    if (t.id === 'qdgreset') { const g = typeof groupOf === 'function' ? groupOf(c) : null; const L = g ? groupLeader(g) || c : c; const dn = dungeonByMap(c.pos.map) || dungeonByMap(L.pos.map); if (dn && confirm('Teleport ' + (g ? 'the group' : c.name) + ' out of ' + dn.name + ' and reset it?\nThe run ends and every creature in it comes back.')) dungeonResetOut(c); renderQuests(); return; }
     if (t.id === 'qlevel') { if (c.order && c.order.type === 'leveling') stopOrder(c); else orderLeveling(c); renderQuests(); return; }
     if (t.id === 'qgo') { const z = $('qzone').value; G.state.settings.questZone = z; orderQuesting(c, z); return; }
     if (t.dataset.ign) { questIgnoreToggle(c, +t.dataset.ign); return; }

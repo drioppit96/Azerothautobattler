@@ -505,6 +505,30 @@ function dungeonContinue(c) {
   }
   log('On with ' + d.name + '.'); save(); renderOrder();
 }
+/* the Dungeon control card (top of the right panel, only while in a dungeon): how the run goes, Rest, Continue
+   dungeon, Teleport out and reset */
+function renderDgCard() {
+  const el = $('dgCard'); if (!el) return; const c = active(); if (!c) return;
+  const { g, L } = dungeonGroupOf(c); const d = isDungeonMap(c.pos.map) ? dungeonByMap(c.pos.map) : isDungeonMap(L.pos.map) ? dungeonByMap(L.pos.map) : null;
+  el.hidden = !d; if (!d) { el._h = ''; return; }
+  let h = cardHead('dgctl', 'Dungeon control <span class="small muted">' + esc(d.name) + '</span>', true);
+  if (cardOpen('dgctl', true)) {
+    const held = (g && g.hold) || (L.order && L.order.hold); const ot = L.order && L.order.type === 'dungeon' ? orderText(L) : null;
+    h += '<div class="small">' + (held ? '<b style="color:#ffd866">Resting</b> - the group stays put until you press Continue dungeon.' : ot ? esc(ot.d) : '<span style="color:#e6b93c">' + esc(L.name) + ' is not running the dungeon right now - Continue dungeon starts it again.</span>') + '</div>';
+    if (g) { const dead = groupChars(g).filter((m) => m.pos.map === d.map && rt(m).ghost).length; if (dead) h += '<div class="small" style="color:#ff8a7a">' + dead + ' down - back on their feet after the fight.</div>'; }
+    h += '<div class="dgbtns"><button class="act" data-dgc="rest"' + (held ? ' disabled' : '') + ' title="Everyone sits down and the group stays put until Continue">' + (held ? 'Resting...' : 'Rest') + '</button>' +
+      '<button class="act" data-dgc="cont" title="On with the run now: nobody waits, the ones far off come to the leader, the leader finds the way on again">Continue dungeon</button></div>' +
+      '<button class="act red dgwide" data-dgc="reset" title="Everyone out to the entrance at once; the dungeon starts over (every creature back)">Teleport out and reset ' + esc(d.name) + '</button>';
+  }
+  if (el._h !== h) { el.innerHTML = h; el._h = h; }
+  el.onclick = (e) => {
+    const b = e.target.closest('[data-dgc]'); if (!b) return; const k = b.dataset.dgc;
+    if (k === 'rest') dungeonRest(c);
+    else if (k === 'cont') dungeonContinue(c);
+    else if (k === 'reset' && confirm('Teleport ' + (g ? 'the group' : c.name) + ' out of ' + d.name + ' and reset it?\nThe run ends and every creature in it comes back.')) dungeonResetOut(c);
+    renderDgCard();
+  };
+}
 /* walking out: to the nearest way out (or the one given), then out through the portal to the entrance */
 function dungeonNearestExit(c, d) {
   let best = null, bd = Infinity;
@@ -559,7 +583,7 @@ function dungeonText(c, o) {
   if (o.phase === 'travel') return { t: (o.onlyTravel ? 'Travel to ' : 'Dungeon: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'to the entrance' };
   const left = d ? dungeonBossesLeft(c, d).length : 0;
   const pl = d && o.gi != null && G.pullPlans && G.pullPlans[d.map + (o.tier ? ':' + o.tier : '')]; const rp = pl && pl.cum ? ' - route ' + Math.round(100 * (pl.cum[Math.min(o.gi, pl.cum.length - 1)] || 0) / Math.max(1, pl.length)) + '%' : '';
-  return { t: 'Dungeon: ' + o.label + rp, d: (o.target && o.target.wp ? 'following the route, ' : o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
+  return { t: 'Dungeon: ' + o.label + rp, d: (o.target && o.target.wp ? 'following the route, ' : o.target ? 'going for ' + (o.target.info ? o.target.info[1] : 'a creature') + ', ' : '') + o.bossKills + ' bosses down, ' + left + ' left, ' + o.kills + ' kills' + (typeof groupOf === 'function' && groupOf(c) ? ', group ' + groupChars(groupOf(c)).filter((m) => !rt(m).ghost && m.hp > 0).length + '/' + groupChars(groupOf(c)).length + ' up' + (partyOf(c) && partyOf(c).length ? ', mercenaries ' + partyAlive(c).length + '/' + partyOf(c).length : '') : o.group ? ', group ' + partyAlive(c).length + '/' + ((d && d.players - 1) || 0) + ' alive' : '') };
 }
 function dungeonBossesLeft(c, d) {
   const W = ensureWorld(d.map); const ids = new Set(d.bosses.map((b) => b.e));

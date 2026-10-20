@@ -605,3 +605,9 @@ label.chk.dim{opacity:.55}
 .hearth .hscity{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0}.hearth .hscity .on{opacity:.7}
 .prof .rrow .pcn{width:52px;background:#0d0b08;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font-size:12px}
 .ufcast.swing i{background:linear-gradient(#e86a4a,#9a2a14)}
+/* Dungeon control card (dungeons.js renderDgCard) */
+.dgcard{border-color:#8a5a2a}
+.dgcard .dgbtns{display:flex;gap:6px;margin:6px 0}
+.dgcard .dgbtns button{flex:1}
+.dgcard .dgwide{width:100%}
+.dgcard[hidden]{display:none}

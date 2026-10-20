@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 z (dungeon Rest / Continue)';
+const GAME_VERSION = '2026-10-20 z2 (Dungeon control card)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -380,7 +380,7 @@ function bindCards() {
     const h = e.target.closest('[data-card]'); if (!h) return;
     const id = h.dataset.card; const o = G.state.settings.cardOpen = G.state.settings.cardOpen || {};
     o[id] = !cardOpen(id, (h.closest('.card') || {}).dataset ? h.closest('.card').dataset.def !== '0' : true); save();
-    if (id === 'quests' || id === 'qact' || id === 'qnear') renderQuests(); else if (id === 'auto') renderSettingsCard(); else renderGearCard();
+    if (id === 'quests' || id === 'qact' || id === 'qnear') renderQuests(); else if (id === 'auto') renderSettingsCard(); else if (id === 'dgctl') renderDgCard(); else renderGearCard();
   });
 }
 /* the automatic behaviour, in groups (what the character does by itself) - each character has its own (c.auto);
@@ -884,6 +884,7 @@ function frame(ts) {
   if (ts - G.uiT > 250) {
     G.uiT = ts; renderChar(); renderAbar(); if (c.order) renderOrder();
     if (!G.qT || ts - G.qT > 1500) { G.qT = ts; if (!$('questCard').matches(':hover')) renderQuests(); }
+    if (typeof renderDgCard === 'function' && (!G.dgT || ts - G.dgT > 500)) { G.dgT = ts; renderDgCard(); }
     if (G.selected && G.selected.kind === 'mob') renderInfo(G.selected);
     if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); if (!$('groupCard').matches(':hover')) renderGroup(); }
     if (METER.show && (!G.mtT || ts - G.mtT > 500)) { G.mtT = ts; renderMeter(); }
