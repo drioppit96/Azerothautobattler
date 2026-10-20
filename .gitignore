@@ -7,3 +7,9 @@ android/
 __pycache__/
 *.pyc
 
+# the Android app: built files (script/make_android.py fills assets/www; GitHub Actions builds the APK)
+android_app/app/src/main/assets/
+android_app/app/build/
+android_app/build/
+android_app/.gradle/
+android_app/local.properties

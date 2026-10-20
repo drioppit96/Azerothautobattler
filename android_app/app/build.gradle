@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+// the signing key: from the environment (GitHub Actions secrets) - the same key every build, so an update installs over
+// the old app and keeps the saved characters; without it the build is signed with the debug key
+def ks = System.getenv('ANDROID_KEYSTORE_FILE')
+
+android {
+    namespace 'com.azeroth.autobattler'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.azeroth.autobattler'
+        minSdk 24
+        targetSdk 34
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName(System.getenv('APP_VERSION') ?: 'dev')
+    }
+    signingConfigs {
+        release {
+            if (ks && new File(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig (ks && new File(ks).exists()) ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}

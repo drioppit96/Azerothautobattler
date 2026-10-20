@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 e (enchanting scrolls)';
+const GAME_VERSION = '2026-10-20 f (Android app)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -794,6 +794,7 @@ function bindInput() {
   $('speed').addEventListener('click', (e) => { const s = e.target.dataset && e.target.dataset.s; if (s !== undefined) { setSpeed(+s); ddClose(); } });
   bindDropdowns(); if (typeof rmBind === 'function') rmBind();
   $('btnSave').onclick = () => {
+    if (window.AzerothApp && AzerothApp.saveFile) { save(); AzerothApp.saveFile('auto_battler_save.json', JSON.stringify(G.state, null, 1)); return; }      // the Android app: to Downloads
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(G.state, null, 1)], { type: 'application/json' }));
     a.download = 'auto_battler_save.json'; a.click();
   };
@@ -820,6 +821,19 @@ function bindDropdowns() {
   });
   document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.dd')) ddClose(); }, true);
   window.addEventListener('resize', ddClose);
+}
+/* the Android app's Back button: closes what is open (menus, windows, the route marker); false when nothing was */
+function appBack() {
+  if (document.querySelector('.dd.open')) { ddClose(); return true; }
+  const ab = $('awayBox'); if (ab && !ab.hidden) { ab.hidden = true; return true; }
+  if ($('iact') && !$('iact').hidden) { hideItemMenu(); return true; }
+  if (G.menuOpen) { hideMenu(); return true; }
+  if (SH.open) { closeSheet(); return true; }
+  if (typeof METER !== 'undefined' && METER.show && typeof toggleMeter === 'function') { toggleMeter(); return true; }
+  if (G.rmOn && typeof rmOpen === 'function') { rmOpen(false); return true; }
+  const cs = $('charswitch'); if (cs && !cs.hidden) { cs.hidden = true; return true; }
+  if (document.body.classList.contains('show-left') || document.body.classList.contains('show-right')) { const b = document.querySelector('#mnav [data-p="map"]'); if (b) { b.click(); return true; } }
+  return false;
 }
 function setSpeed(s) {
   if (s) G.lastSpeed = s;

@@ -87,6 +87,7 @@ async function rmSave() {
 }
 function rmExport() {
   const A = rmAll(); const clean = {}; for (const k in A) if (A[k].routes.some((r) => r.length)) clean[k] = { t: A[k].t, use: A[k].use, name: (dungeonByMap(+k) || {}).name, routes: A[k].routes };
+  if (window.AzerothApp && AzerothApp.saveFile) { AzerothApp.saveFile('route_marks.json', JSON.stringify(clean, null, 1)); return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(clean, null, 1)], { type: 'application/json' })); a.download = 'route_marks.json'; a.click();
 }
 
