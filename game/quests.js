@@ -332,6 +332,10 @@ function lootGo(c, e, gather) {
 /* every way to make progress on objective i: [{kind, d, ...}] */
 function objectiveOptions(c, q, i) {
   const o = q.objectives[i]; const out = []; const W = ensureWorld(c.pos.map);
+  if (W.lazy) {          // the light world: the quest's creatures are brought in (combat.js lwEnsureEntry)
+    const es = o.type === 'Collect' ? (G.q.itemSrc[o.id] || []).map((x) => x[0]) : (o.type === 'Kill' || o.type === 'Use/Interact') && o.id > 0 ? [o.id] : [];
+    for (const e of es.slice(0, 12)) lwEnsureEntry(W, e, c.pos.x, c.pos.y);
+  }
   if (!W.byEntry) { W.byEntry = {}; for (const m of W.list) (W.byEntry[m.e] = W.byEntry[m.e] || []).push(m); }
   const mobs = (entries) => {
     for (const [e, w] of entries) for (const m of W.byEntry[e] || []) {

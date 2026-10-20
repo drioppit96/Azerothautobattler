@@ -226,7 +226,7 @@ function zoneChoices(c, o) {
 /* a place with many creatures of about the character's level, away from guards and elites */
 function grindSpot(c, bad) {
   const W = ensureWorld(c.pos.map); const cells = new Map(); const S = 120;
-  for (const m of W.list) {
+  for (const m of worldMobsAll(W)) {
     if (m.civ || m.rank || (m.info && (m.info[5] === 8 || m.info[5] === 11))) continue;
     const b = behOf(m, c); if (b !== 'A' && b !== 'N') continue;
     if (b === 'N' && m.info && m.info[5] === 7) continue;            // neutral humanoids are townsfolk of some faction

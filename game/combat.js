@@ -42,21 +42,89 @@ function ensureWorld(mapId) {
   if (typeof loadGrid === 'function') loadGrid(mapId);
   const list = [], grid = new Map(), W = { id: mapId, list, grid, active: new Set(), dead: [] };
   const dgMap = typeof isDungeonMap === 'function' && isDungeonMap(mapId);
+  G.world[mapId] = W;
+  // phones: only the area around the characters is in the world (lwUpdate loads and drops it as they move)
+  if (!dgMap && lightWorld()) { W.lazy = true; W.blocks = new Map(); W.rareMade = new Set(); lwUpdate(W, true); return W; }
   for (const [e, lst0] of G.spawnList) {
     if (eventMob(e)) continue;
     const h = G.d.hostility.creatures[e]; const rank = h ? h[6] : 0;
     let lst = lst0.filter((s) => s[0] === mapId); if (!lst.length) continue;
     // a rare (or rare elite) out in the world: ONE of it, at one of its spawn points, up only now and then (rarePool)
     const pool = !dgMap && (rank === 2 || rank === 4) ? lst : null; if (pool) lst = [pool[(Math.random() * pool.length) | 0]];
-    for (const s of lst) {
-      const m = { e, wid: mapId, info: G.mobIdx[e] || null, hx: s[1], hy: s[2], z: s[3], rmin: s[7] || 300, rmax: s[8] || s[7] || 300 };
-      m.aggro = h && h[2] ? h[2] : 20; m.leash = h && h[3] ? h[3] : 45; m.help = h ? h[4] : 0; m.tmpl = h ? h[0] : 0; m.civ = h ? h[5] : 0; m.rank = rank;
-      initMob(m); list.push(m);
-      const k = gk(cell(m.hx), cell(m.hy)); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(m);
-      if (pool) rarePool(W, m, pool);
-    }
+    for (const sp of lst) makeMob(W, e, sp, pool);
   }
-  G.world[mapId] = W; return W;
+  return W;
+}
+function makeMob(W, e, s, pool) {
+  const h = G.d.hostility.creatures[e]; const rank = h ? h[6] : 0;
+  const m = { e, wid: W.id, info: G.mobIdx[e] || null, hx: s[1], hy: s[2], z: s[3], rmin: s[7] || 300, rmax: s[8] || s[7] || 300 };
+  m.aggro = h && h[2] ? h[2] : 20; m.leash = h && h[3] ? h[3] : 45; m.help = h ? h[4] : 0; m.tmpl = h ? h[0] : 0; m.civ = h ? h[5] : 0; m.rank = rank;
+  initMob(m); W.list.push(m);
+  const k = gk(cell(m.hx), cell(m.hy)); let a = W.grid.get(k); if (!a) W.grid.set(k, a = []); a.push(m);
+  if (pool) rarePool(W, m, pool);
+  return m;
+}
+
+/* ------------------------------------------------------------------ the light world (phones)
+   The creatures are made only in the blocks (800 x 800 yards) around the characters in the world and the one next to
+   them; blocks nobody has been near for 2 minutes are dropped again. A quest's creatures elsewhere on the map are
+   brought in when the quest needs them (lwEnsureEntry). On by default in the Android app (Map view: Light world). */
+const LW_BLOCK = 800, LW_KEEP = 120;
+function lightWorld() { if (G.lightWorld == null) { const st = G.state && G.state.settings; const v = st && st.lightWorld != null ? !!st.lightWorld : /AzerothApp/.test(navigator.userAgent); if (!G.state) return v; G.lightWorld = v; } return G.lightWorld; }
+function lwKey(x, y) { return Math.floor(x / LW_BLOCK) + ',' + Math.floor(y / LW_BLOCK); }
+function lwIndex(mapId) {
+  G.lwIdx = G.lwIdx || {}; if (G.lwIdx[mapId]) return G.lwIdx[mapId];
+  const idx = new Map(), byE = new Map();
+  for (const [e, l] of G.spawnList) { if (eventMob(e)) continue; for (const sp of l) { if (sp[0] !== mapId) continue; const k = lwKey(sp[1], sp[2]); let a = idx.get(k); if (!a) idx.set(k, a = []); a.push([e, sp]); let b = byE.get(e); if (!b) byE.set(e, b = []); b.push(sp); } }
+  return (G.lwIdx[mapId] = { idx, byE });
+}
+function lwLoad(W, k, keep) {
+  const t = G.gameTime + (keep || 0);
+  let b = W.blocks.get(k); if (b) { b.t = Math.max(b.t, t); return false; }
+  b = { t, mobs: [] }; W.blocks.set(k, b); const L = lwIndex(W.id);
+  for (const [e, sp] of L.idx.get(k) || []) {
+    const h = G.d.hostility.creatures[e]; const rank = h ? h[6] : 0;
+    if (rank === 2 || rank === 4) { if (W.rareMade.has(e)) continue; W.rareMade.add(e); const pool = L.byE.get(e) || [sp]; b.mobs.push(makeMob(W, e, pool[(Math.random() * pool.length) | 0], pool)); continue; }
+    b.mobs.push(makeMob(W, e, sp, null));
+  }
+  W.byEntry = null; return true;
+}
+function lwUnload(W, k) {
+  const b = W.blocks.get(k); if (!b) return false;
+  if (b.mobs.some((m) => m.st === 'chase' || m.st === 'evade')) return false;              // a fight going on there
+  const gone = new Set(b.mobs);
+  W.list = W.list.filter((m) => !gone.has(m)); W.dead = W.dead.filter((m) => !gone.has(m));
+  for (const m of b.mobs) { const gk0 = gk(cell(m.hx), cell(m.hy)); const a = W.grid.get(gk0); if (a) { const i = a.indexOf(m); if (i >= 0) a.splice(i, 1); } W.active.delete(m); if (m.pool) W.rareMade.delete(m.e); }
+  W.blocks.delete(k); W.byEntry = null; return true;
+}
+/* the blocks around every character in the world on this map are there; the others go after a while */
+function lwUpdate(W, now) {
+  if (!W.lazy) return; if (!now && G.gameTime - (W.lwT || -9) < 1) return; W.lwT = G.gameTime;
+  const chars = G.state ? (typeof liveChars === 'function' ? liveChars() : G.state.characters) : []; let changed = false;
+  for (const c of chars) {
+    if (!c.pos || c.pos.map !== W.id || (c.rt && c.rt.flying)) continue; const bx = Math.floor(c.pos.x / LW_BLOCK), by = Math.floor(c.pos.y / LW_BLOCK);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (lwLoad(W, (bx + i) + ',' + (by + j))) changed = true;
+  }
+  const held = new Set();          // creatures someone is going for stay
+  for (const c of chars) { const r = c.rt || null; if (!r) continue; if (r.tgt) held.add(r.tgt); if (r.killM) held.add(r.killM);
+    if (c.order && c.order.type === 'kill' && c.order.wid === W.id) lwLoad(W, lwKey(c.order.hx, c.order.hy)); }
+  for (const [k, b] of W.blocks) if (G.gameTime - b.t > LW_KEEP && !b.mobs.some((m) => held.has(m)) && lwUnload(W, k)) changed = true;
+  if (changed && G.map && G.map.map === W.id && typeof buildMobsForMap === 'function') buildMobsForMap();
+}
+/* every creature of the map for looking over (where to grind): the world's own list, or in the light world plain
+   records made from the spawn points (not creatures one can fight) */
+function worldMobsAll(W) {
+  if (!W.lazy) return W.list; G.lwStubs = G.lwStubs || {}; if (G.lwStubs[W.id]) return G.lwStubs[W.id];
+  const out = [];
+  for (const [e, l] of lwIndex(W.id).byE) { const h = G.d.hostility.creatures[e]; const info = G.mobIdx[e] || null;
+    for (const sp of l) out.push({ e, hx: sp[1], hy: sp[2], info, civ: h ? h[5] : 0, rank: h ? h[6] : 0, help: h ? h[4] : 0, lvl: info ? info[2] : 1, stub: true }); }
+  return (G.lwStubs[W.id] = out);
+}
+/* a quest needs these creatures: the blocks of the nearest few of them come in */
+function lwEnsureEntry(W, e, x, y) {
+  if (!W.lazy) return; const sp = (lwIndex(W.id).byE.get(+e) || []).slice().sort((a, b) => Math.hypot(a[1] - x, a[2] - y) - Math.hypot(b[1] - x, b[2] - y));
+  let changed = false; for (const s0 of sp.slice(0, 4)) if (lwLoad(W, lwKey(s0[1], s0[2]), 300)) changed = true;      // kept 5 more minutes: the walk there
+  if (changed && G.map && G.map.map === W.id && typeof buildMobsForMap === 'function') buildMobsForMap();
 }
 /* rare creatures: one at a time, at a random one of its spawn points, with its long respawn time (hours for most).
    When the world is made, about 40% of them are up and the rest come some time later; the rares quests need
@@ -330,6 +398,7 @@ function worldTick(dt) {
   if (typeof wcTick === 'function') wcTick(dt);             // guild crafting orders (workshop.js)
   for (const id in G.world) {
     const W = G.world[id];
+    if (W.lazy) lwUpdate(W);
     for (const m of W.active) mobTick(W, m, dt, now);
     if (W.dead.length && ((now * 4) | 0) % 4 === 0) {
       for (let i = W.dead.length - 1; i >= 0; i--) {
@@ -892,6 +961,7 @@ function orderKill(c, m) {
 function killOrderMob(c, o) {
   const r = rt(c); if (r.killM && r.killM.e === o.e) return r.killM;
   const W = G.world[o.wid]; if (!W) return null;
+  if (W.lazy) lwLoad(W, lwKey(o.hx, o.hy), 300);
   return (r.killM = W.list.find((x) => x.e === o.e && x.hx === o.hx && x.hy === o.hy) || null);
 }
 function updateKill(c, o) {

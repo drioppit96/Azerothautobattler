@@ -82,7 +82,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 g (quests at givers, shared NPCs, character arrows)';
+const GAME_VERSION = '2026-10-21 h (light world on phones, touch controls)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -785,7 +785,7 @@ function bindInput() {
       const [W, H] = mapSize(G.map); const minS = Math.min(G.cw / W, G.ch / H) * 0.8;
       const ns = Math.max(minS, Math.min(12, pinch.s * dd / Math.max(1, pinch.d))); const k = ns / pinch.s;
       const cx = (p1.x + p2.x) / 2, cy = (p1.y + p2.y) / 2;
-      G.ox = cx - (pinch.cx - pinch.ox) * k; G.oy = cy - (pinch.cy - pinch.oy) * k; G.scale = ns; $('follow').checked = false; return;
+      G.ox = cx - (pinch.cx - pinch.ox) * k; G.oy = cy - (pinch.cy - pinch.oy) * k; G.scale = ns; return;          // zooming keeps following (the map stays on the character)
     }
     if (G.drag) {
       if (Math.abs(sx - G.drag.x) + Math.abs(sy - G.drag.y) > (G.drag.touch ? 10 : 5)) G.drag.moved = true;
@@ -820,6 +820,7 @@ function bindInput() {
     const f = e.deltaY < 0 ? 1.2 : 1 / 1.2; const ns = Math.max(minS, Math.min(12, G.scale * f));
     const k = ns / G.scale; G.ox = e.offsetX - (e.offsetX - G.ox) * k; G.oy = e.offsetY - (e.offsetY - G.oy) * k; G.scale = ns;
   }, { passive: false });
+  bindMapCtl();
   $('mnav').addEventListener('click', (e) => {
     const p = e.target.dataset && e.target.dataset.p; if (!p) return;
     if (p === 'sheet') { openSheet('char'); return; }
@@ -843,6 +844,7 @@ function bindInput() {
   $('btnChars').onclick = () => openCharSwitch();
   $('btnMeter').onclick = () => toggleMeter();
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
+  if ($('lightworld')) { $('lightworld').checked = lightWorld(); $('lightworld').onchange = () => { G.state.settings.lightWorld = $('lightworld').checked; save(); location.reload(); }; }
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };
   $('fileLoad').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -852,6 +854,29 @@ function bindInput() {
 }
 /* the top bar's drop-down menus (map view, speed): open under their button, close on a click elsewhere */
 function ddClose() { document.querySelectorAll('.dd.open').forEach((d) => d.classList.remove('open')); }
+/* the buttons on the map for phones: zoom, follow the character, pause */
+function mapZoom(f) {
+  const [W, H] = mapSize(G.map); const minS = Math.min(G.cw / W, G.ch / H) * 0.8; const ns = Math.max(minS, Math.min(12, G.scale * f));
+  const k = ns / G.scale; const cx = G.cw / 2, cy = G.ch / 2; G.ox = cx - (cx - G.ox) * k; G.oy = cy - (cy - G.oy) * k; G.scale = ns;
+}
+function syncMapCtl() {
+  const f = $('mcFollow'), p = $('mcPause'); if (!f) return;
+  f.classList.toggle('on', $('follow').checked);
+  const sp = G.state && G.state.settings.speed; p.innerHTML = sp ? '&#10074;&#10074;' : '&#9654;'; p.classList.toggle('on', !sp); p.title = sp ? 'Pause' : 'Go on';
+}
+function bindMapCtl() {
+  const el = $('mapctl'); if (!el) return;
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return; e.stopPropagation(); hideMenu();
+    if (b.id === 'mcIn') mapZoom(1.4);
+    else if (b.id === 'mcOut') mapZoom(1 / 1.4);
+    else if (b.id === 'mcFollow') { const on = !$('follow').checked; $('follow').checked = on; if (on) { const c = active(); if (c.pos.map !== G.map.map || G.map.world || G.map.cont) goToCharacter(); } }
+    else if (b.id === 'mcPause') setSpeed(G.state.settings.speed ? 0 : (G.lastSpeed || 1));
+    syncMapCtl();
+  });
+  $('follow').addEventListener('change', syncMapCtl);
+  setInterval(syncMapCtl, 400);
+}
 function bindDropdowns() {
   document.querySelectorAll('.dd > .ddb').forEach((b) => {
     b.onclick = (e) => {
