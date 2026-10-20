@@ -589,3 +589,23 @@ label.chk.dim{opacity:.55}
 #tacpop .tpitem .sic{width:20px;height:20px}
 @media (max-width:900px){.tacrow,.tactop{gap:6px}.tacrow{flex-direction:column}.tacspine{display:none}.tacbook{padding:10px}}
 .guild .gbtabs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.guild .gbtabs .on{background:#c9a646;color:#1a1409}.guild .gbtabs .full .small{color:#ff7060}.guild .gbtabs .on .small{color:#1a1409}
+/* abilities list (tactics_ui.js): each ability, under it the conditions it is used on */
+.tacpre{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.tacpre select{max-width:260px}
+.tacab .tabk{border-bottom:1px dotted #33291a;padding:5px 0 6px}
+.tacab .tabk.off{opacity:.5}
+.tacab .tabk.unk .aname b{color:#9a8f77}
+.tacab .tabh{display:grid;grid-template-columns:auto 34px 1fr auto;gap:6px;align-items:center}
+.tacab .tabcs{margin:3px 0 0 54px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.tacab .tabc{display:grid;grid-template-columns:38px auto 26px 26px;gap:4px;align-items:center}
+.tacab .tabc.off{opacity:.55}
+.tacab .tabw{color:#9a8f77;font-size:12px;text-align:right;font-style:italic}
+.tacab .tcbtn{background:#2a2014;border:1px solid #5a4528;color:#e8dcc0;border-radius:3px;padding:3px 8px;font-size:12.5px;cursor:pointer;text-align:left}
+.tacab .tcbtn:hover{border-color:#c9a24a}
+.tacab .tcbtn.ally{color:#9fe0a8}
+.tacab .tcbtn.enemy{color:#ff9d84}
+.tacab .tcbtn.self{color:#ffd970}
+.tacab .tabadd{margin-left:42px;font-size:11.5px}
+.tacab .tabfoot{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px}
+@media (max-width:700px){.tacab .tabcs{margin-left:10px}.tacab .tabc{grid-template-columns:30px 1fr 26px 26px}}
+.beh{max-width:860px;margin:0 auto}

@@ -241,6 +241,5 @@ function tacPreset(c, kind) {
   if (kind === 'heal' && K.dps) { const extra = K.dps(c, spec).filter((s) => s.c.indexOf('enemy') === 0 && !list.some((x) => x.a === s.a && x.c === s.c)); if (extra.length) list = list.concat([T('self.mp<', 70, '>end')], extra); }
   const out = []; const seen = new Set();
   for (const s of list) { const k = s.c + '|' + s.a + '|' + s.p; if (seen.has(k)) continue; seen.add(k); out.push(s); if (out.length >= TAC_MAX) break; }
-  for (const s of out) if (s.a === '>end') s.a = '>' + (out.length + 1);
   return out;
 }

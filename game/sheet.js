@@ -8,7 +8,7 @@ const SLOT_LABEL = { 0: 'Head', 1: 'Neck', 2: 'Shoulder', 3: 'Shirt', 4: 'Chest'
 const SH = { tab: 'char', open: false, sel: null };
 /* the five windows (like the C window of the game) and their tabs */
 const SH_GROUPS = [
-  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['tac', 'Tactics'], ['rep', 'Reputation'], ['pet', 'Pet']] },
+  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['rep', 'Reputation'], ['pet', 'Pet']] },
   { k: 'bag', n: 'Bags', key: 'B', tabs: [['bags', 'Bags'], ['bank', 'Bank'], ['gbank', 'Guild bank']] },
   { k: 'trade', n: 'Trade', key: 'T', tabs: [['vendor', 'Vendor'], ['ah', 'Auction house'], ['trade', 'Trade']] },
   { k: 'prof', n: 'Professions', key: 'P', tabs: [['prof', 'Professions'], ['gcraft', 'Guild crafters']] },
@@ -136,7 +136,7 @@ function renderSheet() {
   const nav = $('sheetTabs'); if (nav._h !== tabs) { nav.innerHTML = tabs; nav._h = tabs; }
   const gt = $('sheetGroup'); if (gt) gt.textContent = grp.n;
   $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
-  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep' || SH.tab === 'tac');
+  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep' || SH.tab === 'beh');
   $('sheet').dataset.group = grp.k;
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') {
@@ -147,14 +147,14 @@ function renderSheet() {
   }
   if (SH.tab === 'gcraft') { $('sheetLeft').innerHTML = gcraftHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'rep') { $('sheetLeft').innerHTML = repTabHtml(c); $('sheetBags').innerHTML = ''; return; }
-  if (SH.tab === 'tac') { $('sheetLeft').innerHTML = tacHtml(c); $('sheetBags').innerHTML = ''; return; }
+  if (SH.tab === 'tac') SH.tab = 'beh';            // the tactics are in the abilities list now
   const vs = SH.tab === 'vendor' && document.activeElement && document.activeElement.id === 'vsQ' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + (typeof shopHtml === 'function' ? shopHtml(c) : '') + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
     SH.tab === 'guild' ? guildHtml(c, 'info') : SH.tab === 'glog' ? guildHtml(c, 'log') : SH.tab === 'gbank' ? guildHtml(c, 'bank') : SH.tab === 'bags' ? bagSummaryHtml(c) : SH.tab === 'pet' ? petTabHtml(c) : SH.tab === 'rep' ? repTabHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
-  $('sheetBags').innerHTML = bagsHtml(c);
+  $('sheetBags').innerHTML = SH.tab === 'beh' ? '' : bagsHtml(c);
   if (vs) { const i = $('vsQ'); if (i) { i.focus(); try { i.setSelectionRange(vs[0], vs[1]); } catch (e) { /* */ } } }
 }
 function refreshGear() { renderGearCard(); if (SH.open) renderSheet(); }
@@ -260,7 +260,7 @@ function bindSheet() {
     if (SH.tab === 'bags' && bagSummaryClick(e)) return;
     if (SH.tab === 'pet' && petTabClick(e)) return;
     if (SH.tab === 'rep' && repTabClick(e)) return;
-    if (SH.tab === 'tac' && tacClick(e)) return;
+    if (SH.tab === 'beh' && tacBehClick(e)) return;
     if (e.target.closest('[data-bsort]')) { sortBags(c); return; }
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
@@ -275,7 +275,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'tac' && tacChange(e)) return; if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (SH.tab === 'bags' && typeof hearthChange === 'function' && hearthChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'beh' && tacChange(e)) return; if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (SH.tab === 'bags' && typeof hearthChange === 'function' && hearthChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); if (SH.tab === 'vendor' && typeof shopInput === 'function') shopInput(e); if (SH.tab === 'gcraft' && typeof gcraftInput === 'function') gcraftInput(e); });
   sh.addEventListener('dblclick', (e) => {
@@ -343,6 +343,13 @@ function behaviourHtml(c) {
   const stances = Object.keys(STANCES).filter((n) => c.known && c.known[n]);
   if (stances.length) h += '<div class="sgroup"><h5>Stance</h5><select data-cfgs="stance">' + stances.map((n) => '<option value="' + STANCES[n] + '"' + (cfg.stance === STANCES[n] ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> <span class="small muted">Abilities that need another stance are skipped.</span></div>';
   if (typeof consumablesHtml === 'function') h += consumablesHtml(c);
+  h += '<div class="sgroup"><h5>How it fights</h5>' + tacPresetHtml(c) + '</div>';
+  if (tacActive(c)) {
+    h += tacAbilHtml(c);
+    const up0 = upcomingAbilities(c).slice(0, 8);
+    if (up0.length) h += '<div class="sgroup"><h5>Coming with levels (learned automatically)</h5>' + up0.map((x) => '<div class="small">Level ' + x.lv + ': ' + esc(x.n) + (x.r ? ' (' + esc(x.r) + ')' : '') + (x.isNew ? ' <span class="up">new</span>' : '') + '</div>').join('') + '</div>';
+    return h + '</div>';
+  }
   h += rotationHtml(c);
   h += '<div class="sgroup' + ((cfg.rotation || 'custom') !== 'custom' ? ' dimmed' : '') + '"><h5>' + ((cfg.rotation || 'custom') !== 'custom' ? 'My own list (not used while a ready-made rotation is chosen)' : 'Abilities - checked from the top, the first that fits is used') + '</h5>';
   if (!cfg.rules.length) h += '<div class="muted small">No abilities yet.</div>';

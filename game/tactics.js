@@ -122,12 +122,14 @@ function tacActive(c) { const t = c.cfg && c.cfg.tac; return !t || t.preset !== 
 /* the slots the character fights with: [{c: condition, p, a: action}] */
 function tacSlots(c, preset) {
   const T = tacState(c); const k = preset || T.preset;
-  if (/^c\d$/.test(k)) return T.custom[k] || [];
+  // the list is kept by ability (tactics_ui.js): an ability's conditions together, in the order the abilities come
+  if (/^c\d$/.test(k)) { const L = T.custom[k] || []; if (L.length && !tacIsGrouped(L)) { T.custom[k] = tacFlat(tacGroup(L)); } return T.custom[k] || []; }
   const role = k === 'auto' ? tacRole(c) : k; const spec = typeof rotationSpec === 'function' ? rotationSpec(c) : '';
   const key = k + '|' + role + '|' + spec + '|' + c.level; const r = rt(c);
-  if (!r.tacCache || r.tacCache.key !== key) r.tacCache = { key, slots: tacPreset(c, k === 'auto' ? tacAutoKind(c, role, spec) : k) };
+  if (!r.tacCache || r.tacCache.key !== key) r.tacCache = { key, slots: tacFlat(tacGroup(tacPreset(c, k === 'auto' ? tacAutoKind(c, role, spec) : k))) };
   return r.tacCache.slots;
 }
+function tacIsGrouped(L) { const seen = new Set(); let prev = null; for (const s of L) { if (!s.a || (s.a[0] === '>' && s.a !== '>end')) return false; if (s.a !== prev) { if (seen.has(s.a)) return false; seen.add(s.a); prev = s.a; } } return true; }
 /* the default: the role in the group, else the talents (healing specs heal alone too when it is needed) */
 function tacAutoKind(c, role, spec) {
   if (role === 'tank') return 'tank';
@@ -151,6 +153,7 @@ function tacFight(c, tgt) {
     if (sl.a[0] !== '#' && sl.a[0] !== '>') { const u = abilityUsable(c, sl.a); if (!u.ok) { if (c.cls === 11 && c.form && u.why && /not in/.test(u.why) && cd.g !== 'Enemy' && tacHealish(sl.a)) { leaveForm(c); } continue; } sp = u.sp; x.n = sl.a; x.sp = sp; }
     if (cd.g === 'Ally' && !x.allies) x.allies = tacAllies(c);
     const who = cd.f(x, sl.p != null ? sl.p : cd.p); if (!who) continue;
+    if (sl.a === '>end') break;                 // stop here: nothing below while this is true
     if (sl.a[0] === '>') { const t = +sl.a.slice(1) - 1; if (t <= i) continue; if (t >= slots.length) break; i = t - 1; continue; }       // jump to tactic N (past the last: stop here)
     if (sl.a === '#wait') return;
     if (sl.a === '#atk') { if (who && who.st && who !== tgt) { r.tgt = who; } return; }
