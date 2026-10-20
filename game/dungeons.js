@@ -359,7 +359,11 @@ function partyStep(c, dt) {
     if (typeof msUnitStep === 'function' && msUnitStep(c, u, dt)) return;      // stunned (creature spells); its damage over time
     const mv = (tx, ty, stop) => { const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy); if (d > stop) { const st = Math.min(d - stop, 7.5 * dt); u.x += dx / d * st; u.y += dy / d * st; return false; } return true; };
     if (!threats.length && u.role === 'tank' && r.tankPull && r.tankPull.st === 'alive') {
-      const m = r.tankPull; if (mv(m.x, m.y, MELEE_RANGE - 0.5)) { engage(m, c); gThreat(m, u, 50 + c.level * 6); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); for (const x of threatsOf(c)) gThreat(x, u, 30 + c.level * 4); r.tankPull = null; }
+      const m = r.tankPull; const far = Math.hypot(m.x - u.x, m.y - u.y);
+      if (G.state.settings.dgRangedPull !== false && isDungeonMap(c.pos.map) && far <= 30 && (typeof dgStraight !== 'function' || dgStraight(c.pos.map, { x: u.x, y: u.y, z: c.pos.z }, m))) {      // a shot from where it stands
+        fx(u.x, u.y, 'Shoot', '#ffe9a8'); engage(m, c); gThreat(m, u, 50 + c.level * 6); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); for (const x of threatsOf(c)) gThreat(x, u, 30 + c.level * 4); r.tankPull = null; return;
+      }
+      if (mv(m.x, m.y, MELEE_RANGE - 0.5)) { engage(m, c); gThreat(m, u, 50 + c.level * 6); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); for (const x of threatsOf(c)) gThreat(x, u, 30 + c.level * 4); r.tankPull = null; }
       return;
     }
     if (!threats.length) {
@@ -549,9 +553,12 @@ function renderDgCard() {
     if (g) { const dead = groupChars(g).filter((m) => m.pos.map === d.map && rt(m).ghost).length; if (dead) h += '<div class="small" style="color:#ff8a7a">' + dead + ' down - back on their feet after the fight.</div>'; }
     h += '<div class="dgbtns"><button class="act" data-dgc="rest"' + (held ? ' disabled' : '') + ' title="Everyone sits down and the group stays put until Continue">' + (held ? 'Resting...' : 'Rest') + '</button>' +
       '<button class="act" data-dgc="cont" title="On with the run now: nobody waits, the ones far off come to the leader, the leader finds the way on again">Continue dungeon</button></div>' +
+      '<label class="chk small"><input type="checkbox" data-dgset="dgPreCC"' + (G.state.settings.dgPreCC !== false ? ' checked' : '') + '> Crowd control before each pull (Polymorph, Sap, Shackle, Hibernate, Banish, traps) - the others leave them alone, the tank pulls after</label>' +
+      '<label class="chk small"><input type="checkbox" data-dgset="dgRangedPull"' + (G.state.settings.dgRangedPull !== false ? ' checked' : '') + '> The tank pulls with a shot from range (no ammo needed) and waits for the pack to come</label>' +
       '<button class="act red dgwide" data-dgc="reset" title="Everyone out to the entrance at once; the dungeon starts over (every creature back)">Teleport out and reset ' + esc(d.name) + '</button>';
   }
   if (el._h !== h) { el.innerHTML = h; el._h = h; }
+  el.onchange = (e) => { const k = e.target.dataset && e.target.dataset.dgset; if (!k) return; G.state.settings[k] = e.target.checked; save(); renderDgCard(); };
   el.onclick = (e) => {
     const b = e.target.closest('[data-dgc]'); if (!b) return; const k = b.dataset.dgc;
     if (k === 'rest') dungeonRest(c);
@@ -661,10 +668,22 @@ function dungeonGroupClasses(c) {
 function dungeonSkill(c) { const p = partyOf(c) || []; const aw = p.filter((u) => u.aw != null).map((u) => u.aw); return aw.length ? aw.reduce((a, b) => a + b, 0) / aw.length : 5; }
 function routeCC(c, d, o, p) {
   o.ccDone = o.ccDone || {}; const key = Math.round(p.x) + ',' + Math.round(p.y); if (o.ccDone[key]) return; o.ccDone[key] = true;
-  if (p.kind === 'boss' || p.n < 3) return;
-  if (Math.random() > 0.3 + 0.07 * dungeonSkill(c)) return;      // first-timers forget it
-  const cc = packCcFor(p, dungeonGroupClasses(c)).filter((x) => x.m.st === 'alive').slice(0, p.n >= 5 ? 2 : 1);
-  for (const x of cc) { addMobAura(c, x.m, { n: x.n, dur: 30000 }, { au: 12, lo: 0 }); fx(x.m.x, x.m.y, x.n, '#c8a2ff'); log(CLASS_NAMES[x.cls] + ': ' + x.n + ' on ' + (x.m.info ? x.m.info[1] : 'a creature') + '.'); }
+  if (p.kind === 'boss') return;
+  const alive = p.members.filter((m) => m.st === 'alive' && !mobCCd(m));
+  if (G.state.settings.dgPreCC !== false) {
+    // the group's crowd control (your characters and the mercenaries) on as many as it can - one is left for the tank
+    if (alive.length < 2) return;
+    const cc = packCcFor({ members: alive }, dungeonGroupClasses(c)).slice(0, alive.length - 1);
+    for (const x of cc) dgApplyCC(c, x);
+    if (cc.length) o.ccWait = G.gameTime + 1.6 * cc.length;            // the casts take a moment; the tank pulls after them
+    return;
+  }
+  if (p.n < 3 || Math.random() > 0.3 + 0.07 * dungeonSkill(c)) return;      // without the setting: first-timers forget it
+  for (const x of packCcFor({ members: alive }, dungeonGroupClasses(c)).slice(0, p.n >= 5 ? 2 : 1)) dgApplyCC(c, x);
+}
+function dgApplyCC(c, x) {
+  const a = addMobAura(c, x.m, { n: x.n, dur: 45000 }, { au: 12, lo: 0 }); a.cc = true;
+  fx(x.m.x, x.m.y, x.n, '#c8a2ff'); log(CLASS_NAMES[x.cls] + ': ' + x.n + ' on ' + (x.m.info ? x.m.info[1] : 'a creature') + '.');
 }
 /* the group moves to another wing (its own way in) or through a teleporter */
 function routeJump(c, d, q, say) {
@@ -814,7 +833,25 @@ function updateDungeon(c, o, dt) {
     startInteract(c, 'Using ' + objName(t.e), () => { useGo(t.e, t.i); t.st = 'dead'; const q = G.q.byId[t.qi[0]]; if (t.qi[2] === 'loot') lootGo(c, t.e); else if (q) credit(c, q, t.qi[1]); });
     return;
   }
+  const fighting = r.threats && r.threats.length;
+  if (!fighting && o.ccWait && o.ccWait > G.gameTime) { r.mv = null; return; }          // the crowd control goes on first
+  if (!fighting && dgRangedPull(c, o.target)) return;
   const st = approach(c, o.target); if (st === 'gone') { if (o.target.st === 'alive') o.target.banUntil = 0; o.target = null; }
+}
+/* the tank pulls with a shot (no ammo needed) when the target is in sight and in range: the pack comes to the group,
+   away from the crowd-controlled ones and from patrols; the tank stays put while they come (fightStep). Only when the
+   character itself tanks - with a hired tank the mercenary shoots (partyStep). */
+function dgRangedPull(c, m) {
+  if (G.state.settings.dgRangedPull === false || !m || m.st !== 'alive' || m.wp || m.go || m.npc) return false;
+  const p = partyOf(c); if (p && p.some((u) => u.role === 'tank' && !u.dead)) return false;
+  if (typeof groupOf === 'function' && groupOf(c) && grpRole(c) !== 'tank') return false;
+  const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y); if (d > 30 || d < 8 || Math.abs((m.z || 0) - (c.pos.z || 0)) > 10) return false;
+  if (typeof dgStraight === 'function' && !dgStraight(c.pos.map, c.pos, m)) return false;
+  const r = rt(c); if (r.cast || (r.gcdUntil || 0) > G.gameTime) return false;
+  c.pos.o = Math.atan2(m.x - c.pos.x, m.y - c.pos.y); r.mv = null;
+  fx(c.pos.x, c.pos.y, 'Shoot', '#ffe9a8'); engage(m, c); if (m.st === 'chase') { addThreat(m, c, 20 + c.level * 3); if (m.help) callHelp(ensureWorld(c.pos.map), m, c); }
+  r.pullWait = G.gameTime + 6; r.tgt = m; r.gcdUntil = G.gameTime + 1.5;
+  return true;
 }
 /* your own group between pulls: whoever is low on health (or a mana user low on mana) sits down and rests to full; the
    tank waits until they are up (the leader's groupHold sees them resting) */

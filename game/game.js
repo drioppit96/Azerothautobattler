@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 b (rest on the route)';
+const GAME_VERSION = '2026-10-21 c (crowd control, ranged pulls, stealth)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -390,6 +390,7 @@ const AUTO_GROUPS = [
   ['Selling and junk', [['autoSellJunk', 'Sell junk (grey and vendor trash) when near a vendor, and when the bags are full'], ['sellWhiteGear', 'Count white gear that is no upgrade as junk']]],
   ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)'], ['groupQuests', 'Do group quests (elites out in the world) with a hired group', true]]],
   ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself'], ['autoDisenchant', 'Enchanters: disenchant green gear that is no upgrade (instead of selling it)']]],
+  ['Fighting', [['rogueStealth', 'Rogues: slip into Stealth when not fighting (creatures rarely notice them)', true]]],
   ['Away', [['offlineProgress', 'Offline progress: keeps playing while the game is closed - up to 2 hours, the first 30 minutes in full, the rest at half rate; no dungeons', true]]],
 ];
 function renderSettingsCard() {

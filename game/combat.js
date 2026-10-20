@@ -238,7 +238,8 @@ function lootMob(c, m, questOnly, roll) {
 
 /* ----------------------------------------------------------- mob combat */
 function engage(m, c) {
-  if (m.st !== 'alive') return;
+  if (m.st !== 'alive' || (typeof mobCCd === 'function' && mobCCd(m))) return;          // crowd-controlled: stays out of it
+  if (c && c.id && rt(c).stealthed) stealthBreak(c);
   m.st = 'chase'; m.tgt = c; m.engT = G.gameTime; ensureWorld(c.pos.map).active.add(m);
   if (c.id && typeof groupOf === 'function' && groupOf(c)) { m.cThr = m.cThr || {}; m.cThr[c.id] = Math.max(m.cThr[c.id] || 0, 1); }
 }
@@ -338,6 +339,17 @@ function worldTick(dt) {
   }
 }
 
+/* ---------------------------------------------------------- rogues: Stealth */
+/* out of combat a rogue that knows Stealth slips into it (Automation: Rogues use Stealth) - the creatures do not see it
+   unless it comes right up to them (or, rarely, a little farther); attacking or being found brings it out */
+function stealthStep(c) {
+  const r = rt(c); const now = G.gameTime;
+  if (r.stealthed) { if ((r.threats || []).length || r.ghost || r.resting || r.flying || r.riding || cset(c, 'rogueStealth') === false) stealthBreak(c); return; }
+  if (!c.known || !c.known.Stealth || cset(c, 'rogueStealth') === false || (r.threats || []).length || r.resting || r.ghost || r.flying || r.riding || r.cast || r.interact) return;
+  if (now < (r.stealthCd || 0) || !c.order) return;
+  r.stealthed = true; fx(c.pos.x, c.pos.y, 'Stealth', '#b8a0ff'); dirty(c);
+}
+function stealthBreak(c) { const r = rt(c); if (!r.stealthed) return; r.stealthed = false; r.stealthCd = G.gameTime + 10; dirty(c); }
 /* ---------------------------------------------------------- kills / death */
 function killMob(c, m) {
   // the creature's own world (a damage-over-time can finish it after the killer went elsewhere, into a dungeon even)
@@ -567,6 +579,8 @@ function scanThreats(c) {
     const R = aggroRadius(m, c); const d = Math.hypot(m.x - c.pos.x, m.y - c.pos.y);
     if (dangerous(m, c)) r.danger.push({ m, R: R + 8 });
     else if (safe && m !== r.tgt) r.danger.push({ m, R: R + 3, soft: true });
+    // stealth: only right next to it, and now and then a little farther (higher level ones see better)
+    if (r.stealthed) { const near = Math.max(1.5, R * 0.18 + Math.max(0, m.lvl - c.level) * 0.6); if (d > near && !(d <= R * 0.55 && Math.random() < 0.002 * (1 + Math.max(0, m.lvl - c.level)))) return; if (d <= R) fx(c.pos.x, c.pos.y, 'Detected!', '#ffb36b'); }
     if (d <= R) {
       engage(m, c);
       if (m.help) callHelp(W, m, c);
@@ -656,6 +670,7 @@ function procs(c, m, s, w, slot) {
 }
 function fightStep(c, m, dt) {
   const r = rt(c); const s = charStats(c);
+  if (r.stealthed) stealthBreak(c);
   r.outT = 0; r.resting = false; r.eating = null; r.drinking = null;
   if (typeof consumablesFight === 'function') { consumablesFight(c, m); if (r.bandage) return; }
   if (c.cls === 8 && frostNovaStep(c, m, dt)) return;           // mage: Frost Nova when they reach it, then a few steps back
@@ -664,6 +679,7 @@ function fightStep(c, m, dt) {
   const want = c.cls === 1 ? MELEE_RANGE : combatRange(c, m);
   if (d > want) {
     if (r.cast) return;
+    if ((r.pullWait || 0) > G.gameTime && m.tgt === c && m.st === 'chase' && !(m.auras || []).some((a) => (a.au === 7 || a.au === 26) && a.until > G.gameTime)) return;      // pulled with a shot: it comes to us
     if (typeof dgStraight === 'function' && isDungeonMap(c.pos.map) && !dgStraight(c.pos.map, c.pos, m)) { goTo(c, m.x, m.y, want - 0.5, m.z); if (r.blocked) { r.blocked = false; r.mv = null; } return; }      // a wall between: around it
     const step = Math.min(d - want + 0.5, charSpeed(c) * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return;
   }
@@ -909,6 +925,7 @@ function updateChar(c, dt) {
   regenStep(c, dt);
   if (typeof trailStep === 'function' && isLeader(c)) trailStep(c);          // group.js: the way the leader walked (dungeons)
   if (r.charging) { chargeStep(c, dt); return; }
+  if (c.cls === 4) stealthStep(c);
   if (typeof charCcStep === 'function' && charCcStep(c, dt)) return;           // stunned or feared by a creature's spell
   r.scanT -= dt;
   if (r.scanT <= 0) { r.scanT = SCAN_EVERY; scanThreats(c); autoSellNearVendor(c); taxiDiscover(c); if (r.equipLater && !threatsOf(c).length) autoEquip(c); }

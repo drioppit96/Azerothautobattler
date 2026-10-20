@@ -128,6 +128,8 @@ function upcomingAbilities(c) {
 }
 
 /* ------------------------------------------------------------- creature auras */
+/* crowd-controlled on purpose (Polymorph, Sap, Shackle ... before a pull): it does not join a fight, and damage breaks it */
+function mobCCd(m) { if (!m.auras) return false; const now = G.gameTime; for (const a of m.auras) if (a.cc && a.until > now) return true; return false; }
 function mobAura(m, key) { if (!m.auras) return null; for (const a of m.auras) if (a.key === key && a.until > G.gameTime) return a; return null; }
 function addMobAura(c, m, sp, e) {
   m.auras = (m.auras || []).filter((a) => a.until > G.gameTime);
@@ -180,6 +182,7 @@ function onMobDamaged(m, dmg) {
   if (!m.auras) return; const now = G.gameTime;
   for (const a of m.auras) {
     if (a.until <= now) continue;
+    if (a.cc && dmg > 0) { a.until = 0; fx(m.x, m.y, a.key + ' breaks', '#c8a2ff'); continue; }
     if (a.au === 7 && now > a.brk) a.until = 0;
     else if (a.seduce && dmg > 0) { a.until = 0; fx(m.x, m.y, 'Seduction breaks', '#ff7ad9'); }
     else if (a.au === 26 && dmg > 0) {
@@ -236,7 +239,7 @@ function areaTargets(c, rad, engagedOnly) {
   if (engagedOnly) { for (const m of threatsOf(c)) if (Math.hypot(m.x - c.pos.x, m.y - c.pos.y) <= rad) out.push(m); return out; }
   mobsNear(W, c.pos.x, c.pos.y, rad + 20, (m) => {
     if (m.st !== 'alive' && m.st !== 'chase') return;
-    if (behOf(m, c) === 'F' || behOf(m, c) === 'X' || m.civ) return;
+    if (behOf(m, c) === 'F' || behOf(m, c) === 'X' || m.civ || mobCCd(m)) return;          // not the crowd-controlled ones
     if (engagedOnly && m.tgt !== c) return;
     if (Math.hypot(m.x - c.pos.x, m.y - c.pos.y) <= rad) out.push(m);
   });
