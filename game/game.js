@@ -82,7 +82,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 d (item links in the log)';
+const GAME_VERSION = '2026-10-21 e (dungeon keepers)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -950,6 +950,7 @@ async function boot() {
     if (G.d.dungeons && G.d.dungeons.mobs) for (const m of G.d.dungeons.mobs) if (!G.mobIdx[m[0]]) G.mobIdx[m[0]] = m;
     G.nav = makeNav(G.d.navgraph);
     loadMsg('quest index ...'); buildQuestIndex();
+    if (typeof dungeonKeepersInit === 'function') dungeonKeepersInit();          // the vendors / quest givers at every dungeon entrance (dungeons.js)
 
     loadMsg('maps ...');
     let manifest = null; try { manifest = await J('../files.json'); } catch (e) { manifest = null; }

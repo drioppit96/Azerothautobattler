@@ -179,7 +179,7 @@ function questDungeonRun(c, d, o, q) {
 function questFactionOk(c, q) {
   const k = behIndex(c); const cache = G.q.fac[k] = G.q.fac[k] || {};
   if (q.id in cache) return cache[q.id];
-  const ok = (list) => { if (!list.length) return true; for (const [kind, e] of list) { if (kind !== 'npc') return true; const h = G.d.hostility.creatures[e]; if (!h || h[1][k] === 'F') return true; } return false; };
+  const ok = (list) => { const L = list.filter((x) => !(typeof isDgKeeper === 'function' && x[0] === 'npc' && isDgKeeper(x[1]))); if (!L.length) return true; for (const [kind, e] of L) { if (kind !== 'npc') return true; const h = G.d.hostility.creatures[e]; if (!h || h[1][k] === 'F') return true; } return false; };      // the dungeon keepers serve both sides: the quest's own NPCs decide
   return (cache[q.id] = ok(q.giver) && ok(q.turnin));
 }
 function questAvailable(c, q) {

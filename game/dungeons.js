@@ -408,6 +408,61 @@ function drawParty(ctx, m) {
   ctx.restore();
 }
 
+/* ------------------------------------------------------------------ the dungeon keepers
+   An NPC of this game just inside the entrance of every dungeon, each with a name of its own: sells food and water of
+   every level, repairs, and gives the quests of that dungeon - and takes them back when they are done (the turn-in of
+   the dungeon's quests can be done right there). A dungeon quest: every objective is done with creatures or objects of
+   that dungeon. */
+const DG_KEEPER_BASE = 9500000;
+const DG_KEEPER_NAMES = { 389: 'Grukka Emberhide', 36: 'Old Wendel Brackwater', 43: 'Tahla Mistrunner', 33: 'Corwin Ashgrave', 48: 'Neria Tidewhisper',
+  34: 'Sergeant Pell Harrow', 90: 'Fizzlebolt Cogspanner', 47: 'Brakka Thornhide', 189: 'Brother Aldric Vane', 129: 'Shaggra Bonewise', 70: 'Dunric Stonebeard',
+  209: 'Zaressa Sandstrider', 349: 'Velinde Moonroot', 109: "Jin'kesh the Swampkeeper", 230: 'Thurgan Coalfist', 229: 'Magda Ironclaw', 429: 'Eldrinor Starweave',
+  289: 'Mortimer Graves', 329: 'Lady Elsbeth Crane', 409: 'Torvald Flameward', 249: 'Kasra Dragonwatch', 469: 'Varek Blackscale', 309: "Ma'zun the Peacekeeper",
+  509: 'Sarissa Dunewalker', 531: 'Halvenor Sandshield', 533: 'Father Odran Lightvigil' };
+/* water, bread and meat for every level (1, 5, 15, 25, 35, 45) */
+const DG_KEEPER_GOODS = [159, 1179, 1205, 1708, 1645, 8766, 4540, 4541, 4542, 4544, 4601, 8950, 117, 2287, 3770, 3771, 4599, 8952];
+function isDgKeeper(e) { return e >= DG_KEEPER_BASE && e < DG_KEEPER_BASE + 10000; }
+function dgKeeperOf(map) { return G.dgKeepers && G.dgKeepers[map] || null; }
+/* the dungeon a quest is done in, from where its creatures and objects are (null: not a dungeon quest) */
+function dgQuestMap(q) {
+  if (!q.objectives || !q.objectives.length) return null; let map = null;
+  for (const ob of q.objectives) {
+    const maps = new Map(); const add = (m) => maps.set(m, (maps.get(m) || 0) + 1);
+    if ((ob.type === 'Kill' || ob.type === 'Use/Interact') && ob.id > 0) for (const sp of G.spawnMap.get(ob.id) || []) add(sp[0]);
+    else if ((ob.type === 'Kill' || ob.type === 'Use/Interact') && ob.id < 0) for (const sp of objSpawns(-ob.id)) add(sp[0]);
+    else if (ob.type === 'Collect') { for (const [e] of G.q.itemSrc[ob.id] || []) for (const sp of G.spawnMap.get(+e) || []) add(sp[0]); for (const [e] of G.q.goSrc[ob.id] || []) for (const sp of objSpawns(e)) add(sp[0]); }
+    else return null;
+    let best = null, bn = 0, tot = 0; for (const [m, n] of maps) { tot += n; if (n > bn) { bn = n; best = m; } }
+    if (best == null || !isDungeonMap(best) || bn < tot * 0.6) return null;
+    if (map != null && map !== best) return null; map = best;
+  }
+  return map;
+}
+/* at boot, after the quest index: the keepers as creatures (spawn, name, friendly, vendor + repair + quests) */
+function dungeonKeepersInit() {
+  if (!G.d.dungeons) return; G.dgKeepers = {}; const H = G.d.hostility; const nr = H.races.length;
+  G.d.vendorItems = G.d.vendorItems || {};
+  const qs = {}; for (const q of G.d.quests) { const m = dgQuestMap(q); if (m != null) (qs[m] = qs[m] || []).push(q); }
+  for (const d of dungeonList()) {
+    const e0 = d.enter && d.enter[0]; if (!e0) continue; const e = DG_KEEPER_BASE + d.map; const name = DG_KEEPER_NAMES[d.map] || ('Keeper of ' + d.name);
+    // just inside, a couple of yards beside the way in
+    const x = e0.x + 2.5, y = e0.y + 2.5;
+    const lvl = Math.max(10, Math.min(60, (d.lmax || d.lmin || 20) + 5));
+    const sp = [d.map, x, y, e0.z, 0, 0, 0, 300, 300, 0];
+    G.spawnList.push([e, [sp]]); G.spawnMap.set(e, [sp]);
+    G.mobIdx[e] = [e, name, lvl, lvl, 0, 7, 0];
+    H.creatures[e] = [35, 'F'.repeat(nr), 0, 0, 0, 1, 0, lvl, lvl, NPC_VENDOR | NPC_REPAIR | 2];
+    G.d.vendorItems[e] = DG_KEEPER_GOODS.filter((id) => itemRow(id)).map((id) => [id, 0]);
+    const list = qs[d.map] || [];
+    for (const q of list) {
+      if (q.giver.some((x) => x[0] === 'npc') && !q.giver.some((x) => x[1] === e)) q.giver.push(['npc', e]);
+      if (!q.turnin.some((x) => x[1] === e)) q.turnin.push(['npc', e]);
+    }
+    G.dgKeepers[d.map] = { e, name, map: d.map, x, y, z: e0.z, quests: list.map((q) => q.id) };
+  }
+  G.vend = null;
+  buildQuestIndex();             // again, with the keepers as givers and turn-ins
+}
 /* ------------------------------------------------------------------ the run */
 function orderDungeon(c, d, group, resume) {
   if (G.awayNoDungeon) return;                 // away.js: no dungeons while the game is closed
