@@ -184,7 +184,7 @@ function questOpenFor(c, q, o) {
   if (q.min_level > c.level || (q.prev > 0 && !c.done[q.prev]) || q.prev < 0) return false;
   if (o && skipped(c, o, q.id)) return false;
   if (q.exclusive_group > 0) { for (const id in c.done) { const x = G.q.byId[id]; if (x && x.exclusive_group === q.exclusive_group) return false; } }
-  const m = questMeta(q); if (m.elite && c.level < m.elite + 3) return false;
+  if (!groupQuestOk(c, q)) return false;
   return true;
 }
 /* {zone, map, n, hub:{map,x,y}, score} for every zone with quests for this level, best first */

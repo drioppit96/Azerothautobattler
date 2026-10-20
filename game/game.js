@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-19 e (hearthstone)';
+const GAME_VERSION = '2026-10-20 a (reputation, group quests)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -220,6 +220,7 @@ function migrate(c) {
   dirty(c);
   if (c.mana == null || c.mana > (charStats(c).maxMana || 0)) c.mana = charStats(c).maxMana || 0;
   if (typeof hearthInit === 'function' && G.spawnMap) hearthInit(c);          // the Hearthstone and the home inn
+  if (typeof repInit === 'function') repInit(c);                              // reputation (the finished quests count for old characters)
 }
 function active() { return G.state.characters.find((c) => c.id === G.state.activeId); }
 function baseStats(c) {
@@ -376,7 +377,7 @@ function bindCards() {
 function cset(c, k) { return c && c.auto && k in c.auto ? c.auto[k] : G.state.settings[k]; }
 const AUTO_GROUPS = [
   ['Selling and junk', [['autoSellJunk', 'Sell junk (grey and vendor trash) when near a vendor, and when the bags are full'], ['sellWhiteGear', 'Count white gear that is no upgrade as junk']]],
-  ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)']]],
+  ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)'], ['groupQuests', 'Do group quests (elites out in the world) with a hired group', true]]],
   ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself'], ['autoDisenchant', 'Enchanters: disenchant green gear that is no upgrade (instead of selling it)']]],
 ];
 function renderSettingsCard() {
@@ -855,6 +856,7 @@ async function boot() {
     try { G.d.gathering = await J('../gamedata/gathering.json'); } catch (e) { G.d.gathering = null; }
     if (typeof fishingInit === 'function') fishingInit();
     try { G.d.pets = await J('../gamedata/pets.json'); } catch (e) { G.d.pets = null; }
+    try { G.d.rep = await J('../gamedata/reputation.json'); } catch (e) { G.d.rep = null; console.warn('reputation.json not found - no reputation (run: py wow_reputation.py)'); }
     try { G.d.stances = await J('../gamedata/spell_stances.json'); } catch (e) { G.d.stances = null; }
     try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }
     try { G.d.go = await J('../gamedata/go_data.json'); } catch (e) { G.d.go = null; console.warn('go_data.json not found - quests with objects are not automated (run: py build_gamedata.py goquest)'); }

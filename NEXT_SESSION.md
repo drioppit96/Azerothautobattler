@@ -11,3 +11,5 @@ Done already: mercenaries spending mana like players (`game/mercs.js`); loot tab
 Possible follow-up for the loot: some raid bosses have no loot entry at all (Ragnaros, 11502), because `wow_loot_all.py` keeps only creatures that spawn in the world. Look at this together with the raid simulation.
 
 Possible follow-ups for the pets (`game/pets.js`, data from `script/wow_pets.py`): a stable (more than one hunter pet), learning ability ranks by taming a beast that knows them (the database has no list of what each beast teaches, so ranks come with the level now), the warlock's Infernal / Doomguard / Enslave Demon / Eye of Kilrogg.
+
+Possible follow-ups for reputation (`game/reputation.js`, data from `script/wow_reputation.py`) and group quests (`game/groupquest.js`): quests whose objective is a reputation standing (Argent Dawn, Cenarion Circle, Zandalar, Brood of Nozdormu turn-ins) are still marked "needs a reputation standing" and skipped; reputation turn-ins ("Donation of ...", Argent Dawn insignia and scourgestones) are not automated; there is no "at war" checkbox; the battleground factions get nothing yet (no battlegrounds).

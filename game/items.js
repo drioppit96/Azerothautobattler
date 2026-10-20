@@ -314,6 +314,7 @@ function canEquip(c, id) {
   if ((it.rl || 0) > c.level) return 'requires level ' + it.rl;
   if (it.rq && it.rq.classes && !it.rq.classes.includes(c.cls)) return 'not for your class';
   if (it.rq && it.rq.races && !it.rq.races.includes(c.race)) return 'not for your race';
+  if (it.rf && typeof repItemOk === 'function' && G.d.rep && !repItemOk(c, id)) return 'requires ' + repItemReq(id);
   if (it.rq && it.rq.skill) return null;
   const pf = G.d.items.proficiency[c.cls]; if (!pf) return null;
   if (it.c === 4 && it.s !== 0 && pf.armor && !pf.armor.includes(it.s) && !(it.t === 16)) return 'cannot use ' + (ARMOR_SUB[it.s] || 'this armor');
@@ -377,13 +378,15 @@ function durabilityLoss(c, pct) {
 function worstDurability(c) { let w = 1; for (const k in c.equip) { const m = maxDur(c.equip[k].id); if (m) w = Math.min(w, c.equip[k].dur / m); } return w; }
 function durabilityPct(c) { let a = 0, b = 0; for (const k in c.equip) { const m = maxDur(c.equip[k].id); if (m) { a += c.equip[k].dur; b += m; } } return b ? a / b : 1; }
 const Q_REPAIR = [0.5, 1, 1.2, 1.5, 2, 2.5, 2.5];
-function repairCost(c) {
+/* v: the vendor who repairs (a reputation discount from Friendly on) */
+function repairCost(c, v) {
   let cost = 0;
   for (const k in c.equip) { const it = c.equip[k]; const r = itemRow(it.id); const m = maxDur(it.id); if (!m || it.dur >= m) continue; const per = Math.max(1, Math.round((r.il || 1) * (r.il || 1) * Q_REPAIR[r.q || 0] / 100)); cost += (m - it.dur) * per; }
-  return cost;
+  const d = v && typeof repDiscount === 'function' ? repDiscount(c, v.e) : 0;
+  return d ? Math.floor(cost * (1 - d)) : cost;
 }
-function repairAll(c) {
-  const cost = repairCost(c); if (!cost) return;
+function repairAll(c, v) {
+  v = v || vendorNear(c, 15); const cost = repairCost(c, v); if (!cost) return;
   if (c.gold < cost) { log('Not enough money to repair (' + money(cost) + ').'); return; }
   c.gold -= cost; for (const k in c.equip) { const m = maxDur(c.equip[k].id); if (m) c.equip[k].dur = m; }
   dirty(c); log('Repaired all gear for ' + money(cost) + '.'); save(); refreshGear();
@@ -495,7 +498,8 @@ function sellIndex(c, idx) {
 }
 function buyItem(c, id) {
   const v = vendorNear(c); if (!v) { log('No vendor in reach.'); return; }
-  const price = itemBuy(id); if (c.gold < price) { log('Not enough money.'); return; }
+  if (!repItemOk(c, id)) { log(itemName(id) + ' requires ' + repItemReq(id) + '.'); return; }
+  const price = vendorPrice(c, id, v.e); if (c.gold < price) { log('Not enough money.'); return; }
   const n = buyCount(id);
   if (!addItem(c, id, n)) { log('Bags are full.'); return; }
   c.gold -= price; log('Bought ' + (n > 1 ? n + ' x ' : '') + itemName(id) + ' for ' + money(price) + '.'); save(); refreshGear();
@@ -528,7 +532,7 @@ function ammoCount(c) { const k = ammoKind(c); let n = 0; for (const x of c.bags
 function autoBuyAmmo(c, v) {
   const k = ammoKind(c); if (!k || ammoCount(c) >= 400) return;
   let best = null;
-  for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!it || it.c !== 6 || it.s !== k || (it.rl || 0) > c.level) continue; const val = it.dps || it.rl || 1; if (!best || val > best.val) best = { id: x.id, val, price: itemBuy(x.id) }; }
+  for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!it || it.c !== 6 || it.s !== k || (it.rl || 0) > c.level || !repItemOk(c, x.id)) continue; const val = it.dps || it.rl || 1; if (!best || val > best.val) best = { id: x.id, val, price: vendorPrice(c, x.id, v.e) }; }
   if (!best) return;
   const per = itemStack(best.id); const stacks = Math.min(3, Math.floor(c.gold * 0.2 / Math.max(1, best.price)));
   if (stacks < 1 || bagFree(c) < stacks) return;
@@ -541,9 +545,9 @@ function autoBuyFood(c, v, kind) {
   if (have >= 10) return;
   let best = null;
   for (const x of vendorItems(v.e)) {
-    const it = itemRow(x.id); const u = useInfo(x.id); if (!it || !u || u.kind !== kind || (it.rl || 0) > c.level) continue;
+    const it = itemRow(x.id); const u = useInfo(x.id); if (!it || !u || u.kind !== kind || (it.rl || 0) > c.level || !repItemOk(c, x.id)) continue;
     if (kind === 'food' && !u.tick) continue;
-    const val = kind === 'food' ? u.tick * u.dur / u.every : drinkValue(x.id); if (!best || val > best.val) best = { id: x.id, val, price: itemBuy(x.id) };
+    const val = kind === 'food' ? u.tick * u.dur / u.every : drinkValue(x.id); if (!best || val > best.val) best = { id: x.id, val, price: vendorPrice(c, x.id, v.e) };
   }
   if (!best) return;
   const per = buyCount(best.id); const stacks = Math.min(2, Math.floor(c.gold * 0.15 / Math.max(1, best.price))); if (stacks < 1 || bagFree(c) <= 0) return;
@@ -554,7 +558,8 @@ function autoBuyGear(c, v) {
   if (!v || !cset(c, 'autoEquip') || !c.order || !(c.order.type === 'leveling' || (c.order.resume && c.order.resume.type === 'leveling'))) return;
   for (const x of vendorItems(v.e)) {
     const it = itemRow(x.id); if (!it || !it.sl || !it.sl.length || it.c === 1) continue;
-    const price = itemBuy(x.id); if (price > c.gold / 3 || bagFree(c) <= 0) continue;
+    if (!repItemOk(c, x.id)) continue;
+    const price = vendorPrice(c, x.id, v.e); if (price > c.gold / 3 || bagFree(c) <= 0) continue;
     const inst = makeInst(x.id, 1); if (!upgradeFor(c, inst)) continue;
     c.gold -= price; c.bags.push(inst); log('Bought ' + itemName(x.id) + ' for ' + money(price) + ' (an upgrade).');
     autoEquip(c);
@@ -565,7 +570,7 @@ function autoBuyBags(c, v) {
   for (let k = 0; k < 4; k++) {
     const free = c.bagSlots.findIndex((x) => !x); if (free < 0) return;
     let best = null;
-    for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!it || it.c !== 1 || !it.cs || it.bf) continue; const price = itemBuy(x.id); if (c.gold < price + 100) continue; if (!best || it.cs > best.cs || (it.cs === best.cs && price < best.price)) best = { id: x.id, cs: it.cs, price }; }
+    for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!it || it.c !== 1 || !it.cs || it.bf || !repItemOk(c, x.id)) continue; const price = vendorPrice(c, x.id, v.e); if (c.gold < price + 100) continue; if (!best || it.cs > best.cs || (it.cs === best.cs && price < best.price)) best = { id: x.id, cs: it.cs, price }; }
     if (!best) return;
     c.gold -= best.price; c.bagSlots[free] = makeInst(best.id, 1); log('Bought and equipped ' + itemName(best.id) + ' (+' + best.cs + ' slots) for ' + money(best.price) + '.');
     rt(c).bagFull = false;
@@ -657,7 +662,8 @@ function tooltipHtml(c, inst, opts) {
   if (it.cs) h += '<div>' + it.cs + ' Slot ' + (it.bf ? 'Special ' : '') + 'Bag</div>';
   const md = maxDur(id); if (md) h += '<div' + (inst.dur === 0 ? ' style="color:#ff3b30"' : '') + '>Durability ' + (inst.dur != null ? inst.dur : md) + ' / ' + md + '</div>';
   if (it.rl > 1) h += '<div' + (it.rl > c.level ? ' style="color:#ff3b30"' : '') + '>Requires Level ' + it.rl + '</div>';
-  const why = it.sl && it.sl.length ? canEquip(c, id) : null; if (why && why.indexOf('level') < 0) h += '<div style="color:#ff3b30">' + esc(why[0].toUpperCase() + why.slice(1)) + '</div>';
+  if (typeof repTipLine === 'function' && G.d.rep) h += repTipLine(c, id);
+  const why = it.sl && it.sl.length ? canEquip(c, id) : null; if (why && why.indexOf('level') < 0 && why.indexOf('requires ') !== 0) h += '<div style="color:#ff3b30">' + esc(why[0].toUpperCase() + why.slice(1)) + '</div>';
   for (const f of it.fx || []) {
     const tr = f.trigger || 0;
     h += '<div class="tt-green">' + spellLine(tr === 1 ? 'Equip: ' : tr === 2 ? 'Chance on hit: ' : 'Use: ', f.id) + '</div>';

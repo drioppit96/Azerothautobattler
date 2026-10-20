@@ -112,6 +112,7 @@ function questSupport(q) {
   if (q.id in G.q.support) return G.q.support[q.id];
   let why = null; const meta = { home: null, elite: 0 };
   if (/^(A )?Donation of /.test(q.title)) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = 'reputation turn-in'); }
+  if (q.repobj && q.repobj[1] > 0) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = 'needs a reputation standing (' + (typeof repName === 'function' ? repName(q.repobj[0]) : 'a faction') + ')'); }
   if (q.zone_or_sort === 3277 || q.zone_or_sort === 3358 || q.zone_or_sort === 2597) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = 'battleground quest'); }
   if (SKIP_SORTS[q.zone_or_sort]) { G.q.meta[q.id] = meta; return (G.q.support[q.id] = SKIP_SORTS[q.zone_or_sort]); }
   const open = (list) => list.filter((s) => OPEN_WORLD[s.map]);
@@ -190,6 +191,7 @@ function questAvailable(c, q) {
   if (q.prev < 0 && !c.quests[-q.prev]) return false;
   if (q.exclusive_group > 0) { for (const o of G.d.quests) if (o.exclusive_group === q.exclusive_group && o.id !== q.id && (c.done[o.id] || c.quests[o.id])) return false; }
   if (!questFactionOk(c, q)) return false;
+  if (typeof repQuestOk === 'function' && G.d.rep && !repQuestOk(c, q)) return false;      // offered from (or below) a reputation standing
   return true;
 }
 /* a dropped item that starts a quest: take the quest */
@@ -286,6 +288,7 @@ function turnInQuest(c, q) {
   masteryQuest(c);
   if (typeof questGroup === 'function') groupTurnIn(c, q);
   log('Quest complete: ' + q.title + '. +' + xp + ' xp' + (cash ? ', +' + money(cash) : '') + (got.length ? '. Received: ' + got.join(', ') : '') + '.');
+  if (G.d.rep) repOnQuest(c, q);
   rt(c).bagFull = bagFree(c) <= 0;
   autoEquip(c);
   save(); renderQuests(); refreshGear(); renderChar();
@@ -355,7 +358,7 @@ function workObjective(c, q, i, o) {
   if (G.gameTime - o.progT > 720) { o.progT = G.gameTime; o.wt = null; return 'blocked'; }
   let t = o.wt && o.wt.q === q.id && o.wt.i === i ? o.wt : null;
   const valid = (x) => x && (x.kind === 'mob' ? x.m.st === 'alive' && (x.m.banUntil || 0) < G.gameTime :
-    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? c.gold >= itemBuy(ob.id) * Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / buyCount(ob.id)) : goFree(x.e, x.i));
+    x.kind === 'npc' ? (x.m.usedUntil || 0) < G.gameTime && x.m.st !== 'dead' : x.kind === 'vendor' ? (typeof repItemOk !== 'function' || repItemOk(c, ob.id)) && c.gold >= vendorPrice(c, ob.id, x.e) * Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / buyCount(ob.id)) : goFree(x.e, x.i));
   if (!valid(t)) {
     t = null;
     const opts = objectiveOptions(c, q, i); let bs = 1e18; let home = null, hd = 1e18;
@@ -364,8 +367,8 @@ function workObjective(c, q, i, o) {
       if (dh < hd) { hd = dh; home = { x: hx, y: hy }; }
       if (!valid(x)) continue;
       if (x.kind === 'mob') {
-        if (!attackable(x.m, c) || dangerous(x.m, c) || x.m.lvl > c.level + (c.cfg.style === 'aggressive' ? 3 : c.cfg.style === 'safe' ? 1 : 2)) continue;
-        if (x.m.rank >= 1 && x.m.lvl > c.level - (x.m.rank === 1 ? 3 : 6)) continue;      // elites only when well above them
+        if (!attackable(x.m, c) || dangerous(x.m, c) || x.m.lvl > c.level + (c.cfg.style === 'aggressive' ? 3 : c.cfg.style === 'safe' ? 1 : 2) + (groupFights(c, x.m) ? 1 : 0)) continue;
+        if (x.m.rank >= 1 && x.m.lvl > c.level - (x.m.rank === 1 ? 3 : 6) && !groupFights(c, x.m)) continue;      // elites only when well above them (or with a group)
         let blocked = false; for (const z of r.danger) if (!z.soft && Math.hypot(x.m.x - z.m.x, x.m.y - z.m.y) < z.R) { blocked = true; break; }
         if (blocked) continue;
         const pack = packSize(ensureWorld(c.pos.map), x.m, c);
@@ -391,7 +394,7 @@ function workObjective(c, q, i, o) {
   }
   if (t.kind === 'vendor') {
     if (!goTo(c, t.x, t.y, 3)) { if (r.blocked) { r.blocked = false; o.wt = null; } return 'busy'; }
-    const per = buyCount(ob.id); const n = Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / per) * per; const price = itemBuy(ob.id) * n / per;
+    const per = buyCount(ob.id); const n = Math.ceil(Math.max(1, ob.count - bagCount(c, ob.id)) / per) * per; const price = vendorPrice(c, ob.id, t.e) * n / per;
     if (c.gold >= price && addItem(c, ob.id, n)) { c.gold -= price; log('Bought ' + n + ' x ' + itemName(ob.id) + ' for ' + money(price) + ' (' + q.title + ').'); onItemGained(c, ob.id); }
     o.wt = null; return 'busy';
   }
@@ -476,6 +479,7 @@ function questStep(c, q, o) {
     const f = feederQuest(c, q, i, o); if (f) return { feeder: f };
     const dq = questDungeon(q); if (dq && c.pos.map !== dq.map && !objectiveOptions(c, q, i).length) return { dungeon: dq };
     o.phase = q.title;
+    if (!groupQuestReady(c, q, o)) return 'busy';          // a group quest: find a group first (groupquest.js)
     const st = workObjective(c, q, i, o);
     if (st === 'none') return '!No ' + q.objectives[i].name + ' on this map for "' + q.title + '".';
     if (st === 'blocked') return '!Cannot reach ' + q.objectives[i].name + ' safely.';
@@ -535,7 +539,7 @@ function questLevelLimit(c) { return c.cfg.style === 'aggressive' ? 4 : c.cfg.st
 function questingWanted(c, q, o) {
   if (skipped(c, o, q.id)) return false;
   if (questSupport(q)) return false;
-  const m = questMeta(q); if (m.elite && c.level < m.elite + 3) return false;     // group quest: wait until well above it
+  if (!groupQuestOk(c, q)) return false;     // group quest: with a group from a little below its level, alone when well above it
   if (!dungeonQuestOk(c, q, true)) return false;
   if (q.level > c.level + questLevelLimit(c)) return false;
   return questDoable(c, q, o);
@@ -590,7 +594,7 @@ function updateQuesting(c, o, dt) {
       else if (!t && questMeta(q).turnDungeon && dungeonQuestOk(c, q, true)) { const dd = dungeonQuestDist(c, questDungeon(q)); if (dd < pd) { pd = dd; pick = q; turn = true; } }
       continue;
     }
-    if (o.type === 'leveling' && questMeta(q).elite && c.level < questMeta(q).elite + 3) continue;
+    if (o.type === 'leveling' && !groupQuestOk(c, q)) continue;
     const dq = questDungeon(q);
     for (let i = 0; i < q.objectives.length; i++) {
       if (gObjDone(c, q, i)) continue;
@@ -641,10 +645,12 @@ function renderQuests() {
     for (const q of act) {
       const done = questDone(c, q); const why = questSupport(q); const k = 'a' + q.id; const on = qOpen(k);
       const prog = q.objectives.length ? q.objectives.map((o, i) => progText(c, q, i)).join(', ') : 'deliver';
-      h += '<div class="q qfold' + (done ? ' ok' : '') + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + ' <span class="muted small">' + (done ? '(ready)' : esc(prog)) + '</span></div>';
+      h += '<div class="q qfold' + (done ? ' ok' : '') + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + (questIsGroup(q) ? ' <span class="qgrp">(Group)</span>' : '') + ' <span class="muted small">' + (done ? '(ready)' : esc(prog)) + '</span></div>';
       if (on) {
         q.objectives.forEach((o, i) => { h += '<div class="muted small">' + (o.type === 'Kill' ? (o.id < 0 ? 'Use ' : 'Kill ') : o.type === 'Collect' ? 'Collect ' : o.type + ' ') + esc(o.name) + ': ' + progText(c, q, i) + '</div>'; });
         if (!q.objectives.length) h += '<div class="muted small">Deliver to ' + esc(spotName(nearestOf(c, giverSpawns(q.turnin)))) + '</div>';
+        if (q.rep && q.rep.length && typeof repQuestText === 'function') h += '<div class="small" style="color:#9fc7ff">Reputation: ' + esc(repQuestText(q)) + '</div>';
+        if (!why && questIsGroup(q)) h += '<div class="small qgrp">' + esc(groupQuestText(c, q)) + '</div>';
         if (why) h += '<div class="small" style="color:#e6b93c">' + esc(why) + '</div>';
         else if (questDungeon(q)) h += '<div class="small" style="color:#b28cff">Dungeon: ' + esc(questDungeon(q).name) + ' (level ' + questDungeon(q).lmin + '+)</div>';
         h += '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>' + (done ? 'Turn in' : 'Do it') + '</button> <button class="mini" data-ab="' + q.id + '">Abandon</button>';
@@ -658,7 +664,7 @@ function renderQuests() {
     if (!av.length) h += '<div class="muted small">No quests nearby for your level.</div>';
     for (const { q, d, s } of av) {
       const why = questSupport(q); const dq = !why && questDungeon(q); const k = 'n' + q.id; const on = qOpen(k);
-      h += '<div class="q qfold' + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + ' <span class="muted small">' + Math.round(d) + ' yd' + (dq ? ' - dungeon' : '') + '</span></div>';
+      h += '<div class="q qfold' + (on ? ' open' : '') + '"><div class="qt" data-qf="' + k + '" style="color:' + levelColor(q.level, c.level) + '"><span class="carr">' + (on ? '&#9662;' : '&#9656;') + '</span>[' + q.level + '] ' + esc(q.title) + (questIsGroup(q) ? ' <span class="qgrp">(Group)</span>' : '') + ' <span class="muted small">' + Math.round(d) + ' yd' + (dq ? ' - dungeon' : '') + '</span></div>';
       if (on) h += '<div class="muted small">' + esc(spotName(s)) + ' - ' + Math.round(d) + ' yd' + (why ? ' - <i>' + esc(why) + '</i>' : '') + (dq ? ' - <span style="color:#b28cff">dungeon: ' + esc(dq.short || dq.name) + '</span>' : '') + '</div>' +
         '<button class="mini" data-do="' + q.id + '"' + (why ? ' disabled' : '') + '>Do it</button>';
       h += '</div>';

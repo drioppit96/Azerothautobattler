@@ -94,7 +94,7 @@ function newRecruit(role, map) {
 /* what one companion costs for a run (copper): grows with the level and with how good they are */
 function hireFee(c, m, d) {
   const L = c.level; const base = L * L * 2.5 * ((d.players || 5) > 5 ? 0.6 : 1);
-  return Math.round(base * (0.4 + skillLevel(m) / 4 + instLevel(m, d.map) / 6));
+  return Math.round(base * (0.4 + skillLevel(m) / 4 + instLevel(m, d.map) / 6) * (d.feeMul || 1));
 }
 /* the group for a run: the best the money allows ('best') or the cheapest ('cheap'); first-timers come for free when
    there is not even money for that */

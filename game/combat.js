@@ -19,7 +19,7 @@ function rageConv(level) { return 0.0091107836 * level * level + 3.225598133 * l
 function cell(x) { return Math.floor(x / CELL); }
 function gk(cx, cy) { return cx * 100003 + cy; }
 function behIndex(c) { if (c.rt && c.rt.raceIdx != null) return c.rt.raceIdx; const i = G.d.hostility.races.findIndex((r) => r.id === c.race); rt(c).raceIdx = i < 0 ? 1 : i; return rt(c).raceIdx; }
-function behOf(m, c) { const h = G.d.hostility.creatures[m.e]; return h ? h[1][behIndex(c)] : 'N'; }
+function behOf(m, c) { const h = G.d.hostility.creatures[m.e]; if (!h) return 'N'; const b = h[1][behIndex(c)]; return c && c.rep && G.d.rep ? repBeh(c, h[0], b) : b; }
 
 function fbHp(L, rank) { const b = 30 + 1.2 * L * L + 8 * L; return Math.round(b * (rank === 1 ? 2.1 : rank === 2 ? 2.8 : rank === 3 ? 12 : rank === 4 ? 1.8 : 1)); }
 function fbDmg(L, rank) { const a = 2 + 0.6 * L + 0.045 * L * L; const m = rank === 1 || rank === 2 ? 1.6 : rank === 3 ? 2.5 : 1; return [a * 0.7 * m, a * 1.3 * m]; }
@@ -63,11 +63,12 @@ function aggroRadius(m, c) { return clamp((m.aggro - (c.level - m.lvl)) * AGGRO_
 function effLevel(m) { return m.lvl + (m.rank === 1 ? 4 : m.rank === 2 ? 5 : m.rank === 3 ? 8 : 0); }
 function dangerous(m, c) {
   if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) return m.lvl - c.level >= (rt(c).party ? 8 : 5);      // dungeons are full of elites: only run from the far too strong
+  const p = rt(c).party; if (p && p.length >= 2) return m.lvl - c.level >= (m.rank === 3 ? 2 : p.length >= 3 ? 4 : 3);     // a group out in the world (group quests): elites of about the level are fine
   return effLevel(m) - c.level >= 4;
 }
 /* a creature some race is friendly with: a town guard or citizen of the other faction (not for grinding) */
 function factionNpc(m) { const h = G.d.hostility.creatures[m.e]; return !!(h && h[1].indexOf('F') >= 0); }
-function attackable(m, c) { const b = behOf(m, c); return (b === 'A' || b === 'N') && !m.civ && m.st === 'alive'; }
+function attackable(m, c) { const b = behOf(m, c); return (b === 'A' || (b === 'N' && !(c.rep && G.d.rep && repKillHurts(c, m.e)))) && !m.civ && m.st === 'alive'; }
 function grayLevel(level) { const r = G.d.xp.levels[level - 1]; return r ? r.gray_level : 0; }
 
 /* ------------------------------------------------------------------ xp */
@@ -302,6 +303,7 @@ function killMob(c, m) {
   else {
     const party = rt(c).party; const xp = Math.round(killXp(c, m) * (party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1)); gainXp(c, xp);
     if (typeof petOnKill === 'function') petOnKill(c, m, party && party.length ? Math.min(1, 1.6 / (party.length + 1)) : 1);
+    if (G.d.rep) repOnKill(c, m, dg || !party || !party.length ? 1 : Math.min(1, 1.6 / (party.length + 1)));      // reputation: all of it in a dungeon, shared in a group out in the world
     log(name + ' (lvl ' + m.lvl + ') slain' + (xp ? ', +' + xp + ' xp' : ', no xp') + '.');
     const comps = party ? party.filter((u) => u.comp && !u.dead) : [];
     lootMob(c, m, false, comps.length ? { chars: [c], comps } : null);
@@ -769,7 +771,7 @@ function updateChar(c, dt) {
   const dg = threats.filter((m) => dangerous(m, c));
   if (dg.length) { fleeStep(c, dt, dg); return; }
   if (c.pet || c.cls === 9) petStep(c, dt);
-  if (r.party) partyStep(c, dt);
+  if (r.party) { partyStep(c, dt); if (r.partyQ) groupQuestPartyStep(c, threats); }
   if (r.cast && castStep(c, dt)) { if (threats.length && (!r.tgt || r.tgt.st === 'dead')) r.tgt = threats[0]; return; }
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
   if (r.tame && threats.length && typeof petTameFight === 'function' && petTameFight(c)) return;     // the beast being tamed attacks: keep taming

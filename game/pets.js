@@ -308,7 +308,7 @@ function autoBuyPetFood(c, v) {
   const p = c.pet; if (!v || !p || p.kind !== 'hunter' || G.state.settings.autoBuyFood === false) return;
   let have = 0; for (const x of c.bags) if (petFoodBenefit(p, x.id) > 0) have += x.n; if (have >= 10) return;
   let best = null;
-  for (const x of vendorItems(v.e)) { const b = petFoodBenefit(p, x.id); if (b <= 0) continue; const it = itemRow(x.id); const price = itemBuy(x.id); const val = b * 1000 - (it.il || 0); if (!best || val > best.val) best = { id: x.id, val, price }; }
+  for (const x of vendorItems(v.e)) { const b = petFoodBenefit(p, x.id); if (b <= 0 || !repItemOk(c, x.id)) continue; const it = itemRow(x.id); const price = vendorPrice(c, x.id, v.e); const val = b * 1000 - (it.il || 0); if (!best || val > best.val) best = { id: x.id, val, price }; }
   if (!best || bagFree(c) <= 0 || c.gold < best.price * 2) return;
   const per = buyCount(best.id); const stacks = Math.min(2, Math.floor(c.gold * 0.1 / Math.max(1, best.price)));
   if (stacks >= 1 && addItem(c, best.id, per * stacks)) { c.gold -= stacks * best.price; log('Bought ' + per * stacks + ' x ' + itemName(best.id) + ' for ' + p.name + '.'); }

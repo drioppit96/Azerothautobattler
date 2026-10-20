@@ -8,7 +8,7 @@ const SLOT_LABEL = { 0: 'Head', 1: 'Neck', 2: 'Shoulder', 3: 'Shirt', 4: 'Chest'
 const SH = { tab: 'char', open: false, sel: null };
 /* the five windows (like the C window of the game) and their tabs */
 const SH_GROUPS = [
-  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['pet', 'Pet']] },
+  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['rep', 'Reputation'], ['pet', 'Pet']] },
   { k: 'bag', n: 'Bags', key: 'B', tabs: [['bags', 'Bags'], ['bank', 'Bank'], ['gbank', 'Guild bank']] },
   { k: 'trade', n: 'Trade', key: 'T', tabs: [['vendor', 'Vendor'], ['ah', 'Auction house'], ['trade', 'Trade']] },
   { k: 'prof', n: 'Professions', key: 'P', tabs: [['prof', 'Professions'], ['gcraft', 'Guild crafters']] },
@@ -89,13 +89,15 @@ function vendorHtml(c) {
   const items = vendorItems(v.e);
   let h = '<div class="vhead"><b>' + esc(v.name) + '</b>' + (v.repair ? ' <span class="muted">(repairs)</span>' : '') + '</div>' +
     '<div class="vbtns"><button class="mini" data-vact="junk"' + (junkCount(c) ? '' : ' disabled') + '>Sell junk (' + junkCount(c) + ')</button>' +
-    (v.repair ? ' <button class="mini" data-vact="repair"' + (repairCost(c) ? '' : ' disabled') + '>Repair all: ' + money(repairCost(c)) + '</button>' : '') + '</div>';
+    (v.repair ? ' <button class="mini" data-vact="repair"' + (repairCost(c, v) ? '' : ' disabled') + '>Repair all: ' + money(repairCost(c, v)) + '</button>' : '') + '</div>';
+  const disc = repDiscount(c, v.e); const vf = repOfNpc(v.e);
+  if (vf) h += '<div class="small" style="color:' + (disc ? '#7fe08a' : '#b8ad94') + '">' + esc(repName(vf)) + ': ' + REP_RANKS[repRankOf(c, vf)] + (disc ? ' - ' + Math.round(disc * 100) + '% discount' : '') + '</div>';
   if (!items.length) h += '<div class="muted small" style="margin-top:8px">This vendor\'s goods are not in the game data. Run <code>py build_gamedata.py cstats</code> to export every vendor list. You can still sell here: click an item in your bags.</div>';
   h += '<div class="vlist">';
   items.forEach((x) => {
-    const inst = makeInst(x.id, 1); const price = itemBuy(x.id); const cant = c.gold < price;
+    const inst = makeInst(x.id, 1); const price = vendorPrice(c, x.id, v.e); const repOk = repItemOk(c, x.id); const cant = c.gold < price || !repOk;
     const bn = buyCount(x.id);
-    h += '<div class="vrow" data-buy="' + x.id + '">' + iconHtml(Object.assign(inst, { n: bn })) + '<div class="vname"><span style="color:' + QUALITY_COLORS[itemQuality(x.id)] + '">' + esc(itemName(x.id)) + '</span><div class="small">' + moneyHtml(price) + (bn > 1 ? ' for ' + bn : '') + '</div></div><button class="mini" data-buyb="' + x.id + '"' + (cant ? ' disabled' : '') + '>Buy' + (bn > 1 ? ' ' + bn : '') + '</button></div>';
+    h += '<div class="vrow" data-buy="' + x.id + '">' + iconHtml(Object.assign(inst, { n: bn })) + '<div class="vname"><span style="color:' + QUALITY_COLORS[itemQuality(x.id)] + '">' + esc(itemName(x.id)) + '</span><div class="small">' + moneyHtml(price) + (bn > 1 ? ' for ' + bn : '') + (repOk ? '' : ' <span class="bad">requires ' + esc(repItemReq(x.id)) + '</span>') + '</div></div><button class="mini" data-buyb="' + x.id + '"' + (cant ? ' disabled' : '') + '>Buy' + (bn > 1 ? ' ' + bn : '') + '</button></div>';
   });
   h += '</div><div class="muted small" style="margin-top:6px">To sell: click an item in your bags and choose Sell.</div>';
   return h;
@@ -134,7 +136,7 @@ function renderSheet() {
   const nav = $('sheetTabs'); if (nav._h !== tabs) { nav.innerHTML = tabs; nav._h = tabs; }
   const gt = $('sheetGroup'); if (gt) gt.textContent = grp.n;
   $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
-  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft');
+  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep');
   $('sheet').dataset.group = grp.k;
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') {
@@ -144,9 +146,10 @@ function renderSheet() {
     return;
   }
   if (SH.tab === 'gcraft') { $('sheetLeft').innerHTML = gcraftHtml(c); $('sheetBags').innerHTML = ''; return; }
+  if (SH.tab === 'rep') { $('sheetLeft').innerHTML = repTabHtml(c); $('sheetBags').innerHTML = ''; return; }
   const vs = SH.tab === 'vendor' && document.activeElement && document.activeElement.id === 'vsQ' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + (typeof shopHtml === 'function' ? shopHtml(c) : '') + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
-    SH.tab === 'guild' ? guildHtml(c, 'info') : SH.tab === 'glog' ? guildHtml(c, 'log') : SH.tab === 'gbank' ? guildHtml(c, 'bank') : SH.tab === 'bags' ? bagSummaryHtml(c) : SH.tab === 'pet' ? petTabHtml(c) :
+    SH.tab === 'guild' ? guildHtml(c, 'info') : SH.tab === 'glog' ? guildHtml(c, 'log') : SH.tab === 'gbank' ? guildHtml(c, 'bank') : SH.tab === 'bags' ? bagSummaryHtml(c) : SH.tab === 'pet' ? petTabHtml(c) : SH.tab === 'rep' ? repTabHtml(c) :
     '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
@@ -161,7 +164,7 @@ function instFromEl(el) {
   if (el.dataset.idx != null) return { inst: c.bags[+el.dataset.idx], where: 'bag', idx: +el.dataset.idx };
   if (el.dataset.slot != null) return c.equip[el.dataset.slot] ? { inst: c.equip[el.dataset.slot], where: 'eq', slot: +el.dataset.slot } : null;
   if (el.dataset.bag != null) return c.bagSlots[el.dataset.bag] ? { inst: c.bagSlots[el.dataset.bag], where: 'bagslot', i: +el.dataset.bag } : null;
-  if (el.dataset.buy != null) return { inst: makeInst(+el.dataset.buy, 1), where: 'vendor', price: itemBuy(+el.dataset.buy) };
+  if (el.dataset.buy != null) { const v = vendorNear(c); return { inst: makeInst(+el.dataset.buy, 1), where: 'vendor', price: vendorPrice(c, +el.dataset.buy, v && v.e) }; }
   if (el.dataset.iid != null) return { inst: { id: +el.dataset.iid, n: 1 }, where: 'info' };
   if (el.dataset.bk != null) return bankOf(c).items[+el.dataset.bk] ? { inst: bankOf(c).items[+el.dataset.bk], where: 'bank', i: +el.dataset.bk } : null;
   if (el.dataset.ahl != null) { const [id, i] = el.dataset.ahl.split(':').map(Number); const v = auctioneerNear(c); const L = listings(id, v ? v.side : charSide(c)).find((x) => x.i === i); return L ? { inst: { id, n: L.n, rp: L.rp }, where: 'info' } : null; }
@@ -252,6 +255,7 @@ function bindSheet() {
     if (SH.tab === 'vendor' && typeof shopClick === 'function' && shopClick(e)) return;
     if (SH.tab === 'bags' && bagSummaryClick(e)) return;
     if (SH.tab === 'pet' && petTabClick(e)) return;
+    if (SH.tab === 'rep' && repTabClick(e)) return;
     if (e.target.closest('[data-bsort]')) { sortBags(c); return; }
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;

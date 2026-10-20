@@ -267,6 +267,16 @@ def sec_questchains(ctx):
                     "reward_items": [[G(r, "rewitemid%d" % k), G(r, "rewitemcount%d" % k)] for k in range(1, 5) if G(r, "rewitemid%d" % k)],
                     "choice_items": [[G(r, "rewchoiceitemid%d" % k), G(r, "rewchoiceitemcount%d" % k)] for k in range(1, 7) if G(r, "rewchoiceitemid%d" % k)],
                     "rep": [[G(r, "rewrepfaction%d" % k), G(r, "rewrepvalue%d" % k)] for k in range(1, 6) if G(r, "rewrepfaction%d" % k)]})
+        # group quests and reputation (game/reputation.js; also written by wow_reputation.py)
+        qx = out[-1]
+        if G(r, "type"):
+            qx["type"] = G(r, "type")
+        if G(r, "suggestedplayers"):
+            qx["sugg"] = G(r, "suggestedplayers")
+        for key, f, v in (("minrep", "requiredminrepfaction", "requiredminrepvalue"), ("maxrep", "requiredmaxrepfaction", "requiredmaxrepvalue"),
+                          ("repobj", "repobjectivefaction", "repobjectivevalue")):
+            if G(r, f):
+                qx[key] = [G(r, f), G(r, v)]
     sheet(ctx, "Quest Chains",
           ["Quest ID", "Title", "Level", "Min Level", "Zone/Sort ID", "Races", "Classes",
            "Requires Quest (prev)", "Next Quest", "Next In Chain", "Exclusive Group", "Breadcrumb For",
