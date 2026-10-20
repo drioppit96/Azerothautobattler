@@ -318,7 +318,9 @@ function spellHit(c, sp, e, m, opts) {
 }
 function healSelf(c, v, label) {
   const s = charStats(c); v = Math.round(v * (1 + (s.healPct || 0) / 100));
-  const r = rt(c); if (r.healOn && r.healOn !== c && typeof healOther === 'function') { const to = r.healOn; r.healOn = null; return healOther(c, to, v, label); }
+  const r = rt(c);
+  if (r.healOn && r.healOn.merc) { const u = r.healOn.merc; r.healOn = null; if (u.dead) return 0; const h0 = u.hp; u.hp = Math.min(u.maxhp, u.hp + v); fx(u.x, u.y, '+' + Math.round(u.hp - h0), '#5ee07a'); meterHeal(c, u.hp - h0, label || 'Heal'); return v; }      // a mercenary (tactics)
+  if (r.healOn && r.healOn !== c && typeof healOther === 'function') { const to = r.healOn; r.healOn = null; return healOther(c, to, v, label); }
   r.healOn = null;
   const before = c.hp; c.hp = Math.min(s.maxHp, c.hp + v); fx(c.pos.x, c.pos.y, '+' + Math.round(c.hp - before), '#5ee07a'); meterHeal(c, c.hp - before, label || 'Heal');
   return v;
@@ -362,7 +364,13 @@ function finishSpell(c, name, sp, tgt) {
   if (pt === 0 && cost > 0) r.lastCast = G.gameTime;
   if (groupBuffable(name, sp) && raidBuff(c, name, sp)) return;                     // grouped: the buff goes on the whole group
   if (tgt && tgt !== c && tgt.equip && tgt.pos) { buffOther(c, tgt, sp); return; }      // a buff on another character
-  if (tgt && tgt.merc) { mercGiveBuff(c, null, tgt, name, sp); fx(tgt.merc.x, tgt.merc.y, name, '#9fe0ff'); return; }      // on a mercenary
+  if (tgt && tgt.merc) {      // on a mercenary: a buff, a heal over time, a shield
+    const au8 = (sp.ef || []).find((e) => e.au === 8 && e.k !== 'enemy'); const au69 = (sp.ef || []).find((e) => e.au === 69);
+    if (au8) mercGiveHot(c, null, Object.assign({ x: tgt.merc.x, y: tgt.merc.y }, tgt), name, sp, effValue(c, sp, au8) * Math.max(1, (sp.dur || 12000) / (au8.amp || 3000)));
+    else if (au69) mercShield(c, rt(c), Object.assign({ x: tgt.merc.x, y: tgt.merc.y }, tgt), sp, effValue(c, sp, au69));
+    else mercGiveBuff(c, null, tgt, name, sp);
+    fx(tgt.merc.x, tgt.merc.y, name, '#9fe0ff'); return;
+  }
   const mob = tgt && tgt !== c ? tgt : (sp.ef || []).some((e) => e.k === 'enemy' || e.k === 'area_enemy') ? r.tgt : null;
   applySpell(c, sp, mob, { name });
   fx(c.pos.x, c.pos.y, name, '#ffe9a8');

@@ -784,7 +784,7 @@ function updateChar(c, dt) {
   if (r.tame && threats.length && typeof petTameFight === 'function' && petTameFight(c)) return;     // the beast being tamed attacks: keep taming
   if (threats.length && groupOf(c)) {
     r.tgt = groupPickTarget(c, threats, r.tgt); r.mv = null;
-    if (groupHealStep(c)) return;
+    if (!(typeof tacActive === 'function' && tacActive(c)) && groupHealStep(c)) return;          // with tactics the heals are in the tactics
     if (r.tgt) { fightStep(c, r.tgt, dt); return; }
   }
   if (threats.length) {

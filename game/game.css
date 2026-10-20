@@ -545,3 +545,46 @@ label.chk.dim{opacity:.55}
 .farmset .farmrow{display:flex;gap:6px;margin:4px 0}
 .farmset select{flex:1;min-width:0;background:#0f0c08;border:1px solid var(--line);color:#f0e6cc;border-radius:4px;padding:3px}
 .farmset .bad{color:#ff7060}.farmset button{margin-top:4px}
+/* the Tactics tab: a book like Dragon Age: Origins (tactics_ui.js) */
+.tacbook{position:relative;max-width:980px;margin:0 auto;padding:14px 18px 12px;border-radius:10px;color:#2b1b0b;
+  background:radial-gradient(ellipse at 25% 40%,#f3e6c4 0,#e6d2a4 55%,#cdb27c 100%),#e6d2a4;
+  box-shadow:inset 0 0 40px #7a5a2a66,0 0 0 3px #3a2a16,0 0 0 5px #8a6a3a,0 8px 24px #000a}
+.tacspine{position:absolute;top:10px;bottom:10px;left:50%;width:18px;margin-left:-9px;background:linear-gradient(90deg,#0000,#5a40204d 40%,#2a1a0a66 50%,#5a40204d 60%,#0000);pointer-events:none}
+.tactop{display:flex;gap:28px;margin-bottom:8px}
+.tachalf{flex:1;min-width:0;display:flex;align-items:center;gap:6px}
+.tactop .tachalf{flex-direction:column;align-items:stretch;gap:6px}
+.tacname{display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(#3a2414,#1e120a);border:2px solid #8a6a3a;border-radius:6px;padding:4px 10px;color:#ffd970;font:600 17px Georgia,serif}
+.tacname span{flex:1;text-align:center;background:linear-gradient(90deg,#0000,#a03a1a66,#0000)}
+.tacarr{background:none;border:none;color:#e6c46a;font-size:18px;cursor:pointer;padding:0 4px}.tacarr:hover{color:#fff}
+.tacsel{display:flex;align-items:center;gap:8px;background:linear-gradient(#cdb487,#b89a68);border:1px solid #7a5a2a;border-radius:4px;padding:3px 8px}
+.tacsel span{font:600 14px Georgia,serif;color:#4a2f14;min-width:64px}
+.tacsel select{flex:1;min-width:0;background:linear-gradient(#3a2414,#1e120a);color:#ffe9b0;border:1px solid #8a6a3a;border-radius:4px;padding:3px 6px;font:13px Georgia,serif}
+.tacnote{color:#5a3f1c;min-height:16px}
+.tacrows{display:flex;flex-direction:column;gap:3px;max-height:62vh;overflow:auto;padding-right:4px}
+.tacrows.off{opacity:.5}
+.tacrow{display:flex;gap:28px}
+.tacplus{flex:none;width:26px;height:26px;border-radius:4px;border:1px solid #6a5030;background:linear-gradient(#4a3420,#24170c);color:#f3e2b8;cursor:pointer;font-size:13px;line-height:1}
+.tacplus:hover{color:#ffd970;border-color:#c9a64a}
+.tacnum{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:4px;border:1px solid #6a5030;background:linear-gradient(#3a2818,#1c1209);color:#f3e2b8;font:600 13px Georgia,serif}
+.taccond,.tacact{flex:1;min-width:0;height:26px;display:flex;align-items:center;gap:6px;text-align:left;cursor:pointer;border:1px solid #6a5030;border-radius:3px;padding:0 8px;
+  background:linear-gradient(90deg,#2c1d10,#3c2a18 70%,#2c1d10);color:#f0e2bd;font:13px Georgia,serif;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%)}
+.tacact{clip-path:none;justify-content:space-between}
+.taccond:hover,.tacact:hover{background:linear-gradient(90deg,#3c2814,#5a3c1e 70%,#3c2814);color:#fff}
+.taccond.en{color:#ff9a7a}
+.tacact span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tacact .sic{width:20px;height:20px;border:1px solid #c9a64a;border-radius:3px;flex:none}
+.tacact i{color:#c8a878;font-size:11px}
+.tacrow.dis .taccond,.tacrow.dis .tacact{opacity:.45;text-decoration:line-through}
+.tacrow.unk .tacact{opacity:.6}
+.tacrow.add .taccond{color:#d8c49a;font-style:italic}
+.tacempty{padding:30px;text-align:center;font:15px Georgia,serif;color:#4a2f14}.tacempty a{color:#7a2a10}
+.tacbottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid #8a6a3a66;color:#3a2410}
+.tacbottom .chk{color:#3a2410;font:14px Georgia,serif}.tacbottom .muted{color:#6a4f2c!important}
+#tacpop{position:fixed;z-index:400;background:#f0e1bc;border:1px solid #6a5030;border-radius:4px;box-shadow:0 8px 24px #000b;max-height:70vh;overflow:auto}
+#tacpop .tpcols{display:flex}
+#tacpop .tpcol{display:flex;flex-direction:column;min-width:230px;max-height:68vh;overflow:auto}
+#tacpop .tpcol + .tpcol{border-left:1px solid #a88a5a}
+#tacpop .tphead{background:#3a2414;color:#ffd970;font:600 12px Georgia,serif;padding:3px 8px;position:sticky;top:0}
+#tacpop .tpitem{display:flex;align-items:center;gap:6px;text-align:left;background:none;border:none;border-bottom:1px solid #d6c294;padding:4px 8px;font:13px Georgia,serif;color:#2b1b0b;cursor:pointer}
+#tacpop .tpitem:hover{background:#dcc597}
+#tacpop .tpitem .sic{width:20px;height:20px}
+@media (max-width:900px){.tacrow,.tactop{gap:6px}.tacrow{flex-direction:column}.tacspine{display:none}.tacbook{padding:10px}}

@@ -322,7 +322,7 @@ function mercHealStep(c, u, dt, inFight) {
 }
 /* heals over time: on the mercenaries ticked here, on the characters through their buffs (classes.js) */
 function mercHotStep(c, u, dt) {
-  for (const b of u.buffs || []) if (b.hot && b.until > G.gameTime - 0.01) { b.hot.t += dt; while (b.hot.t >= b.hot.every) { b.hot.t -= b.hot.every; if (!u.dead) { u.hp = Math.min(u.maxhp, u.hp + b.hot.v); meterGroup(c, b.hot.from, 'heal', b.hot.v, b.name); } } }
+  for (const b of u.buffs || []) if (b.hot && b.until > G.gameTime - 0.01) { b.hot.t += dt; while (b.hot.t >= b.hot.every) { b.hot.t -= b.hot.every; if (!u.dead) { u.hp = Math.min(u.maxhp, u.hp + b.hot.v); if (b.hot.from) meterGroup(c, b.hot.from, 'heal', b.hot.v, b.name); else if (typeof meterHeal === 'function') meterHeal(c, b.hot.v, b.name); } } }
 }
 function mercGiveHot(c, u, t, n, sp, total) {
   const dur = sp.dur > 0 ? sp.dur / 1000 : 12; const every = 3; const v = Math.max(1, Math.round(total / Math.max(1, dur / every)));
@@ -367,6 +367,7 @@ function mercFight(c, u, dt, threats, inc, healers, mv) {
   const r = rt(c);
   if (u.gcd <= G.gameTime) { const due = mercBuffDue(c, u, true); if (due && mercCastBuff(c, u, due)) return true; }
   mercOpening(c, u);
+  if (G.gameTime >= (u.openAt || 0) && mercTactics(c, u, threats)) return true;          // the tactics: survive, crowd control, cooldowns, packs, the group
   if (u.role === 'healer') {
     mv(c.pos.x, c.pos.y, 14);
     if (mercHealStep(c, u, dt, true)) return true;
@@ -419,4 +420,120 @@ function mercBuffTarget(c, name) {
     if (Math.hypot(u.x - c.pos.x, u.y - c.pos.y) <= 30) return { merc: u, x: u.x, y: u.y };
   }
   return null;
+}
+
+/* ------------------------------------------------------------------ tactics (like the characters' presets, tactics.js)
+   Every mercenary has a list by class and role, checked from the top each moment it is free: staying alive (potions,
+   Shield Wall, Ice Block, Evasion, Feign Death ...), crowd control on the extra adds (Polymorph, Shackle, Banish,
+   Hibernate, Fear, Blind, Freezing Trap), group heals and dispels, mana (Evocation, Life Tap, Innervate on the healer),
+   cooldowns on elites and bosses, area attacks on packs, execute range. Its experience decides how often it thinks of
+   them (a beginner forgets half). The heals, debuffs and the main damage stay in the code above. */
+const MT = (c, p, n, k, cd, v) => ({ c, p, n, k, cd: cd || 0, v });
+const MERC_TAC = {
+  1: { tank: [MT('self.hp<', 25, 'Last Stand', 'heal', 600, 0.3), MT('self.hp<', 18, 'Shield Wall', 'dr', 1800, [0.25, 10]), MT('enemy.att>', 4, 'Challenging Shout', 'taunt', 600),
+              MT('enemy.clus>', 2, 'Thunder Clap', 'aoe', 6, 0.5)],
+       dps: [MT('enemy.hp<', 20, 'Execute', 'exec', 0, 2.2), MT('enemy.boss', null, 'Recklessness', 'cd', 1800, [0.5, 15]), MT('enemy.elite', null, 'Death Wish', 'cd', 180, [0.2, 30]),
+              MT('enemy.clus>', 2, 'Sweeping Strikes', 'cd', 30, [0.3, 10]), MT('enemy.clus>', 3, 'Whirlwind', 'aoe', 10, 1.0), MT('self.sur>', 3, 'Intimidating Shout', 'fear', 180, 8)] },
+  2: { tank: [MT('self.hp<', 15, 'Lay on Hands', 'heal', 3600, 1), MT('enemy.clus>', 2, 'Consecration', 'aoe', 8, 0.6), MT('self.hp<', 30, 'Divine Protection', 'dr', 300, [0.5, 8])],
+       healer: [MT('self.hp<', 15, 'Divine Shield', 'immune', 300, 12), MT('ally.disp', null, 'Cleanse', 'disp', 0, [1, 3, 4]), MT('ally.disp', null, 'Purify', 'disp', 0, [3, 4]), MT('self.mp<', 30, 'Divine Favor', 'mana', 120, 0.1)],
+       dps: [MT('enemy.hp<', 20, 'Hammer of Wrath', 'exec', 6, 1.6), MT('enemy.clus>', 3, 'Consecration', 'aoe', 8, 0.6), MT('self.hp<', 15, 'Divine Shield', 'immune', 300, 12), MT('ally.disp', null, 'Cleanse', 'disp', 0, [1, 3, 4])] },
+  3: { dps: [MT('self.hp<', 15, 'Feign Death', 'drop', 30), MT('enemy.loose', null, 'Freezing Trap', 'cc', 15, 20), MT('enemy.elite', null, 'Rapid Fire', 'cd', 300, [0.4, 15]),
+              MT('enemy.elite', null, 'Bestial Wrath', 'cd', 120, [0.3, 18]), MT('enemy.clus>', 4, 'Volley', 'aoe', 30, 1.4), MT('enemy.clus>', 3, 'Multi-Shot', 'aoe', 10, 0.7)] },
+  4: { dps: [MT('self.hp<', 12, 'Vanish', 'drop', 300), MT('self.hp<', 35, 'Evasion', 'dr', 300, [0.5, 15]), MT('enemy.loose', null, 'Blind', 'cc', 300, 10), MT('enemy.loose', null, 'Gouge', 'cc', 10, 4),
+              MT('enemy.att>', 2, 'Blade Flurry', 'cd', 120, [0.4, 15]), MT('enemy.elite', null, 'Adrenaline Rush', 'cd', 300, [0.5, 15]), MT('enemy.hp<', 25, 'Eviscerate', 'exec', 8, 1.6)] },
+  5: { healer: [MT('self.hp<', 20, 'Desperate Prayer', 'heal', 600, 0.35), MT('self.sur>', 2, 'Psychic Scream', 'fear', 30, 8), MT('ally.hurt>', 3, 'Prayer of Healing', 'gheal', 4, 1.0),
+                 MT('ally.disp', null, 'Dispel Magic', 'disp', 0, [1]), MT('ally.disp', null, 'Abolish Disease', 'disp', 0, [3]), MT('ally.disp', null, 'Cure Disease', 'disp', 0, [3]),
+                 MT('enemy.loose', null, 'Shackle Undead', 'cc', 0, 30), MT('self.mp<', 25, 'Inner Focus', 'mana', 180, 0.12)],
+       dps: [MT('self.hp<', 20, 'Desperate Prayer', 'heal', 600, 0.35), MT('self.sur>', 2, 'Psychic Scream', 'fear', 30, 8), MT('enemy.loose', null, 'Shackle Undead', 'cc', 0, 30), MT('ally.disp', null, 'Dispel Magic', 'disp', 0, [1])] },
+  7: { healer: [MT('ally.hurt>', 3, 'Chain Heal', 'gheal', 3, 0.8), MT('ally.disp', null, 'Cure Poison', 'disp', 0, [4]), MT('ally.disp', null, 'Cure Disease', 'disp', 0, [3]), MT('self.mp<', 25, 'Mana Tide Totem', 'mana', 300, 0.3)],
+       dps: [MT('enemy.clus>', 3, 'Chain Lightning', 'aoe', 6, 0.8), MT('enemy.clus>', 3, 'Magma Totem', 'aoe', 20, 1.2), MT('enemy.elite', null, 'Elemental Mastery', 'cd', 180, [0.4, 10]), MT('ally.disp', null, 'Cure Poison', 'disp', 0, [4])] },
+  8: { dps: [MT('self.hp<', 15, 'Ice Block', 'immune', 300, 10), MT('self.hp<', 50, 'Ice Barrier', 'shield', 30, 0.3), MT('self.sur>', 1, 'Frost Nova', 'root', 25, 8), MT('enemy.loose', null, 'Polymorph', 'cc', 0, 30),
+              MT('self.mp<', 12, 'Evocation', 'mana', 480, 0.6), MT('enemy.elite', null, 'Arcane Power', 'cd', 180, [0.3, 15]), MT('enemy.elite', null, 'Combustion', 'cd', 180, [0.3, 15]),
+              MT('self.sur>', 3, 'Arcane Explosion', 'aoe', 0, 0.6), MT('enemy.clus>', 3, 'Blizzard', 'aoe', 8, 1.5), MT('enemy.clus>', 3, 'Flamestrike', 'aoe', 8, 1.3), MT('ally.disp', null, 'Remove Lesser Curse', 'disp', 0, [2])] },
+  9: { dps: [MT('self.hp<', 30, 'Death Coil', 'heal', 120, 0.2), MT('self.sur>', 2, 'Howl of Terror', 'fear', 40, 8), MT('enemy.loose', null, 'Banish', 'cc', 0, 20), MT('enemy.loose', null, 'Fear', 'cc', 0, 10),
+              MT('self.mp<', 25, 'Life Tap', 'mana', 0, 0.15), MT('self.sur>', 3, 'Hellfire', 'aoe', 15, 1.0), MT('enemy.clus>', 3, 'Rain of Fire', 'aoe', 8, 1.5), MT('enemy.hp<', 20, 'Shadowburn', 'exec', 15, 1.8)] },
+  11: { tank: [MT('self.hp<', 25, 'Frenzied Regeneration', 'heal', 180, 0.3), MT('self.hp<', 30, 'Barkskin', 'dr', 60, [0.2, 15]), MT('enemy.att>', 4, 'Challenging Roar', 'taunt', 600), MT('enemy.clus>', 2, 'Swipe', 'aoe', 3, 0.5)],
+        healer: [MT('self.hp<', 30, 'Barkskin', 'dr', 60, [0.2, 15]), MT('ally.hurt>', 4, 'Tranquility', 'gheal', 300, 1.5), MT('ally.disp', null, 'Remove Curse', 'disp', 0, [2]), MT('ally.disp', null, 'Abolish Poison', 'disp', 0, [4]),
+                 MT('ally.mp<', 20, 'Innervate', 'innervate', 360, 0.4), MT('enemy.loose', null, 'Hibernate', 'cc', 0, 20)],
+        dps: [MT('self.hp<', 30, 'Barkskin', 'dr', 60, [0.2, 15]), MT('enemy.loose', null, 'Hibernate', 'cc', 0, 20), MT('enemy.clus>', 3, 'Hurricane', 'aoe', 60, 1.5), MT('ally.mp<', 15, 'Innervate', 'innervate', 360, 0.4)] },
+};
+/* the cooldowns make the mercenary hit harder for a while (mercMods adds MERC_BUFF_FX) */
+for (const cls in MERC_TAC) for (const role in MERC_TAC[cls]) for (const t of MERC_TAC[cls][role]) if (t.k === 'cd' && !MERC_BUFF_FX[t.n]) MERC_BUFF_FX[t.n] = { dps: t.v[0] };
+function mercCcTypes(n) { return typeof TAC_CC !== 'undefined' ? TAC_CC[n] : null; }        // tactics.js
+function mercTacList(u) { const K = MERC_TAC[u.cls] || {}; return K[u.role] || K.dps || []; }
+/* one look at the list: true when it did something */
+function mercTactics(c, u, threats) {
+  const now = G.gameTime; if (u.gcd > now || (u.stunUntil || 0) > now) return false;
+  const list = mercTacList(u); if (!list.length) return false;
+  const ux = (u.ex == null ? 5 : u.ex) / 10; const L = mercLevel(c); const r = rt(c);
+  if (Math.random() > 0.35 + 0.65 * ux) return false;                    // a beginner does not think of it now
+  const tgt = r.tgt && r.tgt.st !== 'dead' ? r.tgt : threats[0];
+  u.tcd = u.tcd || {};
+  // the potion: like a player, low on health in a fight that is going badly
+  if (u.hp < u.maxhp * 0.25 && now - (u.hpPotT || -999) > 120 && L >= 5) { u.hpPotT = now; const v = Math.round(u.maxhp * 0.3); u.hp = Math.min(u.maxhp, u.hp + v); fx(u.x, u.y, 'Healing Potion +' + v, '#5ee07a'); return true; }
+  for (const t of list) {
+    if ((u.tcd[t.n] || 0) > now) continue;
+    const sp = mercSpell(u.cls, t.n, L); if (!sp) continue;
+    const who = mercTacCond(c, u, t, tgt, threats); if (!who) continue;
+    const cost = mercCost(c, u, sp); if (t.k !== 'mana' && mercPower(u) < cost) continue;
+    if (!mercTacDo(c, u, t, sp, who, threats, tgt)) continue;
+    if (t.k !== 'mana') mercPay(u, cost);
+    u.tcd[t.n] = now + Math.max(t.cd, 1.5); u.gcd = now + 1.5; fx(u.x, u.y, t.n, '#ffe9a8');
+    return true;
+  }
+  return false;
+}
+function mercTacCond(c, u, t, tgt, threats) {
+  const p = t.p; const near = (x, y, R) => threats.filter((m) => m.st !== 'dead' && Math.hypot(m.x - x, m.y - y) <= R);
+  switch (t.c) {
+    case 'self.hp<': return u.hp / u.maxhp * 100 < p ? u : null;
+    case 'self.mp<': return u.pt === 0 && u.maxmana && u.mana / u.maxmana * 100 < p ? u : null;
+    case 'self.sur>': return near(u.x, u.y, 7).length >= p ? u : null;
+    case 'enemy.att>': return threats.length >= p ? tgt : null;
+    case 'enemy.clus>': return tgt && near(tgt.x, tgt.y, 10).length >= p ? tgt : null;
+    case 'enemy.hp<': return tgt && tgt.hp / tgt.maxhp * 100 < p ? tgt : null;
+    case 'enemy.elite': return tgt && tgt.rank >= 1 ? tgt : null;
+    case 'enemy.boss': return tgt && tgt.rank === 3 ? tgt : null;
+    case 'enemy.loose': {
+      if (threats.length < 3 && !(threats.length >= 2 && threats.some((m) => m.rank >= 1))) return null;
+      const types = mercCcTypes(t.n);
+      return threats.find((m) => m !== tgt && m.st !== 'dead' && m.rank < 3 && !(m.auras || []).some((a) => a.au === 12 && a.until > G.gameTime) && (!types || !m.info || types.includes(m.info[5]))) || null;
+    }
+    case 'ally.hurt>': { const f = mercFolk(c).filter((x) => mercHurt(c, x).pct < 0.7); return f.length >= p ? f : null; }
+    case 'ally.mp<': { const f = mercFolk(c).filter((x) => (x.merc ? x.merc.pt === 0 && x.merc.maxmana && x.merc.mana / x.merc.maxmana * 100 < p : usesMana(x.c) && x.c.mana / Math.max(1, charStats(x.c).maxMana) * 100 < p)); f.sort((a, b) => (b.role === 'healer') - (a.role === 'healer')); return f[0] || null; }
+    case 'ally.disp': { const types = t.v || []; const now = G.gameTime; return mercFolk(c).find((x) => (x.merc ? x.merc.buffs || [] : rt(x.c).buffs || []).some((b) => b.kind === 'debuff' && b.until > now && types.includes(b.disp))) || null; }
+    default: return null;
+  }
+}
+function mercTacDo(c, u, t, sp, who, threats, tgt) {
+  const now = G.gameTime; const L = mercLevel(c);
+  const hit = (m, v) => { v = Math.max(1, Math.round(v)); m.hp -= v; onMobDamaged(m, v); gThreat(m, u, v); meterGroup(c, u, 'dmg', v, t.n); fx(m.x, m.y, '' + v, '#ffd27a'); if (m.st === 'alive') engage(m, c); if (m.hp <= 0) killMob(c, m); };
+  switch (t.k) {
+    case 'heal': { const v = Math.round(u.maxhp * t.v); u.hp = Math.min(u.maxhp, u.hp + v); fx(u.x, u.y, '+' + v, '#5ee07a'); meterGroup(c, u, 'heal', v, t.n); return true; }
+    case 'dr': u.drUntil = now + t.v[1]; u.drMul = t.v[0]; return true;
+    case 'immune': u.immuneUntil = now + t.v; for (const m of threats) if (m.gThr) m.gThr[u.id] = 0; return true;
+    case 'shield': u.absorb = { v: Math.round(u.maxhp * t.v), until: now + 30 }; return true;
+    case 'drop': for (const m of threats) if (m.gThr) m.gThr[u.id] = 0; return true;
+    case 'taunt': { let top = 0; for (const m of threats) top = Math.max(top, m.charThreat || 0, m.petThreat || 0, ...Object.values(m.gThr || {})); for (const m of threats) { m.gThr = m.gThr || {}; m.gThr[u.id] = top * 1.3 + 50; } return true; }
+    case 'cd': mercGiveBuff(c, null, { merc: u }, t.n, sp, t.v[1]); return true;
+    case 'exec': if (!tgt || tgt.st === 'dead') return false; hit(tgt, u.dps * t.v * rnd(0.9, 1.1)); return true;
+    case 'aoe': { const ms = threats.filter((m) => m.st !== 'dead' && Math.hypot(m.x - who.x, m.y - who.y) <= 10); if (!ms.length) return false; for (const m of ms) hit(m, u.dps * t.v * rnd(0.85, 1.15)); return true; }
+    case 'cc': case 'fear': case 'root': {
+      const ms = t.k === 'cc' ? [who] : threats.filter((m) => m.st !== 'dead' && m.rank < 3 && Math.hypot(m.x - u.x, m.y - u.y) <= 10);
+      if (!ms.length) return false;
+      for (const m of ms) { addMobAura(c, m, { n: t.n, dur: (t.k === 'cc' ? t.v : t.v) * 1000 }, { au: 12, lo: 0 }); fx(m.x, m.y, t.n, '#c8a2ff'); }
+      if (t.k === 'cc') log(u.name + ': ' + t.n + ' on ' + (who.info ? who.info[1] : 'a creature') + '.');
+      return true;
+    }
+    case 'gheal': { const v = Math.round(mercHealAmount(u, sp, L) * t.v); for (const x of who) mercHealLand(c, u, x, v * rnd(0.9, 1.1), t.n); return true; }
+    case 'disp': {
+      const types = t.v || []; const list = who.merc ? who.merc.buffs || [] : rt(who.c).buffs || [];
+      const b = list.find((x) => x.kind === 'debuff' && x.until > now && types.includes(x.disp)); if (!b) return false;
+      b.until = 0; if (who.merc) { if (who.merc.stunUntil > now) who.merc.stunUntil = 0; } else { const rr = rt(who.c); if (rr.cc && rr.cc.until > now) rr.cc = null; dirty(who.c); }
+      fx(who.x, who.y, t.n, '#9fe0ff'); return true;
+    }
+    case 'mana': if (u.pt !== 0 || !u.maxmana) return false; if (t.n === 'Life Tap') { if (u.hp < u.maxhp * 0.5) return false; u.hp -= Math.round(u.maxhp * 0.1); } u.mana = Math.min(u.maxmana, u.mana + u.maxmana * t.v); return true;
+    case 'innervate': { if (who.merc) { const o = who.merc; if (!o.maxmana) return false; o.mana = Math.min(o.maxmana, o.mana + o.maxmana * t.v); } else { const s = charStats(who.c); who.c.mana = Math.min(s.maxMana, who.c.mana + s.maxMana * t.v); } fx(who.x, who.y, 'Innervate', '#7fa8ff'); return true; }
+    default: return false;
+  }
 }

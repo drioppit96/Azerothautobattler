@@ -8,7 +8,7 @@ const SLOT_LABEL = { 0: 'Head', 1: 'Neck', 2: 'Shoulder', 3: 'Shirt', 4: 'Chest'
 const SH = { tab: 'char', open: false, sel: null };
 /* the five windows (like the C window of the game) and their tabs */
 const SH_GROUPS = [
-  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['rep', 'Reputation'], ['pet', 'Pet']] },
+  { k: 'char', n: 'Character', key: 'C', tabs: [['char', 'Character'], ['talents', 'Talents'], ['beh', 'Abilities & behaviour'], ['tac', 'Tactics'], ['rep', 'Reputation'], ['pet', 'Pet']] },
   { k: 'bag', n: 'Bags', key: 'B', tabs: [['bags', 'Bags'], ['bank', 'Bank'], ['gbank', 'Guild bank']] },
   { k: 'trade', n: 'Trade', key: 'T', tabs: [['vendor', 'Vendor'], ['ah', 'Auction house'], ['trade', 'Trade']] },
   { k: 'prof', n: 'Professions', key: 'P', tabs: [['prof', 'Professions'], ['gcraft', 'Guild crafters']] },
@@ -136,7 +136,7 @@ function renderSheet() {
   const nav = $('sheetTabs'); if (nav._h !== tabs) { nav.innerHTML = tabs; nav._h = tabs; }
   const gt = $('sheetGroup'); if (gt) gt.textContent = grp.n;
   $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
-  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep');
+  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep' || SH.tab === 'tac');
   $('sheet').dataset.group = grp.k;
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') {
@@ -147,6 +147,7 @@ function renderSheet() {
   }
   if (SH.tab === 'gcraft') { $('sheetLeft').innerHTML = gcraftHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'rep') { $('sheetLeft').innerHTML = repTabHtml(c); $('sheetBags').innerHTML = ''; return; }
+  if (SH.tab === 'tac') { $('sheetLeft').innerHTML = tacHtml(c); $('sheetBags').innerHTML = ''; return; }
   const vs = SH.tab === 'vendor' && document.activeElement && document.activeElement.id === 'vsQ' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + (typeof shopHtml === 'function' ? shopHtml(c) : '') + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
     SH.tab === 'guild' ? guildHtml(c, 'info') : SH.tab === 'glog' ? guildHtml(c, 'log') : SH.tab === 'gbank' ? guildHtml(c, 'bank') : SH.tab === 'bags' ? bagSummaryHtml(c) : SH.tab === 'pet' ? petTabHtml(c) : SH.tab === 'rep' ? repTabHtml(c) :
@@ -259,6 +260,7 @@ function bindSheet() {
     if (SH.tab === 'bags' && bagSummaryClick(e)) return;
     if (SH.tab === 'pet' && petTabClick(e)) return;
     if (SH.tab === 'rep' && repTabClick(e)) return;
+    if (SH.tab === 'tac' && tacClick(e)) return;
     if (e.target.closest('[data-bsort]')) { sortBags(c); return; }
     if (behaviourClick(e)) return;
     if (typeof consumablesClick === 'function' && consumablesClick(e)) return;
@@ -273,7 +275,7 @@ function bindSheet() {
     if (el) { const ref = instFromEl(el); if (ref && ref.inst) { SH.sel = ref.where === 'bag' ? 'b' + ref.idx : null; showItemMenu(e, ref); } return; }
     hideItemMenu();
   });
-  sh.addEventListener('change', (e) => { if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (SH.tab === 'bags' && typeof hearthChange === 'function' && hearthChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
+  sh.addEventListener('change', (e) => { if (SH.tab === 'tac' && tacChange(e)) return; if (SH.tab === 'pet' && petTabChange(e)) return; if (SH.tab === 'ah' && ahChange(e)) return; if (SH.tab === 'trade' && tradeChange(e)) return; if ((SH.tab === 'guild' || SH.tab === 'gbank') && guildChange(e)) return; if (SH.tab === 'gcraft' && typeof gcraftChange === 'function' && gcraftChange(e)) return; if (SH.tab === 'vendor' && typeof shopChange === 'function' && shopChange(e)) return; if (SH.tab === 'bags' && typeof hearthChange === 'function' && hearthChange(e)) return; if (!talentChange(e) && !professionsChange(e)) behaviourChange(e); });
   sh.addEventListener('keydown', (e) => { if (SH.tab === 'ah') ahKey(e); });
   sh.addEventListener('input', (e) => { if (SH.tab === 'prof') professionsInput(e); if (SH.tab === 'vendor' && typeof shopInput === 'function') shopInput(e); if (SH.tab === 'gcraft' && typeof gcraftInput === 'function') gcraftInput(e); });
   sh.addEventListener('dblclick', (e) => {

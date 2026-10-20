@@ -428,6 +428,7 @@ function queuedCost(c, sp, name) { return c.cls === 1 ? [1, abilityCost(c, sp, n
 function useAbilities(c, tgt) {
   const r = rt(c); if (!c.cfg || !c.cfg.rules) return;
   if (r.cast) return;
+  if (typeof tacActive === 'function' && tacActive(c)) { tacFight(c, tgt); return; }          // the tactics (tactics.js)
   if (masteryHesitating(c)) return;            // a moment of hesitation (less with more skill)
   let fumbled = false;
   const dist_ = tgt ? Math.hypot(tgt.x - c.pos.x, tgt.y - c.pos.y) : 0;

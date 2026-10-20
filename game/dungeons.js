@@ -291,6 +291,8 @@ function mobVictimKey(m, c) {
 }
 function gThreat(m, u, v) { m.gThr = m.gThr || {}; m.gThr[u.id] = (m.gThr[u.id] || 0) + v * (u.thr || (u.role === 'tank' ? 3 : u.role === 'healer' ? 0.5 : 0.7)); }
 function compTakeHit(c, u, m, d) {
+  if ((u.immuneUntil || 0) > G.gameTime) { fx(u.x, u.y, 'immune', '#cfc6b0'); return; }          // Ice Block, Divine Shield (mercs.js tactics)
+  if ((u.drUntil || 0) > G.gameTime) d *= u.drMul || 1;                                       // Shield Wall, Evasion, Barkskin
   d = Math.max(1, Math.round(d * (1 - u.armorRed)));
   if (Math.random() < (u.role === 'tank' ? 0.25 : 0.08)) { fx(u.x, u.y, u.role === 'tank' ? 'parry' : 'dodge', '#cfc6b0'); return; }
   mercOnHit(u);
