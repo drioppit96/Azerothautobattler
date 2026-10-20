@@ -657,10 +657,9 @@ function rangedStep(c, m, dt, d) {
   const s = charStats(c); let v = rnd(w.min, w.max);
   let ammo = null;
   if (!w.wand) {
-    const k = ammoKind(c); ammo = c.bags.find((x) => { const it = itemRow(x.id); return it && it.c === 6 && it.s === k; });
-    if (!ammo) { if (!r.noAmmoLog) { r.noAmmoLog = true; log('Out of ' + (k === 3 ? 'bullets' : 'arrows') + '!'); } return false; }
-    r.noAmmoLog = false; v += (itemRow(ammo.id).dps || 0) * w.speed;
-    if (--ammo.n <= 0) c.bags.splice(c.bags.indexOf(ammo), 1);
+    const k = ammoKind(c); ammo = ammoEquipped(c);          // worn in the ammo slot, never used up
+    if (!ammo) { if (!r.noAmmoLog) { r.noAmmoLog = true; log('No ' + (k === 3 ? 'bullets' : 'arrows') + ' in the ammo slot!'); } return false; }
+    r.noAmmoLog = false; v += (ammo.dps || 0) * w.speed;
     const mark = (m.auras || []).find((a) => a.key === "Hunter's Mark" && a.au === 127 && a.until > G.gameTime);
     v += (s.rap + (mark ? mark.val : 0)) / 14 * w.speed;
     if (Math.random() * 100 < 5 + Math.max(0, m.lvl - c.level) - s.hit) { fx(m.x, m.y, 'miss', '#cfc6b0'); return true; }

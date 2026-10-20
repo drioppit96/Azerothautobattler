@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 k (phone changes only in the Android app)';
+const GAME_VERSION = '2026-10-21 l (ammo is worn, never used up)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -260,6 +260,7 @@ function migrate(c) {
   c.bagSlots = c.bagSlots || [null, null, null, null];
   if (c._gear) { for (const k in c._gear.equip) c.equip[k] = makeInst(c._gear.equip[k], 1); for (const [id, n] of c._gear.bags) addItem(c, id, n); delete c._gear; }
   for (const k in c.equip) c.equip[k] = normInst(c.equip[k]);
+  if (typeof ammoMigrate === 'function') ammoMigrate(c);          // ammo stacks from before: one each, the best one worn
   for (const s of c.bags) { const m = maxDur(s.id); if (m && s.dur == null) s.dur = m; }
   c.cfg = Object.assign(defaultCfg(), c.cfg || {}); c.talents = c.talents || {}; c.taxi = c.taxi || {};
   if (!TALENT_BUILDS[c.cls] || !TALENT_BUILDS[c.cls][c.cfg.talentBuild]) c.cfg.talentBuild = Object.keys(TALENT_BUILDS[c.cls] || { none: 1 })[0];
@@ -992,7 +993,8 @@ async function boot() {
     const names = ['races', 'hostility', 'spawns', 'xp', 'taxi', 'navgraph', 'items', 'spells', 'quests', 'vendors', 'loot'];
     const res = await Promise.all(names.map((n) => J('../gamedata/' + n + '.json')));
     names.forEach((n, i) => { G.d[n] = res[i]; });
-    if (typeof lightningStrikeInit === 'function') lightningStrikeInit();          // Lightning Strike: ranks made from Lightning Bolt (classes.js)
+    if (typeof lightningStrikeInit === 'function') lightningStrikeInit();
+    if (typeof ammoInit === 'function') ammoInit();          // arrows and bullets: worn in the ammo slot (items.js)          // Lightning Strike: ranks made from Lightning Bolt (classes.js)
     try { G.d.cstats = await J('../gamedata/creature_stats.json'); } catch (e) { G.d.cstats = null; console.warn('creature_stats.json not found - using estimated creature health and damage'); }
     try { G.d.vendorItems = await J('../gamedata/vendor_items.json'); } catch (e) { G.d.vendorItems = null; }
     try { G.d.objects = await J('../gamedata/objects.json'); } catch (e) { G.d.objects = null; }

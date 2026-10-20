@@ -66,6 +66,7 @@ function bigTradeGood(id, r) {
 }
 function itemStack(id) {
   const r = itemRow(id);
+  if (isAmmo(r)) return 1;          // arrows and bullets: one, worn in the ammo slot, never used up
   if (r && r.n) {
     if (bigTradeGood(id, r)) return 200;
     if (r.c === 0 && /Potion|Elixir/.test(r.n)) return Math.max(20, r.sk || 1);
@@ -327,6 +328,7 @@ function equipDelta(c, inst) {
 }
 function upgradeFor(c, inst) {
   const it = itemRow(inst.id); if (!it || !it.sl || !it.sl.length || canEquip(c, inst.id)) return false;
+  if (isAmmo(it)) { const k = ammoKind(c); const cur = ammoEquipped(c); return !!k && it.s === k && (it.dps || 0) > (cur ? cur.dps || 0 : -1); }
   if (it.sl.includes(17) && !(c.cls === 3 && it.s !== 19 && it.s !== 16) && !(it.s === 19 && (c.cls === 5 || c.cls === 8 || c.cls === 9))) return false;   // ranged slot: hunters shoot, priests / mages / warlocks use wands
   const d = equipDelta(c, inst); return d > 0.5 + Math.abs(itemScore(c, inst)) * 0.02;
 }
@@ -356,12 +358,13 @@ function pickSlot(c, it) {
   let best = sl[0], bv = Infinity; for (const x of sl) { const v = itemScore(c, c.equip[x]); if (v < bv) { bv = v; best = x; } } return best;
 }
 function equipFromBag(c, idx, forceSlot) {
-  const inst = c.bags[idx]; if (!inst) return;
+  let inst = c.bags[idx]; if (!inst) return;
   const it = itemRow(inst.id);
   if (it && it.c === 1 && it.cs) return equipBag(c, idx);
   const why = canEquip(c, inst.id); if (why) { log('Cannot equip ' + itemName(inst.id, inst) + ': ' + why + '.'); return; }
   if (rt(c).threats && rt(c).threats.length && it.c === 4) { log('Cannot change armor while fighting.'); return; }
   const slot = forceSlot != null ? forceSlot : pickSlot(c, it);
+  if (isAmmo(it) && inst.n > 1) { inst.n--; const one = makeInst(inst.id, 1, true); c.bags.splice(idx + 1, 0, one); idx = idx + 1; inst = one; }      // an old stack: one of it
   const back = [];
   if (c.equip[slot]) back.push(c.equip[slot]);
   if (slot === 15 && it.t === 17 && c.equip[16]) back.push(c.equip[16]);
@@ -563,17 +566,35 @@ function autoSellNearVendor(c) {
 }
 /* buy the biggest bag this vendor sells into an empty bag slot, keeping some money (player-like) */
 /* keep some food: buy a stack of the best food this vendor sells when less than 10 are left */
-/* hunters: arrows or bullets for the equipped bow / gun (a quiver's worth) */
+/* ---------------------------------------------------------------- ammo: worn like a trinket
+   Arrows and bullets are one item put in the ammo slot (19); they are never used up. The bow / crossbow takes
+   arrows, the gun bullets; the better one adds its damage to every shot. */
+const AMMO_SLOT = 19;
+function isAmmo(r) { return !!(r && r.c === 6 && (r.s === 2 || r.s === 3)); }
+function ammoInit() { const I = G.d.items.items; for (const id in I) if (isAmmo(I[id])) I[id].sl = [AMMO_SLOT]; }
+/* the ammo worn that fits the ranged weapon (its item row), or null */
+function ammoEquipped(c) { const k = ammoKind(c); const a = c.equip[AMMO_SLOT]; const it = a && itemRow(a.id); return k && it && it.s === k ? it : null; }
+/* every ammo stack from before: one of each kind left; the best fitting one goes in the slot */
+function ammoMigrate(c) {
+  const fix = (arr) => { if (!arr) return arr; const seen = new Set(); return arr.filter((x) => { const it = x && itemRow(x.id); if (!isAmmo(it)) return true; x.n = 1; if (seen.has(x.id)) return false; seen.add(x.id); return true; }); };
+  c.bags = fix(c.bags); if (c.bank && c.bank.items) c.bank.items = fix(c.bank.items);
+  if (c.equip[AMMO_SLOT]) c.equip[AMMO_SLOT].n = 1;
+  const k = ammoKind(c); if (!k) return;
+  let bi = -1, bv = c.equip[AMMO_SLOT] && itemRow(c.equip[AMMO_SLOT].id) && itemRow(c.equip[AMMO_SLOT].id).s === k ? itemRow(c.equip[AMMO_SLOT].id).dps || 0 : -1;
+  c.bags.forEach((x, i) => { const it = itemRow(x.id); if (isAmmo(it) && it.s === k && (it.rl || 0) <= c.level && (it.dps || 0) > bv) { bv = it.dps || 0; bi = i; } });
+  if (bi >= 0) { const inst = c.bags.splice(bi, 1)[0]; const old = c.equip[AMMO_SLOT]; if (old) c.bags.push(old); c.equip[AMMO_SLOT] = inst; }
+}
 function ammoKind(c) { const w = c.equip[17] && itemRow(c.equip[17].id); return w ? (w.s === 3 ? 3 : w.s === 2 || w.s === 18 ? 2 : 0) : 0; }
-function ammoCount(c) { const k = ammoKind(c); let n = 0; for (const x of c.bags) { const it = itemRow(x.id); if (it && it.c === 6 && it.s === k) n += x.n; } return n; }
+function ammoCount(c) { return ammoEquipped(c) ? 1 : 0; }          // 1: ammo for the ranged weapon is worn
 function autoBuyAmmo(c, v) {
-  const k = ammoKind(c); if (!k || ammoCount(c) >= 400) return;
+  const k = ammoKind(c); if (!k) return; const cur = ammoEquipped(c); const have = cur ? cur.dps || 0 : -1;
+  // already in the bags: put the best one on
+  const own = c.bags.map((x, i) => [x, i]).filter(([x]) => { const it = itemRow(x.id); return isAmmo(it) && it.s === k && (it.rl || 0) <= c.level && (it.dps || 0) > have; }).sort((a, b) => (itemRow(b[0].id).dps || 0) - (itemRow(a[0].id).dps || 0))[0];
+  if (own) { equipFromBag(c, own[1], AMMO_SLOT); return; }
   let best = null;
-  for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!it || it.c !== 6 || it.s !== k || (it.rl || 0) > c.level || !repItemOk(c, x.id)) continue; const val = it.dps || it.rl || 1; if (!best || val > best.val) best = { id: x.id, val, price: vendorPrice(c, x.id, v.e) }; }
-  if (!best) return;
-  const per = itemStack(best.id); const stacks = Math.min(3, Math.floor(c.gold * 0.2 / Math.max(1, best.price)));
-  if (stacks < 1 || bagFree(c) < stacks) return;
-  if (addItem(c, best.id, per * stacks)) { c.gold -= stacks * best.price; log('Bought ' + per * stacks + ' x ' + itemName(best.id) + '.'); }
+  for (const x of vendorItems(v.e)) { const it = itemRow(x.id); if (!isAmmo(it) || it.s !== k || (it.rl || 0) > c.level || !repItemOk(c, x.id)) continue; const val = it.dps || 0; if (val > have && (!best || val > best.val)) best = { id: x.id, val, price: vendorPrice(c, x.id, v.e) }; }
+  if (!best || c.gold * 0.5 < best.price || bagFree(c) < 1) return;
+  if (addItem(c, best.id, 1)) { c.gold -= best.price; log('Bought ' + itemName(best.id) + ' for ' + money(best.price) + '.'); const i = c.bags.findIndex((x) => x.id === best.id); if (i >= 0) equipFromBag(c, i, AMMO_SLOT); }
 }
 function autoBuyFood(c, v, kind) {
   if (!v || G.state.settings.autoBuyFood === false) return;

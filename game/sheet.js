@@ -3,8 +3,8 @@
 
 const DOLL_LEFT = [0, 1, 2, 14, 4, 3, 18, 8];
 const DOLL_RIGHT = [9, 5, 6, 7, 10, 11, 12, 13];
-const DOLL_BOTTOM = [15, 16, 17];
-const SLOT_LABEL = { 0: 'Head', 1: 'Neck', 2: 'Shoulder', 3: 'Shirt', 4: 'Chest', 5: 'Waist', 6: 'Legs', 7: 'Feet', 8: 'Wrist', 9: 'Hands', 10: 'Finger', 11: 'Finger', 12: 'Trinket', 13: 'Trinket', 14: 'Back', 15: 'Main Hand', 16: 'Off Hand', 17: 'Ranged', 18: 'Tabard' };
+const DOLL_BOTTOM = [15, 16, 17, 19];
+const SLOT_LABEL = { 0: 'Head', 1: 'Neck', 2: 'Shoulder', 3: 'Shirt', 4: 'Chest', 5: 'Waist', 6: 'Legs', 7: 'Feet', 8: 'Wrist', 9: 'Hands', 10: 'Finger', 11: 'Finger', 12: 'Trinket', 13: 'Trinket', 14: 'Back', 15: 'Main Hand', 16: 'Off Hand', 17: 'Ranged', 18: 'Tabard', 19: 'Ammo' };
 const SH = { tab: 'char', open: false, sel: null };
 /* the five windows (like the C window of the game) and their tabs */
 const SH_GROUPS = [
@@ -120,7 +120,7 @@ function bagSummaryHtml(c) {
   let h = '<div class="bagsum"><div class="sgroup"><h5>Bags</h5>' + statRow('Slots used', c.bags.length + ' / ' + bagCapacity(c) + (bagFree(c) <= 0 ? ' <span class="bad">full</span>' : '')) + statRow('Money', moneyHtml(c.gold)) +
     statRow('Junk', jk ? jk + ' item' + (jk > 1 ? 's' : '') + ' - ' + money(jv) : 'none') + statRow('Upgrades', ups ? '<span style="color:#1eff00">' + ups + '</span>' : 'none') +
     statRow('Food / drink / potions', kinds.food + ' / ' + kinds.drink + ' / ' + kinds.potion) +
-    (c.cls === 3 && typeof ammoCount === 'function' ? statRow('Arrows / bullets', ammoCount(c)) : '') + (c.cls === 9 ? statRow('Soul Shards', bagCount(c, 6265)) : '') + '</div>';
+    (c.cls === 3 && typeof ammoEquipped === 'function' ? statRow('Ammo', ammoEquipped(c) ? esc(ammoEquipped(c).n) + ' (+' + (ammoEquipped(c).dps || 0) + ' dps)' : '<span class="down">none</span>') : '') + (c.cls === 9 ? statRow('Soul Shards', bagCount(c, 6265)) : '') + '</div>';
   h += '<div class="sgroup"><h5>Gear</h5>' + statRow('Durability', Math.round(durabilityPct(c) * 100) + '%') + statRow('Repair cost', rc ? money(rc) : 'nothing to repair') + '</div>';
   h += '<div class="vbtns"><button class="mini" data-bs="sort">Sort the bags</button>' + (ups ? ' <button class="mini" data-bs="equip">Put on the upgrades</button>' : '') +
     (v ? ' <button class="mini" data-bs="junk"' + (jk ? '' : ' disabled') + '>Sell junk</button>' + (v.repair && rc ? ' <button class="mini" data-bs="repair">Repair (' + money(rc) + ')</button>' : '') : ' <button class="mini" data-bs="vendor">Go to a vendor</button>') + '</div>';
