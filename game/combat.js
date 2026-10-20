@@ -372,23 +372,20 @@ function nearestGraveyard(c) {
 }
 function charDie(c, killer) {
   const r = rt(c); if (r.ghost) return;              // already dead
-  // in a dungeon with your own group: one who dies lies where it fell; when the fight is over a groupmate brings it
-  // back (like a healer's resurrection). Only when the last one falls is it a wipe: everyone back from the graveyard.
+  // dying in a dungeon: no ghost run. With your own group the fallen one lies where it fell and a groupmate brings it
+  // back after the fight; when everyone is down (a wipe, or alone) they all stand up again at the entrance inside the
+  // dungeon 20 seconds after the fight is over (inPlaceDeadStep)
   const grp = typeof groupOf === 'function' ? groupOf(c) : null;
-  if (grp && !G.dgWipe && typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) {
-    const alive = groupChars(grp).filter((o) => o !== c && o.pos.map === c.pos.map && !rt(o).ghost && o.hp > 0);
-    if (alive.length) {
-      log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + ' - lies there until the fight is over.');
-      fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30'); masteryDeath(c); durabilityLoss(c, 0.1);
-      const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) { const n = m.cThr && typeof mobRetarget === 'function' ? mobRetarget(m, W) : null; if (n) m.tgt = n; else evade(W, m); }
-      c.hp = 0; r.ghost = { inPlace: true, t: G.gameTime, corpse: { map: c.pos.map, x: c.pos.x, y: c.pos.y } };
-      r.cast = null; r.drinking = null; r.eating = null; r.absorb = null; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; r.mv = null; r.resting = false; c.form = null; c.energy = 0; c.rage = 0;
-      if (c.pet && c.pet.kind !== 'hunter') c.pet = null;
-      save(); renderOrder(); return;
-    }
-    // the last one: the ones lying in there go back with it
-    const lying = groupChars(grp).filter((o) => o !== c && rt(o).ghost && rt(o).ghost.inPlace);
-    if (lying.length) { log('The group wiped.'); G.dgWipe = true; try { for (const o of lying) { rt(o).ghost = null; o.hp = 0; withLog(o, () => charDie(o, null)); } } finally { G.dgWipe = false; } }
+  if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && dungeonByMap(c.pos.map)) {
+    const alive = grp ? groupChars(grp).filter((o) => o !== c && o.pos.map === c.pos.map && !rt(o).ghost && o.hp > 0) : [];
+    log(c.name + ' was killed by ' + (killer && killer.info ? killer.info[1] : 'a creature') + (alive.length ? ' - lies there until the fight is over.' : '.'));
+    fx(c.pos.x, c.pos.y, 'DEAD', '#ff3b30'); masteryDeath(c); durabilityLoss(c, 0.1);
+    const W = ensureWorld(c.pos.map); for (const m of W.active) if (m.tgt === c) { const n = m.cThr && typeof mobRetarget === 'function' ? mobRetarget(m, W) : null; if (n) m.tgt = n; else evade(W, m); }
+    c.hp = 0; r.ghost = { inPlace: true, t: G.gameTime, corpse: { map: c.pos.map, x: c.pos.x, y: c.pos.y } };
+    r.cast = null; r.drinking = null; r.eating = null; r.absorb = null; r.tgt = null; r.interact = null; r.charging = null; r.queued = null; r.threats = []; r.mv = null; r.resting = false; c.form = null; c.energy = 0; c.rage = 0;
+    if (c.pet && c.pet.kind !== 'hunter') c.pet = null;
+    if (!alive.length) dungeonWipe(c);
+    save(); renderOrder(); return;
   }
   const dgDeath = typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && dungeonDeath(c);     // inside: the body is back at the entrance
   const corpse = { map: c.pos.map, x: c.pos.x, y: c.pos.y };
@@ -474,15 +471,44 @@ function ghostStep(c, dt) {
     revive(c);
   }
 }
-/* dead on the spot in a dungeon (charDie): back on its feet a few seconds after the group's fight is over */
+/* a wipe in a dungeon: the creatures go back, everyone who is down there gets up at the entrance inside 20 seconds
+   after the fight; the run counts the wipe (4 wipes: it gives up and leaves) */
+function dungeonWipe(c) {
+  const d = dungeonByMap(c.pos.map); if (!d) return; const grp = typeof groupOf === 'function' ? groupOf(c) : null;
+  const L = grp ? groupLeader(grp) || c : c;
+  const W = G.world[d.map]; if (W) for (const m of W.active) evade(W, m);
+  masteryWipe(L, d);
+  const o = L.order; if (o && o.type === 'dungeon') { o.deaths = (o.deaths || 0) + 1; if (o.deaths >= 4) o.giveUp = true; }
+  for (const f of grp ? groupChars(grp) : [c]) { const fr = rt(f); if (f.pos.map === d.map && fr.ghost && fr.ghost.inPlace) { fr.ghost.wipe = true; fr.ghost.calm = 0; } }
+  log('Wipe! Everyone gets up at the entrance of ' + d.name + ' 20 seconds after the fight.');
+}
+/* dead on the spot in a dungeon (charDie): a groupmate brings it back a few seconds after the fight; after a wipe
+   everyone stands up at the entrance inside, 20 seconds after the fight */
 function inPlaceDeadStep(c, gh, dt) {
-  const r = rt(c); const g = typeof groupOf === 'function' ? groupOf(c) : null;
-  const near = g ? groupChars(g).filter((o) => o !== c && o.pos.map === c.pos.map && !rt(o).ghost && o.hp > 0) : [];
-  if (!near.length) { r.ghost = null; c.hp = 0; G.dgWipe = true; try { charDie(c, null); } finally { G.dgWipe = false; } return; }            // nobody left to help: back from the graveyard
-  if (near.some((o) => (rt(o).threats || []).length)) { gh.calm = 0; return; }
-  gh.calm = (gh.calm || 0) + dt; if (gh.calm < 4) return;
+  const r = rt(c); const g = typeof groupOf === 'function' ? groupOf(c) : null; const d = dungeonByMap(c.pos.map);
+  const group = g ? groupChars(g).filter((o) => o.pos.map === c.pos.map) : [c];
+  const near = group.filter((o) => o !== c && !rt(o).ghost && o.hp > 0);
+  if (!near.length && !gh.wipe) { gh.wipe = true; gh.calm = 0; }                     // nobody left standing: as a wipe
+  const W = G.world[c.pos.map]; const ids = new Set(group.map((o) => o.id));
+  const fight = W && [...W.active].some((m) => m.st === 'chase' && m.tgt && (m.tgt === c || ids.has(m.tgt.id)));
+  if (fight || near.some((o) => (rt(o).threats || []).length)) { gh.calm = 0; return; }
+  gh.calm = (gh.calm || 0) + dt;
+  const s = charStats(c);
+  if (gh.wipe) {
+    if (gh.calm < 20 || !d) return;
+    const L = g ? groupLeader(g) || c : c; const e = d.enter[(L.order && L.order.type === 'dungeon' && L.order.wing) || 0] || d.enter[0];
+    r.ghost = null; c.hp = Math.round(s.maxHp * 0.5); if (usesMana(c) && s.maxMana) c.mana = Math.max(c.mana || 0, Math.round(s.maxMana * 0.5));
+    c.pos = { map: d.map, x: e.x + (Math.random() - 0.5) * 4, y: e.y + (Math.random() - 0.5) * 4, z: e.z, o: c.pos.o }; r.trail = null; r.mv = null; r.resting = true;
+    if (r.party) for (const u of r.party) { u.dead = false; u.hp = u.maxhp; u.x = c.pos.x; u.y = c.pos.y; if (u.maxmana) u.mana = u.maxmana; }
+    if (c.pet && c.pet.dead) c.pet.dead = false;
+    fx(c.pos.x, c.pos.y, 'Back', '#9fe0ff'); log(c.name + ' is back on its feet at the entrance of ' + d.name + '.');
+    const o = c.order; if (o && o.type === 'dungeon') { o.target = null; o.since = G.gameTime; o.lastPos = null; if (o.giveUp) { o.giveUp = false; withLog(c, () => leaveDungeon(c, 'The group wiped ' + o.deaths + ' times - giving up on ' + d.name + '.')); } }
+    if (isActive(c) && $('follow').checked) goToCharacter();
+    save(); renderOrder(); return;
+  }
+  if (gh.calm < 4) return;
   const h = near.find((o) => typeof grpRole === 'function' && grpRole(o) === 'healer') || near[0];
-  const s = charStats(c); r.ghost = null; c.hp = Math.round(s.maxHp * 0.4); if (usesMana(c) && s.maxMana) c.mana = Math.max(c.mana || 0, Math.round(s.maxMana * 0.4));
+  r.ghost = null; c.hp = Math.round(s.maxHp * 0.4); if (usesMana(c) && s.maxMana) c.mana = Math.max(c.mana || 0, Math.round(s.maxMana * 0.4));
   r.resting = true; fx(c.pos.x, c.pos.y, 'Resurrected', '#9fe0ff'); log(h.name + ' brings ' + c.name + ' back to life.');
   save(); renderOrder();
 }
