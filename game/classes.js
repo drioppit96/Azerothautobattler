@@ -392,7 +392,7 @@ function finishSpell(c, name, sp, tgt) {
   if (sp.lstrike) lightningStrikeSwing(c, mob);
 }
 /* Lightning Strike - an ability of this game for Enhancement shamans: a Lightning Bolt in melee. Every rank is the
-   rank of Lightning Bolt with half its mana cost and half its damage (and spell power), the same cast time; it is the
+   rank of Lightning Bolt with half its mana cost and its full damage (and spell power), the same cast time; it is the
    same kind of spell (spell family and mask of Lightning Bolt), so every talent for Lightning Bolt and for nature damage
    works on it too (Concussion, Convection, Call of Thunder, Lightning Mastery, Elemental Fury ...). When it lands the
    shaman also swings its weapon - both weapons when dual wielding - and these swings can trigger the weapon imbues. */
@@ -405,8 +405,6 @@ function lightningStrikeInit() {
     ls.n = 'Lightning Strike'; ls.lv = Math.max(LSTRIKE_LEVEL, sp.lv || 1); ls.rng = [0, 5]; ls.ic = 'spell_lightning_lightningbolt01'; ls.src = ['class']; ls.lstrike = true;
     if (ls.first) ls.first = LSTRIKE_BASE + ls.first;
     if (ls.pw) ls.pw[1] = Math.max(1, Math.round((ls.pw[1] || 0) / 2));
-    for (const e of ls.ef || []) if (e.t === 2) { e.lo /= 2; e.hi /= 2; if (e.ppl) e.ppl /= 2; if (e.coef != null) e.coef /= 2; if (e.die) e.die = Math.max(1, Math.round(e.die / 2)); }
-    if (ls.s) { if (ls.s.direct) ls.s.direct = ls.s.direct.map((v) => Math.round(v / 2)); if (ls.s.cd_direct) ls.s.cd_direct /= 2; }
     S[LSTRIKE_BASE + +id] = ls;
   }
   if (G.abilCache) delete G.abilCache[7];

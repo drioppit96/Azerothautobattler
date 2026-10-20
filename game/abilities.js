@@ -28,7 +28,7 @@ const CLASS_META = {
     'Battle Shout': { st: '', modes: ['off', 'buff'], def: { mode: 'buff' } },
     'Charge': { st: 'b', modes: ['off', 'opener'], def: { mode: 'opener' } },
     'Intercept': { st: 'z', modes: ['off', 'opener'], def: { mode: 'opener' } },
-    'Thunder Clap': { st: 'b', modes: ['off', 'multi', 'debuff', 'spam'], def: { mode: 'multi', p: 2 } },
+    'Thunder Clap': { st: 'bd', modes: ['off', 'multi', 'debuff', 'spam'], def: { mode: 'multi', p: 2 } },
     'Demoralizing Shout': { st: '', modes: ['off', 'multi', 'debuff', 'debuffAll'], def: { mode: 'multi', p: 2 } },
     'Whirlwind': { st: 'z', modes: ['off', 'spam', 'multi'], def: { mode: 'spam', p: 2 } },
     'Rend': { st: 'bd', modes: ['off', 'debuff', 'debuffAll'], def: { mode: 'debuff' } },
