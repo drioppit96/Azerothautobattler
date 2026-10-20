@@ -82,10 +82,30 @@ function updateFollow(c, o, dt) {
     r.mv = null; r.tgt = null; ensureWorld(c.pos.map); log('Caught up with ' + L.name + '.'); return;
   }
   if (g.questMode && memberQuestWork(c, L, o, dt)) return;
+  // in a dungeon: in a file behind the leader, on the very path it walked (no cutting through other packs)
+  if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map)) {
+    const k = g.members.filter((m) => m.id !== L.id).findIndex((m) => m.id === c.id); const p = trailPoint(L, 3 + 3 * Math.max(0, k));
+    o.where = 'following ' + L.name;
+    if (Math.hypot(p.x - c.pos.x, p.y - c.pos.y) > 1.5) { goTo(c, p.x, p.y, 1, p.z); if (r.blocked) { r.blocked = false; r.mv = null; } }
+    else c.pos.o = L.pos.o;
+    return;
+  }
   const s = formationSlot(g, L, c); const ds = Math.hypot(s.x - c.pos.x, s.y - c.pos.y);
   o.where = 'following ' + L.name;
   if (ds > 1.2) { goTo(c, s.x, s.y, 0.8); if (r.blocked) { r.blocked = false; r.mv = null; } }
   else { c.pos.o = L.pos.o; }
+}
+/* where the leader was dist yards of walking ago (its trail, kept while in a dungeon) */
+function trailPoint(L, dist) {
+  const t = rt(L).trail || []; let x = L.pos.x, y = L.pos.y, z = L.pos.z, left = dist;
+  for (let i = t.length - 1; i >= 0; i--) { const q = t[i]; const d = Math.hypot(q.x - x, q.y - y); if (d >= left) { const f = left / (d || 1); return { x: x + (q.x - x) * f, y: y + (q.y - y) * f, z: q.z }; } left -= d; x = q.x; y = q.y; z = q.z; }
+  return { x, y, z };
+}
+function trailStep(c) {
+  const r = rt(c); if (!(typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) { r.trail = null; return; }
+  const t = r.trail || (r.trail = []); const q = t[t.length - 1];
+  if (!q || q.map !== c.pos.map || Math.hypot(q.x - c.pos.x, q.y - c.pos.y) > 30) { r.trail = [{ x: c.pos.x, y: c.pos.y, z: c.pos.z, map: c.pos.map }]; return; }       // a jump (a teleporter, a wing)
+  if (Math.hypot(q.x - c.pos.x, q.y - c.pos.y) >= 1.5) { t.push({ x: c.pos.x, y: c.pos.y, z: c.pos.z, map: c.pos.map }); if (t.length > 60) t.shift(); }
 }
 function followText(c, o) { const g = groupOf(c); const L = g && groupLeader(g); return { t: 'In ' + (L ? L.name + "'s" : 'a') + ' group (' + ROLE_NAMES[grpRole(c) || 'dps'] + ')', d: o.where || 'following' }; }
 /* the leader waits for the group: someone dead, resting, or left behind */

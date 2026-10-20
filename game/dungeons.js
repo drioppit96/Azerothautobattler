@@ -368,6 +368,16 @@ function orderDungeon(c, d, group, resume) {
   const min = d.lmin - (d.kind === 'raid' ? 0 : 3);
   if (c.level < min) { log(d.name + ' needs level ' + min + '.'); return; }
   if (isDungeonMap(c.pos.map) && c.pos.map !== d.map) { log('Leave ' + dungeonByMap(c.pos.map).name + ' first.'); return; }
+  // with your own group: the tank leads the run (it walks in front and pulls), the others follow it
+  const grp = typeof groupOf === 'function' ? groupOf(c) : null;
+  if (grp && grp.leader === c.id) {
+    const tank = groupChars(grp).find((m) => m !== c && grpRole(m) === 'tank' && m.pos.map === c.pos.map);
+    if (tank && grpRole(c) !== 'tank') {
+      const back = resume !== undefined ? resume : (c.order && ['leveling', 'questing', 'quest'].includes(c.order.type) ? c.order : null);
+      groupPromote(tank); log(tank.name + ' (the tank) leads the group through ' + d.name + '.');
+      withLog(tank, () => orderDungeon(tank, d, group, back)); return;
+    }
+  }
   const o = { type: 'dungeon', map: d.map, label: d.name, group: !!group, phase: c.pos.map === d.map ? 'inside' : 'travel', started: G.gameTime, kills: 0, bossKills: 0, resume: resume !== undefined ? resume : (c.order && ['leveling', 'questing', 'quest'].includes(c.order.type) ? c.order : null) };
   if (o.phase === 'travel') {
     o.trip = d.entrance ? planTrip(c, { map: d.entrance.map, x: d.entrance.x, y: d.entrance.y }) : null;
@@ -393,7 +403,8 @@ function enterDungeon(c, d, o) {
   dungeonRunTier(c, d, o);
   if (c.pet && rt(c).pet) { rt(c).pet.x = c.pos.x + 2; rt(c).pet.y = c.pos.y + 1; }
   o.phase = 'inside'; o.entered = G.gameTime; o.lastProgress = G.gameTime;
-  log('Entered ' + d.name + (o.group ? ' with ' + (d.players - 1) + ' mercenaries' : '') + '.');
+  const nm = (partyOf(c) || []).length; const own = typeof groupOf === 'function' && groupOf(c) ? groupChars(groupOf(c)).length - 1 : 0;
+  log('Entered ' + d.name + (own ? ' with ' + own + ' of your characters' + (nm ? ' and ' + nm + ' mercenar' + (nm > 1 ? 'ies' : 'y') : '') : o.group && nm ? ' with ' + nm + ' mercenar' + (nm > 1 ? 'ies' : 'y') : '') + '.');
   if (isActive(c) && $('follow').checked) setMap(dungeonMapAt(c.pos), false, true);
   save();
 }
@@ -550,10 +561,12 @@ function routeNext(c, d, o) {
       if (dd <= bd + 0.5) { bd = dd; bi = i; bp = { x: px, y: py, z: pz, t, d2: Math.hypot(px - c.pos.x, py - c.pos.y) }; }
     }
     if (bi > o.gi) { o.gi = bi; }
-    if (bp && bp.d2 > 8 && bp.t < 0.9) {       // well off the line: straight back to it, a little ahead
-      const a = R[bi - 1], b = R[bi], s = Math.min(1, bp.t + 4 / Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)));
-      return { wp: true, gi: bi - 1, x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s, z: (a.z || 0) + ((b.z || 0) - (a.z || 0)) * s, st: 'alive', info: [0, 'the way on'] };
-    }
+    // after a fight off the line: on to the next waypoint ahead - not back to the line or to one it has passed
+  }
+  // waypoints behind (closer to the next one than this one is to it): skipped
+  for (let k = 0; k < 6 && o.gi < R.length - 1 && !R[o.gi + 1].cut; k++) {
+    const q = R[o.gi], n = R[o.gi + 1]; const dn = Math.hypot(n.x - c.pos.x, n.y - c.pos.y);
+    if (dn < Math.hypot(n.x - q.x, n.y - q.y) && dn < 60 && Math.abs((n.z || 0) - (c.pos.z || 0)) < 12) o.gi++; else break;
   }
   // on along the line
   while (o.gi < R.length) {
@@ -630,6 +643,7 @@ function updateDungeon(c, o, dt) {
   if (G.gameTime - o.entered > DG_TIME_LIMIT * (d.kind === 'raid' ? 1.5 : 1)) { orderLeaveDungeon(c, null, 'Spent too long in ' + d.name + ' - left.'); return; }
   // before each pull: everyone back on their feet
   const p = partyOf(c); const ready = masteryReady(c); if (p && (p.some((u) => u.dead || u.hp < u.maxhp * ready) || mercsResting(c))) { r.mv = null; o.since = G.gameTime; return; }
+  if (dgGroupRest(c)) { r.mv = null; o.since = G.gameTime; return; }
   if (!o.target || o.target.st === 'dead' || o.target.unreach) {
     if (o.target && o.target.st === 'dead') o.lastProgress = G.gameTime;
     o.target = dungeonNext(c, d, o);
@@ -661,9 +675,24 @@ function updateDungeon(c, o, dt) {
   }
   const st = approach(c, o.target); if (st === 'gone') { if (o.target.st === 'alive') o.target.banUntil = 0; o.target = null; }
 }
+/* your own group between pulls: whoever is low on health (or a mana user low on mana) sits down and rests to full; the
+   tank waits until they are up (the leader's groupHold sees them resting) */
+function dgGroupRest(c) {
+  if (typeof groupOf !== 'function' || !groupOf(c) || (rt(c).threats || []).length) return false; let any = false;
+  for (const m of groupChars(groupOf(c))) {
+    if (m.pos.map !== c.pos.map) continue; const mr = rt(m); if (mr.ghost || m.hp <= 0) { any = true; continue; }
+    if ((mr.threats || []).length) return false;
+    const s = charStats(m); const mana = usesMana(m) && m.cls !== 1 && s.maxMana;
+    if (mr.resting) { any = true; continue; }
+    if (m.hp < s.maxHp * 0.6 || (mana && m.mana < s.maxMana * (grpRole(m) === 'healer' ? 0.45 : 0.3))) { mr.resting = true; mr.restFull = false; mr.mv = null; any = true; }
+  }
+  return any;
+}
 /* creatures in a dungeon: no respawn while the instance lasts; companions share the experience */
 function dungeonKill(c, m) {
-  const o = c.order; if (!o || o.type !== 'dungeon') return;
+  let o = c.order;
+  if ((!o || o.type !== 'dungeon') && typeof groupOf === 'function' && groupOf(c)) { const L = groupLeader(groupOf(c)); o = L && L.order; }      // a group member's kill counts for the run
+  if (!o || o.type !== 'dungeon') return;
   o.kills++; const d = dungeonByMap(o.map); if (d && d.bosses.some((b) => b.e === m.e)) { o.bossKills++; log('*** ' + (m.info ? m.info[1] : 'Boss') + ' defeated! ***'); fx(m.x, m.y, 'BOSS DEFEATED', '#ffd23a'); }
 }
 /* the character died inside: everyone runs back from the graveyard at the entrance and goes in again */

@@ -239,7 +239,7 @@ function lootMob(c, m, questOnly, roll) {
 /* ----------------------------------------------------------- mob combat */
 function engage(m, c) {
   if (m.st !== 'alive') return;
-  m.st = 'chase'; m.tgt = c; ensureWorld(c.pos.map).active.add(m);
+  m.st = 'chase'; m.tgt = c; m.engT = G.gameTime; ensureWorld(c.pos.map).active.add(m);
   if (c.id && typeof groupOf === 'function' && groupOf(c)) { m.cThr = m.cThr || {}; m.cThr[c.id] = Math.max(m.cThr[c.id] || 0, 1); }
 }
 function mobDamage(m, c, s, mods) {
@@ -846,6 +846,7 @@ function updateChar(c, dt) {
   if (r.flying) { flyStep(c, dt); return; }
   if (r.riding) { rideStep(c, dt); return; }
   regenStep(c, dt);
+  if (typeof trailStep === 'function' && isLeader(c)) trailStep(c);          // group.js: the way the leader walked (dungeons)
   if (r.charging) { chargeStep(c, dt); return; }
   if (typeof charCcStep === 'function' && charCcStep(c, dt)) return;           // stunned or feared by a creature's spell
   r.scanT -= dt;
@@ -863,6 +864,8 @@ function updateChar(c, dt) {
   if (threats.length && groupOf(c)) {
     r.tgt = groupPickTarget(c, threats, r.tgt); r.mv = null;
     if (!(typeof tacActive === 'function' && tacActive(c)) && groupHealStep(c)) return;          // with tactics the heals are in the tactics
+    // a dungeon: the tank pulls - the others hold back two seconds (unless it is on them) so it gets the creatures first
+    if (r.tgt && r.tgt.tgt !== c && grpRole(c) !== 'tank' && isDungeonMap(c.pos.map) && G.gameTime - (r.tgt.engT || 0) < 2 && groupChars(groupOf(c)).some((o) => o !== c && grpRole(o) === 'tank')) return;
     if (r.tgt) { fightStep(c, r.tgt, dt); return; }
   }
   if (threats.length) {
