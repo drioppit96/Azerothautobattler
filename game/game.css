@@ -612,3 +612,5 @@ label.chk.dim{opacity:.55}
 .dgcard .dgwide{width:100%}
 .dgcard[hidden]{display:none}
 #log .ilog{cursor:pointer;font-weight:600}#log .ilog:hover{text-decoration:underline}
+.sheet-head .sharr{padding:1px 6px;margin:0 4px;font-size:11px}
+#sheetTitle{flex:0 1 auto}#sheetNext{margin-right:auto}

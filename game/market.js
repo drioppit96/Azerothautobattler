@@ -63,6 +63,8 @@ function npcUsable(c, v) { return houseOk(c, v.side); }
 function npcNear(c, list, range) {
   let best = null, bd = range || 12;
   for (const v of list) { if (v.map !== c.pos.map || !npcUsable(c, v)) continue; const d = Math.hypot(v.x - c.pos.x, v.y - c.pos.y); if (d <= bd) { bd = d; best = v; } }
+  // a groupmate (within 40 yards) standing at a banker, an auctioneer, a mailbox: the others can use it too
+  if (!best && typeof groupNear === 'function') for (const o of groupNear(c, 40)) for (const v of list) { if (v.map !== o.pos.map || !npcUsable(c, v)) continue; if (Math.hypot(v.x - o.pos.x, v.y - o.pos.y) <= (range || 12)) return v; }
   return best;
 }
 function auctioneerNear(c, range) { return npcNear(c, auctioneers(), range); }

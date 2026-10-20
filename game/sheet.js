@@ -245,6 +245,10 @@ function bindSheet() {
     if (e.target === sh) { closeSheet(); return; }
     const t = e.target.closest('[data-tab]'); if (t) { SH.tab = t.dataset.tab; hideItemMenu(); renderSheet(); return; }
     if (e.target.id === 'sheetClose') { closeSheet(); return; }
+    if (e.target.id === 'sheetPrev' || e.target.id === 'sheetNext') {          // the next / previous character, the same tab
+      const L = G.state.characters; if (L.length < 2) return; const k = L.findIndex((x) => x.id === G.state.activeId);
+      const n = L[(k + (e.target.id === 'sheetNext' ? 1 : -1) + L.length) % L.length]; const tab = SH.tab; switchCharacter(n.id); openSheet(tab); return;
+    }
     const c = active();
     // mass disenchant: choosing items in the bags
     if (e.target.closest('[data-ccancel]')) { craftCancel(c); renderSheet(); return; }

@@ -511,7 +511,12 @@ function nearestVendor(c, needRepair) {
   for (const [, v] of list) if (!(bad[v.e] > G.gameTime)) return v;
   return null;
 }
-function vendorNear(c, range) { const v = nearestVendor(c); return v && Math.hypot(v.x - c.pos.x, v.y - c.pos.y) <= (range || 8) ? v : null; }
+function vendorNear(c, range) {
+  const v = nearestVendor(c); if (v && Math.hypot(v.x - c.pos.x, v.y - c.pos.y) <= (range || 8)) return v;
+  // a groupmate (within 40 yards) standing at a vendor: the others can use it too
+  if (typeof groupNear === 'function' && !G.inGroupReach) { G.inGroupReach = true; try { for (const o of groupNear(c, 40)) { const w = nearestVendor(o); if (w && Math.hypot(w.x - o.pos.x, w.y - o.pos.y) <= (range || 8)) return w; } } finally { G.inGroupReach = false; } }
+  return null;
+}
 function sellIndex(c, idx) {
   const v = vendorNear(c); if (!v) { log('No vendor in reach.'); return; }
   const s = c.bags[idx]; if (!s) return; const p = itemSell(s.id) * s.n;

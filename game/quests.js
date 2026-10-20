@@ -438,11 +438,22 @@ function feederQuest(c, q, i, o) {
 }
 
 /* ------------------------------------------------------------------ single quest order */
-function orderQuest(c, qid) {
+function orderQuest(c, qid, opts) {
   const q = G.q.byId[qid]; if (!q) return;
-  const why = questSupport(q); if (why) { log('"' + q.title + '": ' + why + '.'); return; }
-  c.order = { type: 'quest', qid, label: q.title, phase: 'start', stack: [] };
-  log('Order: quest "' + q.title + '".'); save(); renderOrder();
+  const why = questSupport(q); if (why && !(opts && opts.pickOnly)) { log('"' + q.title + '": ' + why + '.'); return; }
+  const back = opts && opts.pickOnly && c.order && c.order.type !== 'quest' ? c.order : null;
+  c.order = { type: 'quest', qid, label: q.title, phase: 'start', stack: [], pickOnly: !!(opts && opts.pickOnly), resume: back };
+  log('Order: ' + (opts && opts.pickOnly ? (c.quests[qid] ? 'turn in' : 'pick up') + ' "' + q.title + '"' : 'quest "' + q.title + '"') + '.'); save(); renderOrder();
+}
+/* the map menu at a quest giver: next to it the quest is taken (or turned in) at once and nothing else changes - the
+   character does not start on it by itself; farther away it walks there, takes it (turns it in), and goes back to
+   what it was doing */
+function questAtGiver(c, qid, npc) {
+  const q = G.q.byId[qid]; if (!q) return;
+  const near = npc && npc.map === c.pos.map && Math.hypot(npc.x - c.pos.x, npc.y - c.pos.y) <= 12;
+  if (near && c.quests[qid]) { if (questDone(c, q)) { if (!turnInQuest(c, q)) log('Bags are too full to receive the rewards of "' + q.title + '".'); } else log('"' + q.title + '" is not done yet.'); return; }
+  if (near) { if (questAvailable(c, q)) acceptQuest(c, q); else log('"' + q.title + '" is not available.'); return; }
+  orderQuest(c, qid, { pickOnly: true });
 }
 function updateQuest(c, o, dt) {
   const r = rt(c); const q = G.q.byId[o.qid];
@@ -452,7 +463,9 @@ function updateQuest(c, o, dt) {
     c.order = null; renderOrder(); return;
   }
   if ((r.bagFull || bagFree(c) <= 0) && !questDone(c, q)) { bagsFull(c, o); return; }
+  const had = !!c.quests[q.id];
   const res = questStep(c, q, o);
+  if (o.pickOnly && ((!had && c.quests[q.id]) || res === 'done' || c.done[q.id])) { c.order = o.resume || null; if (c.order) { c.order.wait = 0; resumeOrder(c, c.order); } r.mv = null; save(); renderOrder(); return; }      // only to take it / turn it in
   if (res === 'done') {
     if (o.stack && o.stack.length) { o.qid = o.stack.pop(); o.wt = null; log('Back to "' + G.q.byId[o.qid].title + '".'); }
     else nextAfterQuest(c, q);

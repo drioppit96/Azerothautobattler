@@ -82,7 +82,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 f (group quests, pause)';
+const GAME_VERSION = '2026-10-21 g (quests at givers, shared NPCs, character arrows)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -565,7 +565,7 @@ function showMenu(sx, sy, sel) {
     else if (a === 'kill') orderKill(c, sel.mob);
     else if (a === 'inn') { const v = innkeepers().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || innkeepers().find((x) => x.e === sel.mob.e); if (v && !(c.bind && c.bind.e === v.e)) orderInn(c, v); }
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
-    else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));
+    else if (a.startsWith('quest:')) questAtGiver(c, +a.slice(6), sel.kind === 'mob' ? { map: c.pos.map, x: sel.mob.x, y: sel.mob.y } : null);
     else if (a === 'vendor') { const v = vendorList().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || vendorList().find((x) => x.e === sel.mob.e); if (v) orderVendor(c, v); }
     hideMenu();
   };
