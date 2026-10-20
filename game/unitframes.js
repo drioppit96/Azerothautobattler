@@ -76,7 +76,7 @@ function ufFillChar(me, c) {
   const castOf = () => { const it = r.interact; const ck = typeof craftNow === 'function' ? craftNow(c) : null; return r.cast || ck || (it ? { name: it.label, t: it.t, total: it.dur } : null) || (typeof wcBarOf === 'function' ? wcBarOf(c) : null) || ufSwingBar(c); };
   ufCastBar(me, castOf(), castOf);
   ufSet(me, 'combat', !!(r.threats && r.threats.length), (v) => me.classList.toggle('combat', v));
-  ufAuras(me, ufPlayerAuras(c, r));
+  ufAuras(me, me._hud ? [] : ufPlayerAuras(c, r));
 }
 /* a mercenary's frame: class icon, name (coloured by role), health, mana / rage / energy, cast bar, buffs */
 function ufFillComp(me, u, lvl) {
@@ -116,6 +116,7 @@ function ufCastBar(me, cb, get) {
       if (me.classList.contains('ufmate') || me.classList.contains('ufenemy')) { const nb = me._namebg.style; Object.assign(d.style, { left: nb.left, top: nb.top, width: nb.width, height: nb.height, right: 'auto', bottom: 'auto' }); d.classList.add('onname'); }
     }
     me._cb.hidden = !cb; if (cb) me._cb.lastChild.textContent = cb.name; me._cb.classList.toggle('swing', !!(cb && cb.swing));
+    if (me._hud) ufCastIcon(me, cb);
   });
   if (cb && me._cb) ufCastWidth(me, cb);
 }
@@ -123,13 +124,13 @@ function ufCastWidth(me, k, extra) { const w = Math.min(100, 100 * ((k.t || 0) +
 /* every animation frame: the cast bars of the frames on screen (the part of a game step not simulated yet is added,
    so the bar does not move in steps) */
 function animateCastBars() {
-  const box = $('unitframes'); if (!box) return;
   const extra = (G.state.settings.speed || 0) > 0 ? Math.min(STEP, G.acc || 0) * 1 : 0;
-  for (const el of box.children) {
+  const els = []; for (const id of ['unitframes', 'mhudL', 'mhudR']) { const b = $(id); if (b) els.push(...b.children); }
+  for (const el of els) {
     if (!el._cb || el._cb.hidden || !el._cbGet || el.style.display === 'none') continue;
     const k = el._cbGet();
     if (!k) { el._cb.hidden = true; el._vcast = ''; continue; }
-    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; el._cb.classList.toggle('swing', !!k.swing); }
+    if (el._vcast !== k.name) { el._vcast = k.name; el._cb.lastChild.textContent = k.name; el._cb.classList.toggle('swing', !!k.swing); if (el._hud) ufCastIcon(el, k); }
     ufCastWidth(el, k, extra);
   }
 }
@@ -289,4 +290,62 @@ function ufAuraIcon(name) {
   }
   const ic = G.auraIcon[name];
   return ic ? '<img src="../icons/' + esc(ic.toLowerCase()) + '.jpg" alt="" onerror="this.style.visibility=\'hidden\'">' : esc(name[0]);
+}
+
+/* ------------------------------------------------------------------ the Android app: frames on the map
+   Where the ability bar was: the character (its pet above it) on the left, what it fights on the right - the target
+   big, the other creatures fighting the group small above it. The cast bars have the icon of what is being done. */
+const HUD_ICON = {};
+function spellIconByName(n) {
+  if (n in HUD_ICON) return HUD_ICON[n]; let ic = null; const sp = G.d.spells && G.d.spells.spells;
+  if (sp) for (const id in sp) if (sp[id].n === n && sp[id].ic && sp[id].ic !== 'temp') { ic = sp[id].ic; break; }
+  return (HUD_ICON[n] = ic);
+}
+function ufCastIcon(me, cb) {
+  if (!me._cb) return;
+  if (!me._cic) { const k = document.createElement('img'); k.className = 'ufcic'; k.onerror = () => { k.onerror = null; k.src = '../icons/inv_misc_questionmark.jpg'; }; me._cb.insertBefore(k, me._cb.lastChild); me._cic = k; }
+  if (!cb) return;
+  let ic = cb.ic || null; const c = me._hudC;
+  if (!ic && cb.swing && c) { const w = c.equip[15]; ic = w ? (itemRow(w.id) || {}).ic : 'inv_gauntlets_04'; if (!ic) ic = 'inv_gauntlets_04'; }
+  if (!ic) ic = spellIconByName(cb.name) || (cb.name === 'Auto Attack' ? 'inv_gauntlets_04' : null);
+  const src = '../icons/' + (ic || 'inv_misc_questionmark').toLowerCase() + '.jpg';
+  if (me._cicSrc !== src) { me._cicSrc = src; me._cic.src = src; }
+}
+function hudFrame(box, key, make) {
+  if (!box[key]) { box[key] = make(); box[key]._hud = true; box[key].classList.add('hud'); box.appendChild(box[key]); }
+  return box[key];
+}
+function renderMapHud() {
+  if (typeof IS_APP === 'undefined' || !IS_APP) return;
+  const L = $('mhudL'), R = $('mhudR'); if (!L || !R) return;
+  const c = active(); if (!c) return; const r = rt(c);
+  const W = $('mapwrap').clientWidth || 360;
+  const sp = Math.max(0.6, Math.min(1, (W / 2 - 10) / UF.w));
+  if (L._s !== sp) { L.innerHTML = ''; R.innerHTML = ''; L._s = R._s = sp; for (const k of ['_me', '_pet', '_tg']) { L[k] = null; R[k] = null; } R._sm = []; }
+  // the character: at the bottom, the cast bar under it
+  const me = hudFrame(L, '_me', () => { const f = ufMake(sp, true); f.classList.add('ufplayer'); f.onclick = (e) => { if (e.target.closest('.ufpor')) openCharSwitch(); else openSheet('char'); }; return f; });
+  me._hudC = c; ufFillChar(me, c);
+  const meH = UF.h * sp, castH = 20;
+  let yl = 0;
+  // the pet: small, above the character
+  if (c.pet && c.pet.out !== false && typeof ufMakePet === 'function') {
+    const ps = sp * 0.7;
+    const pet = hudFrame(L, '_pet', () => { const f = ufMakePet(ps); f.onclick = () => openSheet('pet'); return f; });
+    pet.style.display = ''; pet._hudC = c; ufFillPet(pet, c); pet.style.top = '0px'; yl = 53 * ps + 2;
+  } else if (L._pet) L._pet.style.display = 'none';
+  me.style.top = Math.round(yl) + 'px'; L.style.height = Math.ceil(yl + meH + castH) + 'px';
+  // the creatures: the target (or the first one fighting) big at the bottom, the others small above it
+  const tg = r.tgt && r.tgt.st !== 'dead' && r.tgt.hp > 0 && (r.tgt.st === 'chase' || (r.threats || []).length) ? r.tgt : (r.threats || []).find((m) => m.st !== 'dead' && m.hp > 0) || null;
+  const others = tg ? ufPartyEnemies(c, tg).slice(0, 3) : [];
+  const TRIM = 40, ss = Math.max(0.5, sp * 0.62);
+  while (R._sm.length < others.length) { const f = ufMake(ss, false, TRIM); f.classList.add('ufenemy', 'hud'); f._hud = true; R.appendChild(f); R._sm.push(f); f.onclick = () => { if (f._mob) { G.selected = { kind: 'mob', mob: f._mob }; renderInfo(G.selected); } }; }
+  let yr = 0; const smH = UF.h * ss + 3;
+  R._sm.forEach((f, i) => {
+    const m = others[others.length - 1 - i]; f.style.display = m ? '' : 'none'; f._mob = m || null; if (!m) return;
+    f.style.top = Math.round(yr) + 'px'; f._hudC = c; ufFillMob(f, m, c, false, true); yr += smH;
+  });
+  const big = hudFrame(R, '_tg', () => { const f = ufMake(sp, false); f.classList.add('ufenemy'); f.onclick = () => { if (f._mob) { G.selected = { kind: 'mob', mob: f._mob }; renderInfo(G.selected); } }; return f; });
+  big.style.display = tg ? '' : 'none'; big._mob = tg;
+  if (tg) { big.style.top = Math.round(yr) + 'px'; big._hudC = c; ufFillMob(big, tg, c, true); yr += UF.h * sp + castH; }
+  R.style.height = Math.ceil(yr) + 'px'; R.style.display = tg ? '' : 'none';
 }

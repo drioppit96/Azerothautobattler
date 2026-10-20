@@ -663,3 +663,22 @@ label.chk.dim{opacity:.55}
 
 /* things only the Android app has */
 .apponly{display:none!important}html.app .apponly{display:inline-flex!important}
+
+/* the Android app: unit frames on the map instead of the ability bar */
+#mhud{display:none}
+html.app #abar{display:none!important}
+html.app #mhud{display:block;position:absolute;left:4px;right:4px;bottom:4px;height:0;pointer-events:none;z-index:4}
+html.app #mhudL,html.app #mhudR{position:absolute;bottom:0;pointer-events:none}
+html.app #mhudL{left:0;width:50%}html.app #mhudR{right:0;width:50%}
+html.app #mhud .uf{pointer-events:auto;filter:drop-shadow(0 1px 3px #000)}
+html.app #mhud .uf.target{filter:drop-shadow(0 0 4px #ffd866)}
+html.app #mhudL .uf.me{left:0}html.app #mhudR .uf.ufenemy{right:0}
+html.app #mhudL .ufpet{left:4px}html.app #mhudL .ufpet .ufcast{display:none}
+/* the cast bar with the icon of what is being done, joined to it */
+.uf.hud .ufcast{overflow:visible}
+.uf.hud .ufcast:not(.onname){left:calc(6% + 17px);bottom:-17px;height:13px}
+.uf.hud .ufcast:not(.onname) span{line-height:13px;font-size:10px}
+.uf.hud .ufcast .ufcic{position:absolute;right:100%;top:-1px;height:calc(100% + 2px);aspect-ratio:1;border:1px solid #c9a646;border-right:0;border-radius:3px 0 0 3px;box-sizing:border-box;background:#000;object-fit:cover}
+/* the map buttons go to the top right, the zone name to the top left (the frames are at the bottom) */
+html.app #mapctl{top:10px!important;transform:none!important}
+html.app #hud{bottom:auto;top:6px}

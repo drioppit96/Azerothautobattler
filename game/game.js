@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 m (hunter ammo fix)';
+const GAME_VERSION = '2026-10-21 n (app: unit frames on the map)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -423,6 +423,7 @@ function renderChar() {
   if (c.hp == null || c.hp > s.maxHp) c.hp = s.maxHp;
   if (!$('unitframes')) $('charCard').innerHTML = '<div id="unitframes"></div>';
   renderUnitFrames();
+  if (IS_APP && typeof renderMapHud === 'function') renderMapHud();          // the Android app: the frames on the map
 }
 /* ------------------------------------------------------------------ fold-away cards (right panel) */
 function cardOpen(id, def) { const o = G.state.settings.cardOpen || {}; return id in o ? o[id] : def; }
