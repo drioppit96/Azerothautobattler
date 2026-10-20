@@ -61,6 +61,11 @@ function ufFillChar(me, c) {
   ufSet(me, 'img', c.race + '_' + (c.gender || 0), () => { me._img.src = '../ui/CharacterFrame/TemporaryPortrait-' + (c.gender ? 'Female' : 'Male') + '-' + (RACE_PORTRAIT[c.race] || 'Orc') + '.png'; });
   ufSet(me, 'name', c.name, (v) => { me._name.textContent = v; });
   ufSet(me, 'lv', c.level, (v) => { me._lv.textContent = v; });
+  ufSet(me, 'cls', c.cls, (v) => {          // the class: a small round icon at the start of the name plate
+    if (!me._cls) { const k = document.createElement('img'); k.className = 'ufcls'; const nb = me._namebg.style; const sc = parseFloat(me.style.getPropertyValue('--s')) || 1; const d = Math.round(UF.name.h * sc + 4);
+      Object.assign(k.style, { left: (parseFloat(nb.left) + 1) + 'px', top: (parseFloat(nb.top) - 2) + 'px', width: d + 'px', height: d + 'px' }); me.appendChild(k); me._cls = k; me._name.style.paddingLeft = (d - 2) + 'px'; }
+    me._cls.src = 'img/class/' + v + '.png'; me._cls.title = CLASS_NAMES[v] || '';
+  });
   ufSet(me, 'bg', 1, () => { ufBgImg(me, 'url(' + ufFrameTexture(0) + ')'); me._namebg.style.background = 'rgba(0,0,0,.35)'; });
   const hp = Math.max(0, Math.round(c.hp)); const ghost = !!r.ghost;
   ufSet(me, 'hp', hp + '/' + s.maxHp + ghost, () => { me._hpi.style.width = (ghost ? 0 : 100 * hp / s.maxHp) + '%'; me._hpt.textContent = ghost ? 'Ghost' : hp + ' / ' + s.maxHp; });

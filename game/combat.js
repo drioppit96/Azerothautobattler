@@ -1010,7 +1010,7 @@ function updateChar(c, dt) {
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
   if (r.tame && threats.length && typeof petTameFight === 'function' && petTameFight(c)) return;     // the beast being tamed attacks: keep taming
   if (threats.length && groupOf(c)) {
-    r.tgt = groupPickTarget(c, threats, r.tgt); r.mv = null;
+    const nt = groupPickTarget(c, threats, r.tgt); if (nt !== r.tgt || (r.mv && nt && Math.hypot(r.mv.tx - nt.x, r.mv.ty - nt.y) > 8)) r.mv = null; r.tgt = nt;      // the way to it is kept while it is the same one (planned again every step it flipped between ways around a wall and never got there)
     if (!(typeof tacActive === 'function' && tacActive(c)) && groupHealStep(c)) return;          // with tactics the heals are in the tactics
     // a dungeon: the tank pulls - the others hold back two seconds (unless it is on them) so it gets the creatures first
     if (r.tgt && r.tgt.tgt !== c && grpRole(c) !== 'tank' && isDungeonMap(c.pos.map) && G.gameTime - (r.tgt.engT || 0) < 2 && groupChars(groupOf(c)).some((o) => o !== c && grpRole(o) === 'tank')) return;

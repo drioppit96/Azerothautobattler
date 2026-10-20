@@ -657,3 +657,6 @@ label.chk.dim{opacity:.55}
   #menu button{padding:12px 10px}
   #coords{display:none}#hud:has(#zonehint:empty){display:none}
 }
+
+/* the class icon on the name plate of the character frames */
+.uf .ufcls{position:absolute;z-index:7;border-radius:50%;box-shadow:0 0 0 1px #000,0 0 3px #000;pointer-events:auto}
