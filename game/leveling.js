@@ -337,7 +337,7 @@ function abandonStale(c) {
 }
 /* dungeon quests for this level: pick them up in town, run the dungeon (with a group), turn them in */
 function dungeonTourPick(c, o) {
-  if (cset(c, 'dungeonQuests') === false || typeof dungeonList !== 'function') return false;
+  if (cset(c, 'dungeonQuests') === false || typeof dungeonList !== 'function' || G.awayNoDungeon) return false;
   o.dgDone = o.dgDone || {}; if (G.gameTime - (o.dgLook || -1e9) < 120) return false; o.dgLook = G.gameTime;
   let best = null;
   for (const d of dungeonList()) {

@@ -94,7 +94,8 @@ function updateNpcOrder(c, o) {
     return;
   }
   if (o.kind === 'vendor') { shopArrive(c, o); return; }
-  if (o.kind === 'inn') { innArrive(c, o); return; }                  // hearth.js: a new home            // shop.js: Go and buy
+  if (o.kind === 'inn') { innArrive(c, o); return; }
+  if (o.kind === 'bank' && o.deposit && typeof farmDeposit === 'function') { farmDeposit(c, o); return; }          // farm.js: full bags                  // hearth.js: a new home            // shop.js: Go and buy
   c.order = o.resume || null; if (c.order) { c.order.wait = 0; c.order.noSell = false; }
   collectMail(c, true);
   renderOrder(); save();

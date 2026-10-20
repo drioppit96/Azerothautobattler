@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 c (top bar menus, dungeon route marker)';
+const GAME_VERSION = '2026-10-20 d (offline progress, background tab, farming materials)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -232,7 +232,7 @@ function baseStats(c) {
   return { str: s[0], agi: s[1], sta: s[2], int: s[3], spi: s[4], maxHp: hp, power: cs ? cs[1] : 0 };
 }
 function save() {
-  if (G.state) G.state.gameTime = G.gameTime;       // order timers are in game time: keep the clock across sessions
+  if (G.state) { G.state.gameTime = G.gameTime; G.state.lastReal = Date.now(); }       // lastReal: when the game was last running (away.js)       // order timers are in game time: keep the clock across sessions
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.state, (k, v) => (k === 'rt' || k === '_set' ? undefined : v))); } catch (e) { /* ignore */ }
 }
 function loadSave() {
@@ -379,6 +379,7 @@ const AUTO_GROUPS = [
   ['Selling and junk', [['autoSellJunk', 'Sell junk (grey and vendor trash) when near a vendor, and when the bags are full'], ['sellWhiteGear', 'Count white gear that is no upgrade as junk']]],
   ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)'], ['groupQuests', 'Do group quests (elites out in the world) with a hired group', true]]],
   ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself'], ['autoDisenchant', 'Enchanters: disenchant green gear that is no upgrade (instead of selling it)']]],
+  ['Away', [['offlineProgress', 'Offline progress: keeps playing while the game is closed - up to 2 hours, the first 30 minutes in full, the rest at half rate; no dungeons', true]]],
 ];
 function renderSettingsCard() {
   const el = $('setCard'); if (!el) return; const c = active(); const on = cardOpen('auto', false);
@@ -387,11 +388,12 @@ function renderSettingsCard() {
     for (const [title, list] of AUTO_GROUPS) {
       h += '<div class="aset"><h5>' + title + '</h5>' + list.map(([k, t, defTrue]) => '<label class="chk"><input type="checkbox" data-aset="' + k + '"' + ((defTrue ? cset(c, k) !== false : cset(c, k)) ? ' checked' : '') + '> ' + t + '</label>').join('') + '</div>';
     }
+    if (typeof farmCardHtml === 'function') h += farmCardHtml(c);
     h += '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" data-abeh="1">Behaviour</a></div>';
   }
   el.innerHTML = h; el.dataset.def = '0';
-  el.onchange = (e) => { const k = e.target.dataset && e.target.dataset.aset; if (!k) return; const a = active(); a.auto = a.auto || {}; a.auto[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
-  el.onclick = (e) => { if (e.target.dataset && e.target.dataset.abeh) { e.preventDefault(); openSheet('beh'); } };
+  el.onchange = (e) => { if (typeof farmCardChange === 'function' && farmCardChange(e)) return; const k = e.target.dataset && e.target.dataset.aset; if (!k) return; const a = active(); a.auto = a.auto || {}; a.auto[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
+  el.onclick = (e) => { if (typeof farmCardClick === 'function' && farmCardClick(e)) return; if (e.target.dataset && e.target.dataset.abeh) { e.preventDefault(); openSheet('beh'); } };
 }
 function orderText(c) {
   const o = c.order; if (!o) return null;
@@ -404,6 +406,7 @@ function orderText(c) {
   if (o.type === 'patrol') return patrolText(c, o);
   if (o.type === 'dungeon') return dungeonText(c, o);
   if (o.type === 'npc') return npcOrderText(c, o);
+  if (o.type === 'farm') return farmText(c, o);
   if (o.type === 'follow') return followText(c, o);
   if (o.type === 'fish') return fishText(c, o);
   if (o.type === 'trainer') return { t: 'Train ' + profName(o.skill), d: (o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) + ' - ' : '') + 'to ' + o.label };
@@ -829,7 +832,10 @@ function setSpeed(s) {
 /* ------------------------------------------------------------------- loop */
 function frame(ts) {
   const dt = Math.min(0.25, (ts - (G.last || ts)) / 1000); G.last = ts;
-  const sp = G.state.settings.speed;
+  // the browser stopped the loop (tab in the background, the computer asleep): play the missed time (away.js)
+  const now = Date.now(); const gap = (now - (G.lastReal || now)) / 1000; G.lastReal = now;
+  if (gap > AWAY_MIN && !G.catching && typeof awayCatchUp === 'function') awayCatchUp(gap, 'hidden');
+  const sp = G.catching ? 0 : G.state.settings.speed;
   if (sp > 0) {
     G.acc += dt * sp;
     const live = liveChars(); let n = 0; const cap = Math.max(60, Math.round(400 / live.length));
@@ -905,6 +911,7 @@ async function boot() {
     for (const f of (manifest ? manifest.portraits : await listDir('../portraits/by_name/', '.png'))) { const m = /^(\d+)_/.exec(f); if (m) G.portraits[+m[1]] = f; }
 
     G.state = loadSave();
+    const lastReal = G.state && G.state.lastReal;          // before anything saves again: when the game was closed
     if (!G.state || !G.state.characters || !G.state.characters.length) {
       G.state = Object.assign({ version: 1, activeId: null, characters: [], settings: { speed: 1, autoSellJunk: true, autoEquip: true, chainQuests: true } }, G.state || {}, { characters: [] });
       $('loading').style.display = 'none';
@@ -926,8 +933,9 @@ async function boot() {
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');
     log('Game version ' + GAME_VERSION + '.');
     $('loading').style.display = 'none';
-    requestAnimationFrame(frame);
+    G.lastReal = Date.now(); requestAnimationFrame(frame);
     window.G = G;
+    if (lastReal && typeof awayCatchUp === 'function') awayCatchUp((Date.now() - lastReal) / 1000, 'closed');          // offline progress
   } catch (e) {
     $('loading').innerHTML = '<div><b style="color:#e0453a">Could not start</b><div id="loadmsg" style="max-width:520px">' + esc(e.message) + '<br><br>Start the game with start_game.bat (it serves your "wow excel" folder), then open http://localhost:8000/game/</div></div>';
     console.error(e);

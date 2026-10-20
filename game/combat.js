@@ -94,6 +94,7 @@ function questXp(q, c) {
 }
 function gainXp(c, xp, why) {
   if (xp <= 0 || c.level >= MAX_LEVEL) return;
+  if (G.away) G.away.xp[c.id] = (G.away.xp[c.id] || 0) + xp;          // away.js: what the time away gave
   c.xp += xp;
   fx(c.pos.x, c.pos.y, '+' + xp + ' xp', '#c58cf0');
   for (;;) {
@@ -303,6 +304,7 @@ function killMob(c, m) {
   m.st = 'dead'; m.tgt = null; m.hp = 0; m.respAt = dg ? Infinity : G.gameTime + irnd(m.rmin, m.rmax); m.deadAt = G.gameTime; W.active.delete(m); W.dead.push(m);
   const name = m.info ? m.info[1] : 'creature';
   if (dg) dungeonKill(c, m);
+  if (G.away) G.away.kills[c.id] = (G.away.kills[c.id] || 0) + 1;
   masteryKill(c, m);
   if (typeof groupOf === 'function' && groupOf(c)) groupKill(c, m, W);           // your characters together: shared kill, experience in parts
   else {
@@ -802,7 +804,7 @@ function updateChar(c, dt) {
   if (c.cls !== 1 && oocStep(c)) return;
   if (c.prof && profStep(c)) return;
   const o = c.order;
-  if (!o) return;
+  if (!o) { if (c.farm && c.farm.idle && typeof farmIdle === 'function') farmIdle(c); return; }          // farm.js: materials when idle
   if (typeof groupHold === 'function' && groupHold(c, o)) return;      // the leader waits for the group
   if (o.type === 'travel') {
     if (o.cross && typeof travelCross === 'function') { const st = travelCross(c, o); if (st !== 'done') return; }
@@ -820,6 +822,7 @@ function updateChar(c, dt) {
   else if (o.type === 'fish') updateFishing(c, o, dt);
   else if (o.type === 'patrol') updatePatrol(c, o, dt);
   else if (o.type === 'dungeon') updateDungeon(c, o, dt);
+  else if (o.type === 'farm') updateFarm(c, o, dt);
 }
 function replanTravel(c, o) {
   if (o.cross) return;

@@ -362,6 +362,7 @@ function drawParty(ctx, m) {
 
 /* ------------------------------------------------------------------ the run */
 function orderDungeon(c, d, group, resume) {
+  if (G.awayNoDungeon) return;                 // away.js: no dungeons while the game is closed
   const min = d.lmin - (d.kind === 'raid' ? 0 : 3);
   if (c.level < min) { log(d.name + ' needs level ' + min + '.'); return; }
   if (isDungeonMap(c.pos.map) && c.pos.map !== d.map) { log('Leave ' + dungeonByMap(c.pos.map).name + ' first.'); return; }

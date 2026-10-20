@@ -255,9 +255,10 @@ function nodesNear(map, x, y, rad, fn) {
 function nodeFree(n) { return !(G.nodeUsed && G.nodeUsed[n.key] > G.gameTime); }
 function canGather(c, n) { const sk = n.kind === 'herb' ? 182 : 186; return hasProf(c, sk) && profSkill(c, sk) >= n.req; }
 /* the nearest node the character can gather (free, reachable, not next to dangerous creatures) */
-function findNode(c, rad) {
+function findNode(c, rad, only) {
   const r = rt(c); let best = null, bd = 1e9; const W = ensureWorld(c.pos.map);
   nodesNear(c.pos.map, c.pos.x, c.pos.y, rad, (n) => {
+    if (only && !only.has(n.e)) return;            // farming one ore (farm.js): only its veins
     if (!canGather(c, n) || !nodeFree(n) || (r.nodeBan && r.nodeBan[n.key] > G.gameTime)) return;
     const d = Math.hypot(n.x - c.pos.x, n.y - c.pos.y); if (d >= bd) return;
     let bad = false; mobsNear(W, n.x, n.y, 30, (m) => { if (!bad && m.st === 'alive' && behOf(m, c) === 'A' && dangerous(m, c) && Math.hypot(m.x - n.x, m.y - n.y) < aggroRadius(m, c) + 6) bad = true; });
@@ -282,7 +283,7 @@ function gatherNode(c, n) {
 function gatherStep(c, o, rad) {
   const r = rt(c);
   if (o.node && (!nodeFree(o.node) || !canGather(c, o.node))) o.node = null;
-  if (!o.node) { if (G.gameTime - (o.nodeT || -9) < 1) return false; o.nodeT = G.gameTime; o.node = findNode(c, rad); if (!o.node) return false; o.nodeSince = G.gameTime; }
+  if (!o.node) { if (G.gameTime - (o.nodeT || -9) < 1) return false; o.nodeT = G.gameTime; o.node = findNode(c, rad, o._set instanceof Set ? o._set : null); if (!o.node) return false; o.nodeSince = G.gameTime; }
   const n = o.node;
   if (G.gameTime - o.nodeSince > 60) { r.nodeBan = r.nodeBan || {}; r.nodeBan[n.key] = G.gameTime + 600; o.node = null; return false; }
   if (!goTo(c, n.x, n.y, 3)) { if (r.blocked) { r.blocked = false; r.nodeBan = r.nodeBan || {}; r.nodeBan[n.key] = G.gameTime + 600; o.node = null; } return true; }

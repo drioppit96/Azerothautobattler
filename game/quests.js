@@ -160,7 +160,7 @@ function questDungeon(q) { const m = questMeta(q); const id = m.dungeon || m.tur
 /* level and settings allow the dungeon of a quest; auto = leveling / auto-questing (no raids, settings) */
 function dungeonQuestOk(c, q, auto) {
   const d = questDungeon(q); if (!d) return true;
-  if (auto && (cset(c, 'dungeonQuests') === false || d.kind === 'raid')) return false;
+  if (auto && (cset(c, 'dungeonQuests') === false || d.kind === 'raid' || G.awayNoDungeon)) return false;
   return c.level >= d.lmin - (auto ? 0 : 3);
 }
 function dungeonQuestDist(c, d) { return d.entrance && d.entrance.map === c.pos.map ? Math.hypot(d.entrance.x - c.pos.x, d.entrance.y - c.pos.y) + 300 : 6000; }

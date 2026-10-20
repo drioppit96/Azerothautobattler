@@ -533,3 +533,15 @@ label.chk.dim{opacity:.55}
 .rmchip.on{background:var(--c)}.rmchip.on b,.rmchip.on span{color:#000}
 .rmbtns{display:flex;gap:5px;flex-wrap:wrap}
 .rmmsg{color:#9fe0a0}
+/* away.js: catching up, and what happened */
+.awaybar{width:320px;height:12px;margin:10px auto 0;border:1px solid var(--gold2);border-radius:3px;background:#0008;overflow:hidden}
+.awaybar i{display:block;height:100%;background:linear-gradient(#ffd04a,#c08a10)}
+#awayBox{position:fixed;inset:0;z-index:300;background:#0007;display:flex;align-items:center;justify-content:center}
+#awayBox[hidden]{display:none}
+.awaybox{width:min(520px,94vw);max-height:80vh;overflow:auto;background:#1d1810;border:1px solid var(--gold2);border-radius:8px;padding:12px 14px;box-shadow:0 8px 30px #000c}
+.awayhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}.awayhead b{color:#ffd100}.awayhead button{margin-left:auto}
+.awayc{padding:6px 0;border-top:1px solid #3a3020}.awayc .bad{color:#ff7060}
+/* farm.js: profession materials (Automation) */
+.farmset .farmrow{display:flex;gap:6px;margin:4px 0}
+.farmset select{flex:1;min-width:0;background:#0f0c08;border:1px solid var(--line);color:#f0e6cc;border-radius:4px;padding:3px}
+.farmset .bad{color:#ff7060}.farmset button{margin-top:4px}
