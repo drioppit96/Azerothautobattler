@@ -487,13 +487,44 @@ function dungeonResetOut(c) {
 function dungeonGroupOf(c) { const g = typeof groupOf === 'function' ? groupOf(c) : null; const L = g ? groupLeader(g) || c : c; return { g, L, who: g ? groupChars(g) : [c] }; }
 function dungeonRest(c) {
   const { g, L, who } = dungeonGroupOf(c); const d = dungeonByMap(L.pos.map); if (!d) return;
-  if (g) g.hold = true; else if (L.order) L.order.hold = true;
-  for (const m of who) { if (m.pos.map !== d.map) continue; const r = rt(m); if (r.ghost) continue; r.mv = null; r.tgt = null; if (!(r.threats || []).length) { r.resting = true; r.restFull = true; } }
-  log('Resting in ' + d.name + ' - press Continue dungeon to go on.'); save(); renderOrder();
+  const h = g || L.order; if (!h) return;
+  // first back to the route (the nearest point of it), then everyone sits down there
+  const p = dgRoutePoint(L, d); h.hold = true; h.restAt = p; h.restSat = !p;
+  if (p && L.order && L.order.type === 'dungeon') { L.order.gi = p.gi; L.order.target = null; }
+  for (const m of who) { if (m.pos.map !== d.map) continue; const r = rt(m); if (r.ghost) continue; r.mv = null; r.tgt = null; r.resting = false; }
+  if (!p) dgSitDown(c);
+  log((p ? 'Back to the route, then resting' : 'Resting') + ' in ' + d.name + ' - press Continue dungeon to go on.'); save(); renderOrder();
+}
+/* the nearest point of the dungeon's route to the leader (on its floor): {x, y, z, gi} or null */
+function dgRoutePoint(L, d) {
+  const plan = dungeonPullPlan(d, (L.order && L.order.type === 'dungeon' && L.order.tier) || null); const R = plan && plan.route; if (!R || R.length < 2) return null;
+  const f = dungeonFloorAt(d, L.pos.x, L.pos.y, L.pos.z); let best = null, bd = Infinity;
+  for (let i = 1; i < R.length; i++) {
+    const a = R[i - 1], b = R[i]; if (b.cut) continue;
+    const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy || 1; const t = clamp(((L.pos.x - a.x) * vx + (L.pos.y - a.y) * vy) / L2, 0, 1);
+    const p = { x: a.x + vx * t, y: a.y + vy * t, z: (a.z || 0) + ((b.z || 0) - (a.z || 0)) * t, gi: i };
+    if (dungeonFloorAt(d, p.x, p.y, p.z) !== f) continue;
+    const dd = Math.hypot(p.x - L.pos.x, p.y - L.pos.y) + Math.abs(p.z - (L.pos.z || p.z)) * 2; if (dd < bd) { bd = dd; best = p; }
+  }
+  return best;
+}
+/* everyone of the group in the dungeon sits down to rest to full */
+function dgSitDown(c) {
+  const { who } = dungeonGroupOf(c);
+  for (const m of who) { const r = rt(m); if (r.ghost || !isDungeonMap(m.pos.map) || (r.threats || []).length) continue; r.mv = null; r.resting = true; r.restFull = true; }
+}
+/* holding (the Rest button): the leader walks back to the route point, then everyone sits there */
+function dgHoldStep(c, h) {
+  const r = rt(c);
+  if (h.restAt && !h.restSat) {
+    if (goTo(c, h.restAt.x, h.restAt.y, 2, h.restAt.z) || r.blocked) { r.blocked = false; h.restSat = true; r.mv = null; dgSitDown(c); }
+    return;
+  }
+  r.mv = null;
 }
 function dungeonContinue(c) {
   const { g, L, who } = dungeonGroupOf(c); const d = dungeonByMap(L.pos.map) || dungeonByMap(c.pos.map); if (!d) return;
-  if (g) g.hold = false; if (L.order) L.order.hold = false;
+  if (g) { g.hold = false; g.restAt = null; } if (L.order) { L.order.hold = false; L.order.restAt = null; }
   if (!L.order || L.order.type !== 'dungeon' || L.order.map !== d.map) { withLog(L, () => orderDungeon(L, d, true)); }
   const o = L.order;
   if (o && o.type === 'dungeon') { o.target = null; o.since = G.gameTime; o.targetSince = null; o.lastPos = null; o.phase = o.phase === 'leaving' ? 'leaving' : 'inside'; if (o.entered == null) o.entered = G.gameTime; }
@@ -746,7 +777,7 @@ function updateDungeon(c, o, dt) {
   }
   if (c.pos.map !== d.map) { c.order = o.resume || null; renderOrder(); return; }
   if (o.phase === 'leaving') { if (dungeonExitStep(c, o, d)) leaveDungeon(c, o.leaveMsg); return; }
-  if (o.hold && !(r.threats && r.threats.length)) { r.mv = null; o.since = G.gameTime; return; }          // alone: the Rest button
+  if (o.hold && !(r.threats && r.threats.length)) { dgHoldStep(c, o); o.since = G.gameTime; return; }          // alone: the Rest button
   if (G.gameTime - (o.lastCall || 0) > 2) o.since = G.gameTime;          // busy with fighting, resting or looting in between
   o.lastCall = G.gameTime;
   if (r.bagFull || bagFree(c) <= 0) { const junk = c.bags.map((x, i) => ({ x, i })).filter((q) => isJunk(c, q.x.id)).sort((a, b) => itemSell(a.x.id) * a.x.n - itemSell(b.x.id) * b.x.n); if (junk.length) { const k = Math.max(1, Math.ceil(junk.length / 3)); for (const q of junk.slice(0, k).sort((a, b) => b.i - a.i)) c.bags.splice(q.i, 1); r.bagFull = false; log('Bags are full - threw away ' + k + ' junk item' + (k > 1 ? 's' : '') + '.'); } }
