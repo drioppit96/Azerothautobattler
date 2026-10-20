@@ -276,8 +276,9 @@ function tacInterrupt(c, m, n) {
   if (!m.cast) return; m.cast = null; m.sgcd = G.gameTime + 4; fx(m.x, m.y, 'interrupted', '#ffb36b');
 }
 /* items */
-function tacItem(c, k) {
-  const r = rt(c); let best = -1, bv = k === '#hpmin' || k === '#mpmin' ? Infinity : -1;
+/* the bag slot of the item an item action uses (-1: none in the bags) */
+function tacItemFind(c, k) {
+  let best = -1, bv = k === '#hpmin' || k === '#mpmin' ? Infinity : -1;
   c.bags.forEach((s, i) => {
     const it = itemRow(s.id); if (!it || (it.rl || 0) > c.level) return;
     if (k === '#hp' || k === '#hpmin' || k === '#stone') {
@@ -291,6 +292,10 @@ function tacItem(c, k) {
       if (k === '#bomb' && u.kind === 'bomb') { const v = u.hi; if (v > bv) { bv = v; best = i; } }
     }
   });
+  return best;
+}
+function tacItem(c, k) {
+  const r = rt(c); const best = tacItemFind(c, k);
   if (best < 0) return false;
   if (k === '#hp' || k === '#hpmin') { if ((r.potionCd || 0) > G.gameTime) return false; return useItem(c, best, true) !== false; }
   if (k === '#stone') { r.icd = r.icd || {}; if ((r.icd.stone || 0) > G.gameTime) return false; const s = charStats(c); const u = useInfo(c.bags[best].id); const v = irnd(u.lo, u.hi); c.hp = Math.min(s.maxHp, c.hp + v); r.icd.stone = G.gameTime + 120; fx(c.pos.x, c.pos.y, '+' + v, '#5ee07a'); log('Used ' + itemName(c.bags[best].id) + ' (+' + v + ' health).'); removeItem(c, c.bags[best].id, 1); return true; }
