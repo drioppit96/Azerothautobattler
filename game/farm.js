@@ -198,7 +198,7 @@ function farmText(c, o) {
 /* idle: start farming by itself (Automation), at most once a minute */
 function farmIdle(c) {
   const f = c.farm; if (!f || !f.idle) return; const r = rt(c);
-  if (G.gameTime - (r.farmT || -1e9) < 60) return; r.farmT = G.gameTime;
+  if (G.gameTime - (r.farmT || -1e9) < 60 || (r.idleUntil || 0) > G.gameTime) return; r.farmT = G.gameTime;      // not right after Stop
   if (typeof groupOf === 'function' && groupOf(c) && !isLeader(c)) return;
   orderFarm(c, f.kind, f.item, true);
 }

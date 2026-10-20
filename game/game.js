@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 q (craft how many)';
+const GAME_VERSION = '2026-10-20 r (group walking, stop all)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -351,8 +351,18 @@ function orderTravel(c, target, label) {
   log('Order: travel to ' + c.order.label + ' (' + Math.round(p.total) + ' yd, ' + fmtTime(p.total / c.speed / Math.max(1, G.state.settings.speed || 1)) + ', ' + p.via + ').');
   save(); renderOrder();
 }
+/* Stop: the order and everything going on or waiting (casting, crafting, disenchanting, eating, resting, taming, the order
+   to come back to); the idle automations (farming when idle, looking for a pet) wait 10 minutes */
 function stopOrder(c) {
-  if (c.order) { log('Order cancelled.'); c.order = null; const r = rt(c); r.mv = null; r.tgt = null; r.resting = false; save(); renderOrder(); }
+  const r = rt(c); const busy = !!(c.order || r.cast || r.craftQ || (r.deQueue && r.deQueue.length) || r.eating || r.drinking || r.resting || r.interact || r.tame || r.bandage);
+  c.order = null; delete c.resume; r.saved = null;
+  r.mv = null; r.tgt = null; r.resting = false; r.restFull = false; r.eating = null; r.drinking = null; r.bandage = null; r.interact = null; r.tame = null; r.queued = null; r.petGo = null;
+  if (r.cast && !r.flying && !r.riding) r.cast = null;
+  if (r.craftQ && typeof craftFinish === 'function') craftFinish(c);
+  if (r.deQueue) r.deQueue = [];
+  r.idleUntil = G.gameTime + 600;
+  if (busy) log('Stopped - everything cancelled.');
+  save(); renderOrder(); if (typeof SH !== 'undefined' && SH.open) renderSheet();
 }
 /* --------------------------------------------------------------------- UI */
 function renderChar() {

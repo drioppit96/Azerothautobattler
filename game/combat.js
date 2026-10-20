@@ -665,7 +665,9 @@ function steer(c, dx, dy, step) {
 /* ------------------------------------------------------------ movement api */
 /* A movement plan {path, idx, done, total} is advanced by advance(); travel orders use the same record. */
 function advance(c, mv, dt) {
-  // stuck detection (steering around dangerous creatures can dead-end)
+  // stuck detection (steering around dangerous creatures can dead-end); a pause (a fight, resting, the group leader
+  // waiting for the others) is not being stuck: the check starts over after it
+  if (mv.lastT != null && G.gameTime - mv.lastT > 0.5) mv.chk = null; mv.lastT = G.gameTime;
   if (!mv.chk) mv.chk = { t: G.gameTime, x: c.pos.x, y: c.pos.y };
   else if (G.gameTime - mv.chk.t >= 4) {
     if (Math.hypot(c.pos.x - mv.chk.x, c.pos.y - mv.chk.y) < 6) { mv.blocked = true; return false; }

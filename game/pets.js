@@ -488,7 +488,7 @@ function tameCandidate(c, m) {
 }
 function petTameStep(c, dt) {
   const r = rt(c); const now = G.gameTime;
-  if (c.pet || !c.known || !c.known['Tame Beast'] || c.cfg.petTame === false || r.party || (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) { r.tame = null; return false; }
+  if (c.pet || !c.known || !c.known['Tame Beast'] || c.cfg.petTame === false || r.party || (r.idleUntil || 0) > now || (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) { r.tame = null; return false; }
   if (r.tame && (r.tame.m.st !== 'alive' || now - r.tame.t0 > 90)) { if (r.tame.m.st === 'alive') r.tame.m.banUntil = now + 300; r.tame = null; }
   if (!r.tame) {
     if (now - (r.tameLook || -99) < 5) return false; r.tameLook = now;
