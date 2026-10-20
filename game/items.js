@@ -33,7 +33,12 @@ function rtc(c) { return rt(c); }
 function itemRow(id) { return G.d.items.items[id] || null; }
 function lootRow(id) { return G.d.loot.items[id] || null; }
 function propOf(inst) { return inst && inst.rp ? G.d.items.random_props[inst.rp] || null : null; }
-function itemName(id, inst) { const r = itemRow(id); const l = lootRow(id); const base = r ? r.n : l ? l[0] : 'Item ' + id; const p = propOf(inst); return p ? base + ' ' + p.n : base; }
+function itemName(id, inst) { const r = itemRow(id); const l = lootRow(id); const base = r ? r.n : l ? l[0] : 'Item ' + id; const p = propOf(inst); const n = p ? base + ' ' + p.n : base; iNameSeen(n, id, p ? inst : null); return n; }
+/* the item names made lately: a log line that has one of them gets it as a link (game.js log) */
+function iNameSeen(n, id, inst) {
+  const M = G.inames || (G.inames = new Map()); if (M.has(n)) M.delete(n); M.set(n, { id, inst });
+  if (M.size > 400) M.delete(M.keys().next().value);
+}
 function itemQuality(id) { const r = itemRow(id); if (r) return r.q || 0; const l = lootRow(id); return l ? l[1] : 1; }
 function itemSell(id) {
   const r = itemRow(id); if (r && r.sp != null) { const k = buyCount(id); return k > 1 && vendorSold(id) ? Math.min(r.sp, Math.floor(itemBuy(id) / k / 4)) : r.sp; }

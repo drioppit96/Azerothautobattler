@@ -26,12 +26,35 @@ function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'
 /* the log: one per character (the one being simulated right now - G.logCtx - or the one you play) */
 function log(msg) {
   const c = G.logCtx || (G.state && G.state.activeId ? active() : null);
-  if (c) { G.logs = G.logs || {}; const L = (G.logs[c.id] = G.logs[c.id] || []); L.unshift([G.gameTime, msg]); if (L.length > 80) L.length = 80; if (!isActive(c)) return; }
+  // the items named in it (made by itemName just before): links in the rarity's colour, click for the tooltip
+  let links = null;
+  if (G.inames && G.inames.size) { msg = String(msg); for (const [nm, rec] of G.inames) if (nm.length > 2 && msg.indexOf(nm) >= 0) (links = links || []).push([nm, rec.id, rec.inst || null]); G.inames.clear(); }
+  if (c) { G.logs = G.logs || {}; const L = (G.logs[c.id] = G.logs[c.id] || []); L.unshift([G.gameTime, msg, links]); if (L.length > 80) L.length = 80; if (!isActive(c)) return; }
   const el = $('log'); if (!el) return; const d = document.createElement('div');
-  d.innerHTML = '<span class="t">' + fmtTime(G.gameTime) + '</span> ' + esc(msg);
+  d.innerHTML = '<span class="t">' + fmtTime(G.gameTime) + '</span> ' + logMsgHtml(msg, links); d._links = links;
   el.prepend(d); while (el.children.length > 80) el.removeChild(el.lastChild);
 }
-function renderLog() { const el = $('log'); const c = active(); if (!el || !c) return; el.innerHTML = ((G.logs && G.logs[c.id]) || []).map(([t, m]) => '<div><span class="t">' + fmtTime(t) + '</span> ' + esc(m) + '</div>').join(''); }
+function logMsgHtml(msg, links) {
+  let h = esc(msg); if (!links || !links.length) return h;
+  const order = links.map((l, i) => i).sort((a, b) => links[b][0].length - links[a][0].length);
+  for (const i of order) h = h.split(esc(links[i][0])).join('\u0001' + i + '\u0002');            // longest names first, then the shorter ones cannot hit inside them
+  return h.replace(/\u0001(\d+)\u0002/g, (_, i) => { const [nm, id] = links[+i]; return '<span class="ilog" data-ilog="' + i + '" style="color:' + (QUALITY_COLORS[itemQuality(id)] || '#fff') + '">[' + esc(nm) + ']</span>'; });
+}
+function renderLog() {
+  const el = $('log'); const c = active(); if (!el || !c) return;
+  const L = (G.logs && G.logs[c.id]) || [];
+  el.innerHTML = L.map(([t, m, links]) => '<div><span class="t">' + fmtTime(t) + '</span> ' + logMsgHtml(m, links) + '</div>').join('');
+  [...el.children].forEach((d, i) => { d._links = L[i] && L[i][2]; });
+}
+/* clicking an item in the log: its tooltip (another click anywhere closes it) */
+function bindLogLinks() {
+  const el = $('log'); if (!el || el._bound) return; el._bound = true;
+  el.addEventListener('click', (e) => {
+    const s = e.target.closest('[data-ilog]'); if (!s) return; const row = s.closest('#log > div'); const l = row && row._links && row._links[+s.dataset.ilog]; if (!l) return;
+    e.stopPropagation(); showItemTip(e, { inst: l[2] || { id: l[1], n: 1 }, where: 'info' }); G.logTip = true;
+  });
+  document.addEventListener('click', (e) => { if (G.logTip && !e.target.closest('[data-ilog]')) { G.logTip = false; hideItemTip(); } });
+}
 function isActive(c) { return !!(c && G.state && c.id === G.state.activeId); }
 /* the characters in the world right now: the one you play and the ones set to keep playing (Go) */
 function liveChars() {
@@ -46,7 +69,7 @@ function switchCharacter(id) {
   G.selected = null; if (SH.open) closeSheet(); hideMenu(); if (G.routeEdit) { G.routeEdit = null; if (typeof renderRouteBar === 'function') renderRouteBar(); }
   const uf = $('unitframes'); if (uf) uf._w = 0;
   ensureWorld(c.pos.map); loadGrid(c.pos.map); goToCharacter();
-  renderLog(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderSettingsCard(); renderAbar(); renderGroup();
+  renderLog(); bindLogLinks(); renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderSettingsCard(); renderAbar(); renderGroup();
   if (typeof meterReset === 'function') meterReset();
   log('Now playing ' + c.name + (c.order ? ' (' + orderText(c).t + ')' : '') + '.'); save(); renderCharSwitch();
 }
@@ -59,7 +82,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 c (crowd control, ranged pulls, stealth)';
+const GAME_VERSION = '2026-10-21 d (item links in the log)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -962,7 +985,7 @@ async function boot() {
     goToCharacter();
     loadGrid(c.pos.map);
     setSpeed(G.state.settings.speed === undefined ? 1 : G.state.settings.speed);
-    renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderSettingsCard(); bindCards(); bindSheet(); syncNodeToggle();
+    renderChar(); renderOrder(); renderInfo(null); renderGearCard(); renderQuests(); renderSettingsCard(); bindCards(); bindSheet(); bindLogLinks(); syncNodeToggle();
     METER.show = !!G.state.settings.meter; renderMeter(true); syncMeterBtn();
     bindGroupCard(); renderGroup();
     log('Welcome. ' + c.name + ' stands in ' + (G.map.name) + '. Click the map to give an order.');

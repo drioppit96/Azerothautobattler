@@ -611,3 +611,4 @@ label.chk.dim{opacity:.55}
 .dgcard .dgbtns button{flex:1}
 .dgcard .dgwide{width:100%}
 .dgcard[hidden]{display:none}
+#log .ilog{cursor:pointer;font-weight:600}#log .ilog:hover{text-decoration:underline}
