@@ -21,7 +21,7 @@ function gbankRemove(g, id, n) {
 function gbankAdd(g, id, n) {
   const st = itemStack(id);
   if (st > 1) for (const s of g.bank.items) { if (s.id === id && s.n < st && !s.rp) { const k = Math.min(st - s.n, n); s.n += k; n -= k; if (!n) return 0; } }
-  while (n > 0 && gbankFree(g) > 0) { const k = Math.min(st, n); g.bank.items.push(makeInst(id, k, true)); n -= k; }
+  while (n > 0) { const tab = gbSlotFor(g, id); if (!tab) break; const k = Math.min(st, n); const inst = makeInst(id, k, true); inst.gt = tab; g.bank.items.push(inst); n -= k; }        // into its own tab (guild.js)
   return n;
 }
 /* the crafters of a guild: one entry per character and crafting profession that has recipes */
@@ -136,7 +136,7 @@ function gcraftHtml(c) {
   h += '<div class="gtabs gctabs">' + crafters.map((x) => '<button class="mini' + (x.key === GC.sel ? ' on' : '') + '" data-gcsel="' + x.key + '"><b style="color:' + CLASS_COLOR[x.c.cls] + '">' + esc(x.c.name) + '</b> ' + esc(profName(x.skill)) + ' ' + profSkill(x.c, x.skill) + '</button>').join('') + '</div>';
   const cur = crafters.find((x) => x.key === GC.sel); const q = GC.q.trim().toLowerCase();
   h += '<div class="psearch"><input id="gcQ" type="search" placeholder="Search ' + esc(cur.c.name) + '\'s recipes..." value="' + esc(GC.q) + '"><label class="chk"><input type="checkbox" data-gccan="1"' + (GC.can ? ' checked' : '') + '> Only what there are materials for</label></div>';
-  h += '<div class="small muted">Materials come from the guild bank (' + g.bank.items.length + ' / ' + GUILD_BANK_SLOTS + ' slots), what is missing from ' + esc(c.name) + '\'s bags. ' + esc(cur.c.name) + ' makes it on its own; it goes into ' + esc(c.name) + '\'s bags.</div>';
+  h += '<div class="small muted">Materials come from the guild bank (' + g.bank.items.length + ' / ' + GB_TOTAL + ' slots), what is missing from ' + esc(c.name) + '\'s bags. ' + esc(cur.c.name) + ' makes it on its own; it goes into ' + esc(c.name) + '\'s bags.</div>';
   const list = cur.recipes.filter((sid) => recipeMatches(PD().recipes[sid], q) && (!GC.can || gcMakeable(g, c, PD().recipes[sid]) > 0));
   h += '<div class="gclist">';
   if (!list.length) h += '<div class="muted small">No recipe' + (q ? ' matches "' + esc(GC.q) + '"' : '') + (GC.can ? ' with materials in the guild bank' : '') + '.</div>';

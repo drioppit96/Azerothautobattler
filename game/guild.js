@@ -4,6 +4,47 @@
    200 slots plus money that every member can use at a banker. Also the sorting of bags, bank and guild bank. */
 
 const GUILD_BANK_SLOTS = 200;
+/* the guild bank's tabs: General (200 slots, and what does not fit in its own tab) and one of 98 slots for each kind of
+   thing - a deposit goes into the tab it belongs to by itself */
+const GB_TABS = [['gen', 'General', 200], ['leather', 'Leather', 98], ['cloth', 'Cloth', 98], ['ore', 'Ore & metal', 98], ['cooking', 'Cooking', 98],
+  ['ench', 'Enchanting', 98], ['gear', 'Gear', 98], ['recipe', 'Recipes', 98], ['cons', 'Consumables', 98]];
+const GB_CAP = Object.fromEntries(GB_TABS.map((t) => [t[0], t[2]]));
+const GB_TOTAL = GB_TABS.reduce((s, t) => s + t[2], 0);
+const GB_CLOTH = /(Cloth|Bolt of|Runecloth|Felcloth|Mooncloth|Spider's Silk|Coarse Thread|Fine Thread|Silken Thread|Heavy Silken Thread|Rune Thread)$|^Bolt of/;
+const GB_LEATHER = /(Leather|Hide|Scale|Scales|Pelt|Leather Scraps)$/;
+const GB_ORE = /( Ore| Bar|Rough Stone|Coarse Stone|Heavy Stone|Solid Stone|Dense Stone|Blasting Powder|Flux)$/;
+const GB_ENCH = /(Dust|Essence|Shard|Crystal|Rod)$/;
+/* the tab an item belongs to */
+function gbTabOf(id) {
+  G.gbTab = G.gbTab || {}; if (id in G.gbTab) return G.gbTab[id];
+  const it = itemRow(id); let t = 'gen'; const n = it ? it.n : '';
+  const reag = typeof profIndex === 'function' && PD() ? profIndex().reag[id] : null; const has = (sk) => !!(reag && reag.has(sk));
+  gbIndex();
+  if (id >= 9000000) t = 'ench';                                         // enchanting scrolls
+  else if (!it) t = 'gen';
+  else if (it.c === 9) t = 'recipe';
+  else if (it.c === 2 || it.c === 4 || it.c === 1 || (it.sl && it.sl.length && it.c !== 0)) t = 'gear';
+  else if (GB_CLOTH.test(n)) t = 'cloth';
+  else if (GB_LEATHER.test(n) || G.gbSkin.has(id)) t = 'leather';
+  else if (GB_ORE.test(n) || G.gbOre.has(id)) t = 'ore';
+  else if (G.gbHerb.has(id)) t = 'gen';                                    // herbs: no tab of their own
+  else if (has(185) || /^Raw |Meat$|Egg$|Flank$|Steak$|Spice|Wing$|Leg$|Tail$|Ribs$|Claw Meat|Thigh$|Snout$|Venison$|Fillet$/.test(n)) t = 'cooking';
+  else if (has(333) || (GB_ENCH.test(n) && (it.c === 7 || it.c === 15))) t = 'ench';
+  else if (it.c === 0) t = 'cons';
+  return (G.gbTab[id] = t);
+}
+/* the things only skinning and the ore veins give (for the names the patterns above do not catch) */
+function gbIndex() {
+  if (G.gbSkin) return; G.gbSkin = new Set(); G.gbOre = new Set(); G.gbHerb = new Set();
+  for (const s of G.d.skinning || []) if (s.kind === 'Skinning') for (const l of s.loot || []) G.gbSkin.add(l.item);
+  const P = G.d.prof, go = G.d.go; if (P && go) for (const e in P.nodes) { const g = go.objects[e]; for (const row of (g && go.loot[g[2]]) || []) (P.nodes[e][0] === 'ore' ? G.gbOre : G.gbHerb).add(row[0]); }
+}
+/* the tab an item sits in (its own, or General when its own was full) */
+function gbTabName(k) { const t = GB_TABS.find((x) => x[0] === k); return t ? t[1] : k; }
+function gbTabIn(s) { gbIndex(); return s.gt || gbTabOf(s.id); }
+function gbCount(g, tab) { let n = 0; for (const s of g.bank.items) if (gbTabIn(s) === tab) n++; return n; }
+/* where a new stack of the item goes: its own tab, else General; null when both are full */
+function gbSlotFor(g, id) { gbIndex(); const t = gbTabOf(id); if (gbCount(g, t) < GB_CAP[t]) return t; if (t !== 'gen' && gbCount(g, 'gen') < GB_CAP.gen) return 'gen'; return null; }
 const GUILD_RANKS = ['Guild Master', 'Officer', 'Member'];
 const EMBLEMS = ['⚔', '☠', '♛', '✦', '☀', '☾', '❖', '✠', '♞', '⚜', '☘', '✪', '⚒', '⚔︎', '❣', '✡', '☯', '❄', '♨', '☸'].filter((x, i, a) => a.indexOf(x) === i);
 const GCOLORS = ['#7a1010', '#b01e1e', '#d2691e', '#c9a646', '#e8d48a', '#2e6b2e', '#3fae5a', '#1c4f8a', '#3f7fd8', '#5b2c8a', '#9b4fd6', '#202020', '#5a5a5a', '#d8d8d8', '#6b4a2b', '#0f5b5b'];
@@ -67,18 +108,19 @@ function guildDisband(g, quiet) {
 }
 
 /* ------------------------------------------------------------------ guild bank (at any banker) */
-function gbankFree(g) { return GUILD_BANK_SLOTS - g.bank.items.length; }
+function gbankFree(g, id) { if (id != null) return gbSlotFor(g, id) ? 1 : 0; return GB_TOTAL - g.bank.items.length; }
 function gbankPut(c, idx) {
   const g = guildOf(c); const inst = c.bags[idx]; if (!g || !inst) return false;
   const st = itemStack(inst.id);
   if (st > 1 && !inst.rp) for (const s of g.bank.items) if (s.id === inst.id && s.n < st) { const k = Math.min(st - s.n, inst.n); s.n += k; inst.n -= k; if (!inst.n) break; }
-  if (inst.n > 0) { if (gbankFree(g) <= 0) { log('The guild bank is full.'); save(); refreshGear(); return false; } g.bank.items.push(inst); }
-  c.bags.splice(idx, 1); rt(c).bagFull = false; guildLog(g, c.name + ' deposited ' + itemName(inst.id, inst) + '.'); save(); refreshGear(); return true;
+  let tab = null;
+  if (inst.n > 0) { tab = gbSlotFor(g, inst.id); if (!tab) { log('The ' + gbTabName(gbTabOf(inst.id)) + ' tab and General of the guild bank are full.'); save(); refreshGear(); return false; } inst.gt = tab; g.bank.items.push(inst); }
+  c.bags.splice(idx, 1); rt(c).bagFull = false; guildLog(g, c.name + ' deposited ' + itemName(inst.id, inst) + (tab ? ' (' + gbTabName(tab) + ')' : '') + '.'); GUI.gbTab = tab || gbTabOf(inst.id); save(); refreshGear(); return true;
 }
 function gbankTake(c, i) {
   const g = guildOf(c); const inst = g && g.bank.items[i]; if (!inst) return;
   const ok = itemStack(inst.id) > 1 && !inst.rp ? addItem(c, inst.id, inst.n) : (bagFree(c) > 0 ? (c.bags.push(inst), true) : false);
-  if (!ok) { log('Bags are full.'); return; } g.bank.items.splice(i, 1); guildLog(g, c.name + ' took ' + (inst.n > 1 ? inst.n + ' x ' : '') + itemName(inst.id, inst) + '.'); save(); refreshGear();
+  if (!ok) { log('Bags are full.'); return; } delete inst.gt; g.bank.items.splice(i, 1); guildLog(g, c.name + ' took ' + (inst.n > 1 ? inst.n + ' x ' : '') + itemName(inst.id, inst) + '.'); save(); refreshGear();
 }
 function gbankMoney(c, v) {
   const g = guildOf(c); if (!g) return; v = Math.round(v);
@@ -142,12 +184,16 @@ function guildHtml(c, mode) {
     h += '<p>' + (rk === 0 ? '<button class="mini red" data-gdis="1">Disband the guild</button> ' : '') + (rk !== 0 || g.members.length === 1 ? '<button class="mini" data-gleave="1">Leave the guild</button>' : '') + '</p>';
   } else if (GUI.tab === 'bank') {
     const v = bankerNear(c);
-    h += '<div class="vhead">Guild bank <span class="muted small">' + g.bank.items.length + ' / ' + GUILD_BANK_SLOTS + '</span> &middot; ' + moneyHtml(g.bank.gold) + '</div>';
+    h += '<div class="vhead">Guild bank <span class="muted small">' + g.bank.items.length + ' / ' + GB_TOTAL + '</span> &middot; ' + moneyHtml(g.bank.gold) + '</div>';
     if (!v) h += '<div class="muted">The guild bank is used at a banker.</div><p><button class="act" data-bkgo="1">Go to the nearest banker</button></p>';
     else {
       h += '<div class="vbtns"><button class="mini" data-gsort="1">Sort</button> <span class="small">Money: <input type="number" min="0" id="gMoney" value="1" style="width:60px"> gold <button class="mini" data-gmon="1">Deposit</button>' + (rk <= 1 ? '<button class="mini" data-gmon="-1">Take</button>' : '') + '</span>' +
         ' <span class="muted small">Click an item in your bags to put it in, one here to take it out.</span></div>';
-      h += '<div class="grid gbgrid">'; for (let i = 0; i < GUILD_BANK_SLOTS; i++) { const s = g.bank.items[i]; h += s ? '<div class="slot" data-gb="' + i + '" data-iid="' + s.id + '">' + iconHtml(s) + '</div>' : '<div class="slot empty"></div>'; } h += '</div>';
+      const cur = GUI.gbTab && GB_CAP[GUI.gbTab] ? GUI.gbTab : 'gen';
+      h += '<div class="gbtabs">' + GB_TABS.map(([k, n, cap]) => { const used = gbCount(g, k); return '<button class="mini' + (k === cur ? ' on' : '') + (used >= cap ? ' full' : '') + '" data-gbtab="' + k + '">' + n + ' <span class="small">' + used + '/' + cap + '</span></button>'; }).join('') + '</div>';
+      const mine = []; g.bank.items.forEach((s, i) => { if (gbTabIn(s) === cur) mine.push([s, i]); });
+      h += '<div class="grid gbgrid">'; for (let k = 0; k < GB_CAP[cur]; k++) { const x = mine[k]; h += x ? '<div class="slot" data-gb="' + x[1] + '" data-iid="' + x[0].id + '">' + iconHtml(x[0]) + '</div>' : '<div class="slot empty"></div>'; } h += '</div>';
+      if (cur === 'gen') h += '<div class="small muted">General holds everything without a tab of its own (herbs, quest items ...) and what no longer fits in its own tab.</div>';
     }
   } else h += '<div class="glog small">' + ((g.log || []).slice().reverse().map((t) => '<div>' + esc(t) + '</div>').join('') || '<span class="muted">Nothing yet.</span>') + '</div>';
   return h + '</div>';
@@ -166,6 +212,7 @@ function guildClick(e) {
   if ((b = t.closest('[data-bkgo]'))) { orderNpc(c, 'bank'); closeSheet(); return true; }
   if (!bankerNear(c)) return false;
   if ((b = t.closest('[data-gsort]'))) { sortGuildBank(c); return true; }
+  if ((b = t.closest('[data-gbtab]'))) { GUI.gbTab = b.dataset.gbtab; renderSheet(); return true; }
   if ((b = t.closest('[data-gmon]'))) { gbankMoney(c, (+$('gMoney').value || 0) * 10000 * +b.dataset.gmon); return true; }
   if ((b = t.closest('[data-gb]'))) { gbankTake(c, +b.dataset.gb); return true; }
   if (SH.tab === 'gbank' && (b = t.closest('#sheetBags [data-idx]'))) { gbankPut(c, +b.dataset.idx); return true; }

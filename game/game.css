@@ -588,3 +588,4 @@ label.chk.dim{opacity:.55}
 #tacpop .tpitem:hover{background:#dcc597}
 #tacpop .tpitem .sic{width:20px;height:20px}
 @media (max-width:900px){.tacrow,.tactop{gap:6px}.tacrow{flex-direction:column}.tacspine{display:none}.tacbook{padding:10px}}
+.guild .gbtabs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.guild .gbtabs .on{background:#c9a646;color:#1a1409}.guild .gbtabs .full .small{color:#ff7060}.guild .gbtabs .on .small{color:#1a1409}
