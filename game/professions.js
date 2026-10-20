@@ -663,7 +663,7 @@ function profBar(c, id) { const s = profState(c).skills[id]; return '<div class=
 function reagHtml(c, r) { return (r.re || []).map(([it, n]) => { const have = bagCount(c, it); return '<span class="reag' + (have >= n ? '' : ' miss') + '" data-iid="' + it + '">' + esc(itemName(it)) + ' ' + Math.min(have, 999) + '/' + n + '</span>'; }).join(' '); }
 /* the professions window: every part is a drop-down section (click its title), a search over all recipes
    (recipe, item and reagent names) and a "can craft now" filter */
-const PROFUI = { q: '', can: false };
+const PROFUI = { q: '', can: false, cnt: {} };
 function profOpen(key, def) { const o = G.state.settings.profOpen || {}; return key in o ? o[key] : def; }
 function profSection(key, title, body, def, force) {
   const open = force || profOpen(key, def);
@@ -714,7 +714,8 @@ function professionsHtml(c) {
       const pid = r.cr ? r.cr[0] : r.ench ? scrollId(sid) : null; const it = pid ? itemRow(pid) : null;
       b += '<div class="rrow">' + (it && it.ic ? '<img class="sic" src="../icons/' + it.ic.toLowerCase() + '.jpg" alt="">' : '<span class="sic"></span>') +
         '<div class="rname"><b class="rc-' + col + '"' + (pid ? ' data-iid="' + pid + '"' : '') + '>' + esc(r.n) + '</b>' + (n ? ' <span class="muted">[' + n + ']</span>' : '') + '<div class="small">' + reagHtml(c, r) + '</div></div>' +
-        '<button class="mini" data-pcraft="' + sid + '"' + (n ? '' : ' disabled') + (r.ench ? ' title="Makes a scroll: use it on an item from the bags"' : '') + '>Craft</button>' +
+        '<input type="number" class="pcn" data-pcn="' + sid + '" min="1" max="' + Math.max(1, n) + '" value="' + Math.max(1, Math.min(PROFUI.cnt[sid] || 1, Math.max(1, n))) + '" title="How many to craft"' + (n ? '' : ' disabled') + '>' +
+        '<button class="mini" data-pcraft="' + sid + '"' + (n ? '' : ' disabled') + (r.ench ? ' title="Makes scrolls: use one on an item from the bags"' : ' title="Craft this many"') + '>Craft</button>' +
         '<button class="mini" data-pcraftall="' + sid + '"' + (n > 1 ? '' : ' disabled') + '>All</button></div>';
     }
     const waiting = c.bags.filter((x) => { const rc = recipeOf(x.id); return rc && rc.r.skill === id && !profState(c).recipes[rc.sid]; });
@@ -738,6 +739,7 @@ function professionsHtml(c) {
 }
 /* typing in the search box: the list follows at once, the box keeps the focus */
 function professionsInput(e) {
+  if (e.target.dataset && e.target.dataset.pcn) { PROFUI.cnt[e.target.dataset.pcn] = Math.max(1, Math.floor(+e.target.value || 1)); return true; }      // how many to craft (kept while the window redraws)
   if (e.target.id !== 'profSearch') return false;
   PROFUI.q = e.target.value; renderSheet(); return true;
 }
@@ -748,7 +750,7 @@ function professionsClick(e) {
   if (d.pall) { const o = G.state.settings.profOpen = {}; for (const k of ['mine', 'learn', 'fish', 'route'].concat(Object.keys(profState(c).skills).map((x) => 'r' + x))) o[k] = d.pall === '1'; save(); renderSheet(); return true; }
   if (d.ptrain) { orderTrainer(c, +d.ptrain); closeSheet(); return true; }
   if (d.punlearn) { if (confirm('Forget ' + profName(+d.punlearn) + ' and all its recipes?')) unlearnProfession(c, +d.punlearn); renderSheet(); return true; }
-  if (d.pcraft) { craft(c, +d.pcraft, 1); renderSheet(); return true; }
+  if (d.pcraft) { const inp = b.parentElement && b.parentElement.querySelector('[data-pcn]'); const k = Math.max(1, Math.floor(+(inp ? inp.value : PROFUI.cnt[d.pcraft]) || 1)); craft(c, +d.pcraft, Math.min(k, craftCount(c, +d.pcraft) || 1)); renderSheet(); return true; }
   if (d.pcraftall) { craft(c, +d.pcraftall, 999); renderSheet(); return true; }
   if (d.proute === 'edit') { routeEditStart('gather'); return true; }
   if (d.proute === 'clear') { profState(c).route = null; save(); renderSheet(); return true; }
