@@ -59,7 +59,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-20 n (all herbs, zones by level)';
+const GAME_VERSION = '2026-10-20 o (home in the capitals)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -505,6 +505,7 @@ function showMenu(sx, sy, sel) {
     const qs = (G.q.byGiver[sel.mob.e] || []).filter((q) => questAvailable(c, q));
     for (const q of qs.slice(0, 5)) { const why = questSupport(q); extra += '<button data-a="quest:' + q.id + '"' + (why ? ' disabled title="' + esc(why) + '"' : '') + '>Quest: ' + esc(q.title) + ' (' + q.level + ')</button>'; }
     const h9 = G.d.hostility.creatures[sel.mob.e];
+    if (typeof innkeepers === 'function' && innkeepers().some((v) => v.e === sel.mob.e) && innUsable(c, { e: sel.mob.e })) extra += '<button data-a="inn">' + (c.bind && c.bind.e === sel.mob.e ? 'Your home inn' : 'Make this inn your home (Hearthstone)') + '</button>';
     if (h9 && (h9[9] & 4 || (G.d.vendorItems && G.d.vendorItems[sel.mob.e]))) extra += '<button data-a="vendor">Go to vendor (buy / sell' + (h9[9] & 16384 ? ' / repair' : '') + ')</button>';
     const ready = Object.keys(c.quests).map((id) => G.q.byId[id]).filter((q) => q && q.turnin.some((t) => t[1] === sel.mob.e) && questDone(c, q));
     for (const q of ready) extra += '<button data-a="quest:' + q.id + '">Turn in: ' + esc(q.title) + '</button>';
@@ -528,6 +529,7 @@ function showMenu(sx, sy, sel) {
     else if (a === 'flyfrom') openFlightWindow(sel.id);
     else if (a === 'route' || a === 'kroute' || a === 'sroute') { const k = a === 'route' ? 'gather' : a === 'sroute' ? 'skin' : 'grind'; if (G.routeEdit !== k) routeEditStart(k); routeAddPoint(target); }
     else if (a === 'kill') orderKill(c, sel.mob);
+    else if (a === 'inn') { const v = innkeepers().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || innkeepers().find((x) => x.e === sel.mob.e); if (v && !(c.bind && c.bind.e === v.e)) orderInn(c, v); }
     else if (a === 'grindtype') orderGrind(c, target.x, target.y, 250, [sel.mob.e], title + ' near here');
     else if (a.startsWith('quest:')) orderQuest(c, +a.slice(6));
     else if (a === 'vendor') { const v = vendorList().find((x) => x.e === sel.mob.e && Math.hypot(x.x - sel.mob.x, x.y - sel.mob.y) < 5) || vendorList().find((x) => x.e === sel.mob.e); if (v) orderVendor(c, v); }

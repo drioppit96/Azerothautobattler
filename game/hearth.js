@@ -10,10 +10,13 @@ const HEARTHSTONE = 6948, HEARTH_SPELL = 8690, HEARTH_CD = 1800, HEARTH_CAST = 1
 /* the first home of each race: the inn of the first town (Goldshire, Razor Hill, Kharanos, Dolanaar, Brill, Bloodhoof) */
 const START_INN = { 1: 295, 2: 6928, 3: 1247, 4: 6736, 5: 5688, 6: 6747, 7: 1247, 8: 6928 };
 const NOT_INN = new Set([384, 1261, 3362, 3685, 4730, 4731, 7952, 7955, 9087]);
+/* the inns of the capitals (the zone map puts Ironforge in Dun Morogh and the Undercity in Tirisfal): their own names,
+   and only for their own side */
+const CAPITAL_INNS = { 6740: ['Stormwind', 'A'], 5111: ['Ironforge', 'A'], 6735: ['Darnassus', 'A'], 6929: ['Orgrimmar', 'H'], 6746: ['Thunder Bluff', 'H'], 6741: ['Undercity', 'H'] };
 function innkeepers() { if (!G.innList) G.innList = npcsWith(NPC_INNKEEPER, 'innNpcs').filter((v) => !NOT_INN.has(v.e)); return G.innList; }
 /* an innkeeper this character can talk to (not of the other faction) */
-function innUsable(c, v) { const b = behOf({ e: v.e }, c); return b === 'F' || b === 'N'; }
-function innZone(v) { const z = typeof zoneAt === 'function' ? zoneAt(v.map, v.x, v.y) : null; return (z && z.name) || (typeof zoneNameAt === 'function' && zoneNameAt({ map: v.map, x: v.x, y: v.y })) || (v.map === 0 ? 'Eastern Kingdoms' : v.map === 1 ? 'Kalimdor' : ''); }
+function innUsable(c, v) { const cap = CAPITAL_INNS[v.e]; if (cap) return cap[1] === charSide(c); const b = behOf({ e: v.e }, c); return b === 'F' || b === 'N'; }
+function innZone(v) { if (CAPITAL_INNS[v.e]) return CAPITAL_INNS[v.e][0]; const z = typeof zoneAt === 'function' ? zoneAt(v.map, v.x, v.y) : null; return (z && z.name) || (typeof zoneNameAt === 'function' && zoneNameAt({ map: v.map, x: v.x, y: v.y })) || (v.map === 0 ? 'Eastern Kingdoms' : v.map === 1 ? 'Kalimdor' : ''); }
 function innNearest(c, p) {
   let best = null, bd = Infinity;
   for (const v of innkeepers()) { if (v.map !== p.map || !innUsable(c, v)) continue; const d = Math.hypot(v.x - p.x, v.y - p.y) * (behOf({ e: v.e }, c) === 'F' ? 1 : 1.5); if (d < bd) { bd = d; best = v; } }
@@ -99,6 +102,9 @@ function hearthHtml(c) {
   const near = c.pos && innkeepers().find((v) => v.map === c.pos.map && innUsable(c, v) && Math.hypot(v.x - c.pos.x, v.y - c.pos.y) <= 8);
   if (near && (!c.bind || c.bind.e !== near.e || Math.abs(c.bind.x - near.x) > 1)) h += ' <button class="mini" data-hs="here">Make this inn your home</button>';
   h += '</div>';
+  // the capitals of its side: one click to go there and make it home
+  const caps = Object.entries(CAPITAL_INNS).filter(([, x]) => x[1] === charSide(c)).map(([e]) => innkeepers().find((v) => v.e === +e)).filter(Boolean);
+  if (caps.length) h += '<div class="hscity"><span class="small muted">Major cities:</span> ' + caps.map((v) => { const home = c.bind && c.bind.e === v.e; return '<button class="mini' + (home ? ' on' : '') + '" data-hs="city:' + v.e + '"' + (home ? ' disabled title="Your home now"' : ' title="Go to ' + esc(v.name) + ' and make ' + esc(innZone(v)) + ' your home"') + '>' + esc(innZone(v)) + (home ? ' (home)' : '') + '</button>'; }).join(' ') + '</div>';
   // every inn the character can use: this continent first, by distance
   const list = innkeepers().filter((v) => innUsable(c, v)).map((v) => ({ v, d: v.map === c.pos.map ? Math.hypot(v.x - c.pos.x, v.y - c.pos.y) : 1e7 + v.map }))
     .sort((a, b) => a.d - b.d);
@@ -115,6 +121,7 @@ function hearthClick(e) {
   const b = e.target.closest('[data-hs]'); if (!b) return false; const c = active();
   if (b.dataset.hs === 'use') { if (hearthUse(c)) closeSheet(); else renderSheet(); return true; }
   if (b.dataset.hs === 'here') { const v = innkeepers().find((x) => x.map === c.pos.map && innUsable(c, x) && Math.hypot(x.x - c.pos.x, x.y - c.pos.y) <= 8); if (v) hearthBindTo(c, v); renderSheet(); return true; }
+  if (b.dataset.hs.startsWith('city:')) { const v = innkeepers().find((x) => x.e === +b.dataset.hs.slice(5)); if (v && orderInn(c, v)) closeSheet(); return true; }
   if (b.dataset.hs === 'go') { const v = HS.pick && innByKey(HS.pick); if (v && orderInn(c, v)) { HS.pick = ''; closeSheet(); } return true; }
   return false;
 }

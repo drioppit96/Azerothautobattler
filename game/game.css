@@ -602,3 +602,4 @@ label.chk.dim{opacity:.55}
 .tacab .tabfoot{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px}
 @media (max-width:700px){.tacab .tarow{grid-template-columns:18px 30px 1fr}.tacab .tarow select,.tacab .tarow input[type=number],.tacab .tarow .pfill{grid-column:2 / 4}.tacab .tarow .updn{grid-column:3}}
 .beh{max-width:860px;margin:0 auto}
+.hearth .hscity{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0}.hearth .hscity .on{opacity:.7}
