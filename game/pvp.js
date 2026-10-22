@@ -240,6 +240,7 @@ function bgStep(B, dt) {
   for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgNearestGy(B, u.team, u.x, u.y); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; }
   const alive = B.units.filter((u) => u.alive);
   for (const u of alive) if (u.alive) bgUnitStep(B, u, dt, alive);
+  bgEffects(B, dt);
   bgObjectives(B, dt, T);
   // your characters: where their fighter is
   for (const u of B.units) if (u.c && rt(u.c).bg === B) {
@@ -256,33 +257,42 @@ function bgUnitStep(B, u, dt, alive) {
     else bgMove(u, u.hx, u.hy, dt, 1);
     return;
   }
+  // stunned, sheeped, feared, in Ice Block: a way out (trinket, racials, Blink ...) or wait / run
+  if (!bgCanAct(u)) { if (G.gameTime >= (u.boT || 0)) { u.boT = G.gameTime + 0.5; bgBreakOut(B, u); } if (!bgCanAct(u)) { bgHelpless(B, u, dt); u.healing = 0; return; } }
   const P = bgPlan(B, u); const A = P.anchor; const inA = (x) => !A || Math.hypot(x.x - A[0], x.y - A[1]) <= A[2];
-  // healers: someone of the team hurt near them
-  if (u.heal) {
-    const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * (x.carry ? 0.95 : 0.75) && bgDist(x, u) < 35).sort((a, b) => a.hp / a.maxhp - (a.carry ? 0.5 : 0) - b.hp / b.maxhp + (b.carry ? 0.5 : 0))[0];
-    if (h) { if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3)); h.hp += v; u.healed += v; } return; }
-  }
   // a target: the one the order names, else keep the one it has, else the enemy flag carrier first, else the nearest
-  let t = P.hunt && P.hunt.alive ? P.hunt : null;
-  if (!t && u.tgt && u.tgt.alive && !u.tgt.general && bgDist(u.tgt, u) < 45 && (!A || Math.hypot(u.tgt.x - A[0], u.tgt.y - A[1]) <= A[2] + 12)) t = u.tgt;
+  // (stealthed ones only seen up close, the sheeped and the ones in Ice Block / Divine Shield left alone)
+  const seen = (x) => (!x.stealth || bgDist(x, u) < 7) && !bgHas(x, 'incap') && !bgHas(x, 'immune');
+  let t = P.hunt && P.hunt.alive && seen(P.hunt) ? P.hunt : null;
+  if (!t && u.tgt && u.tgt.alive && !u.tgt.general && seen(u.tgt) && bgDist(u.tgt, u) < 45 && (!A || Math.hypot(u.tgt.x - A[0], u.tgt.y - A[1]) <= A[2] + 12)) t = u.tgt;
   if (!t) {
     let best = null, bd = P.range || 34;
-    for (const x of alive) { if (!x.alive || x.team === u.team || x.general || !inA(x)) continue; const d = bgDist(x, u) - (x.carry ? 25 : 0); if (d < bd) { bd = d; best = x; } }
+    for (const x of alive) { if (!x.alive || x.team === u.team || x.general || !inA(x) || !seen(x)) continue; const d = bgDist(x, u) - (x.carry ? 25 : 0); if (d < bd) { bd = d; best = x; } }
     t = best;
   }
   u.tgt = t;
+  // the class: abilities a few times a second (pvptactics.js)
+  if (G.gameTime >= (u.tacT || 0)) { u.tacT = G.gameTime + 0.35 + Math.random() * 0.2; bgBreakOut(B, u); bgTactics(B, u, t, P); if (!bgCanAct(u)) return; }
+  // healers: someone of the team hurt near them (not while silenced)
+  if (u.heal && bgCanCast(u)) {
+    const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * (x.carry ? 0.95 : 0.75) && bgDist(x, u) < 35).sort((a, b) => a.hp / a.maxhp - (a.carry ? 0.5 : 0) - b.hp / b.maxhp + (b.carry ? 0.5 : 0))[0];
+    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3) * bgHealMul(h)); h.hp += v; u.healed += v; u.healing = G.gameTime + 0.6; } return; }
+  }
   if (u.carry && t && bgDist(t, u) > 8) t = null;          // the flag carrier keeps running
-  if (t) {
+  if (t && bgKite(B, u, dt)) return;          // casters and hunters: step away from a slowed / frozen melee first
+  if (t && (u.form === 'travel' || u.form === 'wolf' || u.form === 'cheetah') && !u.carry) u.form = null;
+  if (t && !(u.form === 'travel' && u.carry)) {
     const d = bgDist(t, u); const range = u.ranged ? 26 : 4;
-    if (d > range) bgMove(u, t.x, t.y, dt, range - 1); else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));
+    if (d > range) bgMove(u, t.x, t.y, dt, range - 1); else if (u.ranged && !bgCanCast(u) && [5, 8, 9].includes(u.cls)) bgMove(u, t.x, t.y, dt, 3); else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));
     return;
   }
   const g = P.goal; if (g) bgMove(u, g[0] + (g[2] ? 0 : u.jx), g[1] + (g[2] ? 0 : u.jy), dt, 1);
 }
-function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * (u.carry ? 1.25 : 1) * dt); /* a flag carrier runs a bit faster */ u.x += dx / d * s; u.y += dy / d * s; }
+function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * bgSpeedMul(u) * dt); /* forms, Sprint, slows and roots (pvptactics.js) */ if (s <= 0) return; u.x += dx / d * s; u.y += dy / d * s; }
 function bgHit(B, u, t, v) {
   if (!t.alive || !u.alive) return;          // died earlier in this same step
-  if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 90 ? 1 : held > 45 ? 0.6 : 0.35; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
+  if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 90 ? 1 : held > 45 ? 0.7 : 0.45; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
+  v = bgDmgMul(B, t, u, v); if (!(v > 0)) return;
   t.hp -= v; u.dmg += v; t.hit.add(u.id);
   if (u.c && isActive(u.c) && Math.random() < 0.06) fx(t.x, t.y, '' + Math.round(v * 20), '#fff');
   if (t.hp <= 0) bgDie(B, t, u);
@@ -290,7 +300,7 @@ function bgHit(B, u, t, v) {
 function bgUScale(u) { return Math.max(0.15, Math.min(1, (u.c ? u.c.level : u.level) / 60)); }
 function bgGive(u, h) { if (!h) return; u.honor += h; if (u.c) pvpGain(u.c, Math.round(h)); }
 function bgDie(B, t, killer) {
-  t.alive = false; t.hp = 0; t.deaths++; t.tgt = null; killer.kills++;
+  t.alive = false; t.hp = 0; t.deaths++; t.tgt = null; killer.kills++; t.st = {}; t.absorb = 0; t.form = null; t.stealth = false; t.brk = null;
   const now = G.gameTime; t.resAt = bgNextWave(B);
   // released: the spirit waits at its side's nearest graveyard for the next wave
   const gy = bgNearestGy(B, t.team, t.x, t.y); t.x = gy[0] + rnd(-3, 3); t.y = gy[1] + rnd(-3, 3);
@@ -433,7 +443,7 @@ function bgObjectives(B, dt, T) {
     for (const team of ['Alliance', 'Horde']) {
       const foe = team === 'Alliance' ? 'Horde' : 'Alliance'; const ff = def.flag[foe], mine = def.flag[team];
       // taking the enemy flag
-      if (!B.flag[foe].carrier) { const u = B.units.find((x) => x.alive && x.team === team && !x.carry && Math.hypot(x.x - ff[0], x.y - ff[1]) < 5); if (u) { u.carry = foe; u.carryT = G.gameTime; B.flag[foe].carrier = u.id; bgNote(B, u.name + ' (' + team + ') took the ' + foe + ' flag!'); } }
+      if (!B.flag[foe].carrier) { const u = B.units.find((x) => x.alive && x.team === team && !x.carry && Math.hypot(x.x - ff[0], x.y - ff[1]) < 5); if (u) { u.carry = foe; u.carryT = G.gameTime; u.stealth = false; if (u.form === 'cheetah') u.form = null; if (u.st) { u.st.immune = 0; u.st.iceblock = 0; } B.flag[foe].carrier = u.id; bgNote(B, u.name + ' (' + team + ') took the ' + foe + ' flag!'); } }
       // bringing it home while the own flag is there
       const car = B.units.find((x) => x.alive && x.carry === foe && x.team === team);
       if (car && !B.flag[team].carrier && Math.hypot(car.x - mine[0], car.y - mine[1]) < 6) {
@@ -531,7 +541,7 @@ function bgDraw(ctx, m) {
   ctx.save(); ctx.textAlign = 'center';
   const ring = (x, y, r, col, w) => { ctx.strokeStyle = col; ctx.lineWidth = w || 2; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.stroke(); };
   // objectives
-  if (B.key === 'wsg') for (const t of ['Alliance', 'Horde']) { const f = B.def.flag[t]; const [x, y] = w2s(f[0], f[1]); bgFlagIcon(ctx, x, y, BG_TEAM_COL[t], !B.flag[t].carrier); }
+  if (B.key === 'wsg') for (const t of ['Alliance', 'Horde']) { const f = B.def.flag[t]; const [x, y] = w2s(f[0], f[1]); bgFlagIcon(ctx, x, y, BG_TEAM_COL[t], !B.flag[t].carrier, 1.4); }
   const pts = B.key === 'ab' ? B.nodes : B.key === 'av' ? B.gys : [];
   ctx.font = 'bold 10px Segoe UI';
   for (const n of pts) {
@@ -545,21 +555,42 @@ function bgDraw(ctx, m) {
     for (const u of B.units) if (!u.alive && !u.general) { const g = bgNearestGy(B, u.team, u.x, u.y); const k = g[0] + ',' + g[1] + u.team; const e = at.get(k) || { x: g[0], y: g[1], n: 0, t: u.team }; e.n++; at.set(k, e); }
     ctx.font = 'bold 10px Segoe UI'; ctx.lineWidth = 3;
     for (const e of at.values()) { const [x, y] = w2s(e.x, e.y); const s = e.n + ' dead \u00b7 ' + wv + 's'; ctx.strokeStyle = '#000'; ctx.strokeText(s, x, y + 20); ctx.fillStyle = BG_TEAM_COL[e.t]; ctx.fillText(s, x, y + 20); } }
-  // the fighters (your own characters are drawn by the map itself)
+  bgDrawGround(ctx, B);
+  // the fighters (your own characters are drawn by the map itself): bigger icons, and the ones on top of each other
+  // spread a little on screen only (their places in the battleground stay the same)
+  const R = Math.max(10, Math.min(20, bgPpy() * 4.5)); const pos = bgLayout(B, R);
   for (const u of B.units) {
-    if (!u.alive || (u.c && rt(u.c).bg === B)) continue;
-    const [x, y] = w2s(u.x, u.y); const R = u.general ? 10 : 6;
-    if (!drawClassIcon(ctx, u.cls, x, y, R)) { ctx.fillStyle = BG_TEAM_COL[u.team]; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.3); ctx.fill(); }
-    ring(x, y, R + 1.5, BG_TEAM_COL[u.team], u.general ? 3 : 2);
-    ctx.fillStyle = '#000'; ctx.fillRect(x - 8, y - R - 6, 16, 3); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 8, y - R - 6, 16 * u.hp / u.maxhp, 3);
-    if (u.carry) bgFlagIcon(ctx, x + 7, y - 9, BG_TEAM_COL[u.carry], true, 0.7);
+    if (!u.alive) continue; const p = pos.get(u); if (!p) continue; const [x, y] = p; const own = u.c && rt(u.c).bg === B;
+    if (own) { bgDrawStatus(ctx, u, x, y, R); continue; }
+    const r = u.general ? R + 5 : R;
+    ctx.globalAlpha = u.stealth ? 0.4 : 1;
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 6.3); ctx.fill();
+    if (!drawClassIcon(ctx, u.cls, x, y, r)) { ctx.fillStyle = BG_TEAM_COL[u.team]; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fill(); }
+    ring(x, y, r + 1.5, BG_TEAM_COL[u.team], u.general ? 3.5 : 2.5);
+    if (u.heal) { ctx.fillStyle = '#000'; ctx.fillRect(x + r - 5, y + r - 5, 8, 8); ctx.fillStyle = '#5eff7a'; ctx.fillRect(x + r - 4, y + r - 2, 6, 2); ctx.fillRect(x + r - 2, y + r - 4, 2, 6); }
+    const bw = r * 2.4; ctx.fillStyle = '#000'; ctx.fillRect(x - bw / 2 - 1, y - r - 8, bw + 2, 5); ctx.fillStyle = u.team === B.side ? '#3fae5a' : '#d64a3a'; ctx.fillRect(x - bw / 2, y - r - 7, bw * Math.max(0, u.hp / u.maxhp), 3);
+    ctx.globalAlpha = 1;
+    bgDrawStatus(ctx, u, x, y, r);
+    if (u.carry) bgFlagIcon(ctx, x + r * 0.8, y - r - 4, BG_TEAM_COL[u.carry], true, 0.9);
   }
   // what is picked in the raid panel: a gold ring
-  if (RAID.show && B.side) { const sl = RAID.sel; ctx.strokeStyle = '#ffd866'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2]);
-    for (const u of B.units) if (u.alive && u.team === B.side && !u.general && (sl.kind === 'unit' ? String(u.id) === sl.id : sl.kind === 'grp' ? u.grp === +sl.id : false)) { const [x, y] = w2s(u.x, u.y); ctx.beginPath(); ctx.arc(x, y, 11, 0, 6.3); ctx.stroke(); }
+  if (RAID.show && B.side) { const sl = RAID.sel; ctx.strokeStyle = '#ffd866'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+    for (const u of B.units) if (u.alive && u.team === B.side && !u.general && (sl.kind === 'unit' ? String(u.id) === sl.id : sl.kind === 'grp' ? u.grp === +sl.id : false)) { const p = pos.get(u); if (!p) continue; ctx.beginPath(); ctx.arc(p[0], p[1], R + 6, 0, 6.3); ctx.stroke(); }
     ctx.setLineDash([]); }
   for (const u of B.units) if (u.c && u.carry && u.alive) { const [x, y] = w2s(u.x, u.y); bgFlagIcon(ctx, x + 9, y - 12, BG_TEAM_COL[u.carry], true, 0.7); }
   ctx.restore();
+}
+/* where each fighter is drawn: its place on screen, pushed apart from the ones it overlaps (smoothly, a little) */
+function bgLayout(B, R) {
+  const pts = []; for (const u of B.units) if (u.alive) { const [x, y] = w2s(u.x, u.y); pts.push({ u, x, y, ox: 0, oy: 0, fix: !!(u.c && rt(u.c).bg === B) }); }
+  const D = R * 2.1;
+  for (let it = 0; it < 5; it++) for (let i = 0; i < pts.length; i++) { const a = pts[i];
+    for (let j = i + 1; j < pts.length; j++) { const b = pts[j]; const dx = b.x + b.ox - a.x - a.ox, dy = b.y + b.oy - a.y - a.oy; if (Math.abs(dx) >= D || Math.abs(dy) >= D) continue; const d = Math.hypot(dx, dy); if (d >= D) continue;
+      const nx = d > 0.01 ? dx / d : Math.cos(i * 2.4 + j), ny = d > 0.01 ? dy / d : Math.sin(i * 2.4 + j); const push = (D - d) / (a.fix || b.fix ? 1 : 2);
+      if (!a.fix) { a.ox -= nx * push; a.oy -= ny * push; } if (!b.fix) { b.ox += nx * push; b.oy += ny * push; } } }
+  const out = new Map(); const cap = R * 4;
+  for (const p of pts) { const m = Math.hypot(p.ox, p.oy); if (m > cap) { p.ox *= cap / m; p.oy *= cap / m; } const u = p.u; u.lx = (u.lx || 0) * 0.75 + p.ox * 0.25; u.ly = (u.ly || 0) * 0.75 + p.oy * 0.25; out.set(u, [p.x + u.lx, p.y + u.ly]); }
+  return out;
 }
 function bgFlagIcon(ctx, x, y, col, up, k) {
   k = k || 1; ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y + 9 * k); ctx.lineTo(x, y - 9 * k); ctx.stroke();
