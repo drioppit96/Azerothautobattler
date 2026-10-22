@@ -286,17 +286,22 @@ function bgUnitStep(B, u, dt, alive) {
   u.tgt = t;
   // the class: abilities a few times a second (pvptactics.js)
   if (G.gameTime >= (u.tacT || 0)) { u.tacT = G.gameTime + 0.35 + Math.random() * 0.2; bgBreakOut(B, u); bgTactics(B, u, t, P); if (!bgCanAct(u)) return; }
-  // healers: someone of the team hurt near them (not while silenced)
+  // in the middle of a cast: stands still until it is done (moving, a stun, silence or the target out of reach ends it)
+  if (u.cast && bgCastStep(B, u)) return;
+  // healers: someone of the team hurt near them (not while silenced) - heals have a cast time
   if (u.heal && bgCanCast(u)) {
     const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * (x.carry ? 0.95 : 0.75) && bgDist(x, u) < 35).sort((a, b) => a.hp / a.maxhp - (a.carry ? 0.5 : 0) - b.hp / b.maxhp + (b.carry ? 0.5 : 0))[0];
-    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3) * bgHealMul(h) * (B.dmgK || 1) * 0.85); h.hp += v; u.healed += v; u.healing = G.gameTime + 0.6; bgHealFx(B, u, h, v); } return; }
+    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else bgStartCast(u, h, true); return; }
   }
   if (u.carry && t && bgDist(t, u) > 8) t = null;          // the flag carrier keeps running
   if (t && bgKite(B, u, dt)) return;          // casters and hunters: step away from a slowed / frozen melee first
   if (t && (u.form === 'travel' || u.form === 'wolf' || u.form === 'cheetah') && !u.carry) u.form = null;
   if (t && !(u.form === 'travel' && u.carry)) {
     const d = bgDist(t, u); const range = u.ranged ? 26 : 4;
-    if (d > range) { if (d > 70) bgGo(B, u, t.x, t.y, dt, range - 1); else bgMove(u, t.x, t.y, dt, range - 1); } else if (u.ranged && !bgCanCast(u) && [5, 8, 9].includes(u.cls)) bgMove(u, t.x, t.y, dt, 3); else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));
+    if (d > range) { if (d > 70) bgGo(B, u, t.x, t.y, dt, range - 1); else bgMove(u, t.x, t.y, dt, range - 1); }
+    else if (u.ranged && !bgCanCast(u) && [5, 8, 9].includes(u.cls)) bgMove(u, t.x, t.y, dt, 3);
+    else if (u.ranged) bgStartCast(u, t, false);          // spells and shots: stand still and cast (pvp casts below)
+    else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));          // melee swings also on the move
     return;
   }
   const g = P.goal; if (g) bgGo(B, u, g[0] + (g[2] ? 0 : u.jx), g[1] + (g[2] ? 0 : u.jy), dt, 1);
@@ -343,19 +348,39 @@ function bgGo(B, u, gx, gy, dt, stop) {
   const pts = u.path.pts; while (pts.length && Math.hypot(pts[0][0] - u.x, pts[0][1] - u.y) < 9) pts.shift();
   if (pts.length) bgMove(u, pts[0][0], pts[0][1], dt, 0); else bgMove(u, gx, gy, dt, stop);
 }
-function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * bgSpeedMul(u) * dt); /* forms, Sprint, slows and roots (pvptactics.js) */ if (s <= 0) return; u.x += dx / d * s; u.y += dy / d * s; }
-function bgHit(B, u, t, v) {
+function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * bgSpeedMul(u) * dt); /* forms, Sprint, slows and roots (pvptactics.js) */ if (s <= 0) return; u.x += dx / d * s; u.y += dy / d * s; if (u.cast) u.cast = null; /* moving breaks a cast */ }
+/* casts: nobody casts on the move. [cast time, the time one cast stands for] - casters cast back to back (Frostbolt,
+   Shadow Bolt, Lightning Bolt, Wrath, Smite / Mind Blast); hunters aim their shot for half a second, then can move
+   until the next one; heals: Holy Light, Healing Wave, Greater Heal, Healing Touch (with the faster ones mixed in) */
+const BG_CAST = { 3: [0.5, 2.2], 5: [2.2, 2.2], 7: [2.5, 2.5], 8: [2.5, 2.5], 9: [2.5, 2.5], 11: [2, 2], 2: [2, 2] };
+const BG_HEAL_CAST = { 2: 2, 5: 2.5, 7: 2.5, 11: 2.5 };
+function bgStartCast(u, t, heal) {
+  if (G.gameTime < (u.nextAt || 0)) return;          // a hunter between its shots
+  const [ct, cyc] = heal ? [BG_HEAL_CAST[u.cls] || 2, BG_HEAL_CAST[u.cls] || 2] : BG_CAST[u.cls] || [2, 2];
+  u.cast = { t0: G.gameTime, end: G.gameTime + ct * rnd(0.9, 1.1), cyc, tgt: t, heal };
+}
+function bgCastStep(B, u) {
+  const c = u.cast; const t = c.tgt; const max = c.heal ? 42 : 40;
+  const ok = t && t.alive && bgCanAct(u) && (u.cls === 3 || bgCanCast(u)) && bgDist(t, u) <= max && (c.heal ? t.team === u.team : !bgHas(t, 'immune'));
+  if (!ok) { u.cast = null; return false; }
+  if (G.gameTime < c.end) return true;
+  u.cast = null; u.nextAt = G.gameTime + Math.max(0, c.cyc - (c.end - c.t0));
+  if (c.heal) { const v = Math.min(t.maxhp - t.hp, u.heal * c.cyc * rnd(0.8, 1.2) * bgHealMul(t) * (B.dmgK || 1) * 0.85); t.hp += v; u.healed += v; bgHealFx(B, u, t, v, true); }
+  else bgHit(B, u, t, u.dps * c.cyc * rnd(0.85, 1.15), true);
+  return true;
+}
+function bgHit(B, u, t, v, cast) {
   if (!t.alive || !u.alive) return;          // died earlier in this same step
   if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 100 ? 0.9 : held > 50 ? 0.5 : 0.28; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
   v = bgDmgMul(B, t, u, v * (B.dmgK || 1)); if (!(v > 0)) return;
-  t.hp -= v; u.dmg += v; t.hit.add(u.id); bgSwing(B, u, t, v);
+  t.hp -= v; u.dmg += v; t.hit.add(u.id); bgSwing(B, u, t, v, cast);
   if (t.hp <= 0) bgDie(B, t, u);
 }
 /* what a fight looks like: every 1.5-2.5 s an attack shows - melee lunges, hunters shoot arrows, casters bolts of
    their school; the damage since the last one floats up for your own characters' fights */
 const BG_SCHOOL = { 2: 1, 5: 1, 7: 3, 8: 4, 9: 5, 11: 3 };
-function bgSwing(B, u, t, v) {
-  u.swD = (u.swD || 0) + v; if (G.gameTime < (u.swT || 0) || G.headless) return; u.swT = G.gameTime + 1.5 + Math.random();
+function bgSwing(B, u, t, v, cast) {
+  u.swD = (u.swD || 0) + v; if ((!cast && G.gameTime < (u.swT || 0)) || G.headless) return; u.swT = G.gameTime + 1.5 + Math.random();          /* a finished cast always shows */
   if (!G.map || G.map.map !== B.map || typeof vfxShot !== 'function') { u.swD = 0; return; }
   const mine = (u.c && rt(u.c).bg === B) || (t.c && rt(t.c).bg === B); const n = mine ? '' + Math.round(u.swD) : null; u.swD = 0;
   const col = t.c && rt(t.c).bg === B ? '#ff7a6a' : '#ffffff';
@@ -363,8 +388,8 @@ function bgSwing(B, u, t, v) {
   else if (u.cls === 3) vfxShot(u, t, 0, n, col, false, true);
   else vfxShot(u, t, u.cls === 8 && u.id.length % 2 ? 2 : BG_SCHOOL[u.cls] || 0, n, col, false, false);
 }
-function bgHealFx(B, u, h, v) {
-  u.hfD = (u.hfD || 0) + v; if (G.gameTime < (u.hfT || 0) || G.headless) return; u.hfT = G.gameTime + 2 + Math.random();
+function bgHealFx(B, u, h, v, cast) {
+  u.hfD = (u.hfD || 0) + v; if ((!cast && G.gameTime < (u.hfT || 0)) || G.headless) return; u.hfT = G.gameTime + 2 + Math.random();
   if (!G.map || G.map.map !== B.map || typeof vfxShot !== 'function') { u.hfD = 0; return; }
   const mine = (h.c && rt(h.c).bg === B); vfxShot(u, h, 3, mine ? '+' + Math.round(u.hfD) : null, '#5eff7a', false, false); u.hfD = 0;
 }
@@ -672,6 +697,7 @@ function bgDraw(ctx, m) {
     const bw = r * 2.4; ctx.fillStyle = '#000'; ctx.fillRect(x - bw / 2 - 1, y - r - 8, bw + 2, 5); ctx.fillStyle = u.team === B.side ? '#3fae5a' : '#d64a3a'; ctx.fillRect(x - bw / 2, y - r - 7, bw * Math.max(0, u.hp / u.maxhp), 3);
     ctx.globalAlpha = 1;
     if (typeof vfxUnitFlash === 'function') vfxUnitFlash(ctx, u, x, y, r);
+    if (u.cast && !(u.cls === 3 && u.cast.end - u.cast.t0 < 1)) { const p = Math.min(1, (G.gameTime - u.cast.t0) / Math.max(0.1, u.cast.end - u.cast.t0)); const bw2 = r * 2.4; ctx.fillStyle = '#000'; ctx.fillRect(x - bw2 / 2 - 1, y + r + 3, bw2 + 2, 4); ctx.fillStyle = u.cast.heal ? '#5eff7a' : '#ffd04a'; ctx.fillRect(x - bw2 / 2, y + r + 4, bw2 * p, 2); }
     bgDrawStatus(ctx, u, x, y, r);
     if (u.carry) bgFlagIcon(ctx, x + r * 0.8, y - r - 4, BG_TEAM_COL[u.carry], true, 0.9);
   }

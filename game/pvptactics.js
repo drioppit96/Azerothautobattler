@@ -34,6 +34,7 @@ function bgApply(B, src, t, kind, dur, name, opt) {
   st[kind] = Math.max(st[kind] || 0, now + dur);
   if (kind === 'fear' || kind === 'root') t.brk = { k: kind, left: t.maxhp * (kind === 'fear' ? 0.2 : 0.3) };          // breaks after this much damage
   if (kind === 'fear') t.fearFrom = src;
+  if (kind === 'stun' || kind === 'incap' || kind === 'fear' || (kind === 'silence' && t.cls !== 3)) t.cast = null;          // interrupted
   if (kind === 'stun' || kind === 'incap' || kind === 'fear') { t.stealth = false; if (t.form === 'travel' || t.form === 'wolf' || t.form === 'cheetah') t.form = null; }
   if (name) bgFx(B, t, name, BG_CC_COL[kind] || '#fff');
   return true;
@@ -85,13 +86,13 @@ function bgBreakOut(B, u) {
 function bgBlink(B, u) {
   bgUse(u, 'blink', 15); const near = bgNearestEnemy(B, u, 40); let dx, dy;
   if (u.carry) { const h = B.def.flag[u.team]; dx = h[0] - u.x; dy = h[1] - u.y; } else if (near) { dx = u.x - near.x; dy = u.y - near.y; } else { dx = 1; dy = 0; }
-  const d = Math.hypot(dx, dy) || 1; u.x += dx / d * 20; u.y += dy / d * 20; bgFx(B, u, 'Blink', '#9fd0ff');
+  const d = Math.hypot(dx, dy) || 1; u.x += dx / d * 20; u.y += dy / d * 20; u.cast = null; bgFx(B, u, 'Blink', '#9fd0ff');
 }
 function bgNearestEnemy(B, u, r, f) { let best = null, bd = r; for (const x of B.units) { if (!x.alive || x.team === u.team || x.general || (f && !f(x))) continue; const d = Math.hypot(x.x - u.x, x.y - u.y); if (d < bd) { bd = d; best = x; } } return best; }
 function bgEnemiesIn(B, u, r, f) { const out = []; for (const x of B.units) if (x.alive && x.team !== u.team && !x.general && Math.abs(x.x - u.x) < r && Math.abs(x.y - u.y) < r && Math.hypot(x.x - u.x, x.y - u.y) < r && (!f || f(x))) out.push(x); return out; }
 function bgAlliesIn(B, u, r, f) { const out = []; for (const x of B.units) if (x.alive && x.team === u.team && !x.general && Math.hypot(x.x - u.x, x.y - u.y) < r && (!f || f(x))) out.push(x); return out; }
 const bgMelee = (x) => !x.ranged;
-const bgCasting = (x) => x.heal && (x.healing || 0) > G.gameTime;
+const bgCasting = (x) => !!(x.cast && x.cls !== 3);          // casting a spell (a heal, a bolt): something to interrupt
 /* the enemy flag carrier (carrying our flag) */
 function bgTheirCarrier(B, u) { return B.key === 'wsg' ? B.units.find((x) => x.alive && x.carry === u.team) || null : null; }
 function bgOurCarrier(B, u) { return B.key === 'wsg' ? B.units.find((x) => x.alive && x.team === u.team && x.carry) || null : null; }
