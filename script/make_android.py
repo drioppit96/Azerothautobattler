@@ -64,7 +64,7 @@ def main():
     os.makedirs(out)
     log("game files: %d" % copy_tree(os.path.join(root, "game"), os.path.join(out, "game"), SKIP_GAME))
     log("game data: %d" % copy_tree(os.path.join(root, "gamedata"), os.path.join(out, "gamedata"), SKIP_DATA))
-    for d in ("maps_dungeon", "maps_hd", "icons"):
+    for d in ("maps_dungeon", "maps_hd", "icons", "charlooks"):
         if os.path.isdir(os.path.join(root, d)):
             log("%s: %d" % (d, copy_tree(os.path.join(root, d), os.path.join(out, d))))
     for d in UI_DIRS:

@@ -58,7 +58,7 @@ function ufSet(el, k, v, fn) { if (el['_v' + k] !== v) { el['_v' + k] = v; fn(v)
 /* a character's frame: portrait, name, level, health, power, combo points, cast bar, buffs */
 function ufFillChar(me, c) {
   const r = rt(c); const s = charStats(c);
-  ufSet(me, 'img', c.race + '_' + (c.gender || 0), () => { me._img.src = '../ui/CharacterFrame/TemporaryPortrait-' + (c.gender ? 'Female' : 'Male') + '-' + (RACE_PORTRAIT[c.race] || 'Orc') + '.png'; });
+  ufSet(me, 'img', c.race + '_' + (c.gender || 0) + (typeof lookKey === 'function' && c.look ? lookKey(c.race, c.gender, c.look) + ':' + LOOK.ver : ''), () => { me._img.src = typeof charPortrait === 'function' ? charPortrait(c) : '../ui/CharacterFrame/TemporaryPortrait-' + (c.gender ? 'Female' : 'Male') + '-' + (RACE_PORTRAIT[c.race] || 'Orc') + '.png'; });          // the chosen look (looks.js)
   ufSet(me, 'name', c.name, (v) => { me._name.textContent = v; });
   ufSet(me, 'lv', c.level, (v) => { me._lv.textContent = v; });
   ufSet(me, 'cls', c.cls, (v) => {          // the class: a small round icon at the start of the name plate

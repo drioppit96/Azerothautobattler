@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-21 p (melee spread out, app attack bars)';
+const GAME_VERSION = '2026-10-22 a (character looks, waiting for the extracted data)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -1009,6 +1009,7 @@ async function boot() {
     try { G.d.stances = await J('../gamedata/spell_stances.json'); } catch (e) { G.d.stances = null; }
     try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }
     try { G.d.go = await J('../gamedata/go_data.json'); } catch (e) { G.d.go = null; console.warn('go_data.json not found - quests with objects are not automated (run: py build_gamedata.py goquest)'); }
+    if (typeof looksInit === 'function') looksInit();          // character looks (looks.js), in the background
     G.d.graveyards = DATA.graveyards;
     G.spawnList = Object.entries(G.d.spawns.spawns).map(([e, l]) => [+e, l]);
     G.spawnMap = new Map(G.spawnList);

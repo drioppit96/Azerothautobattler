@@ -685,3 +685,17 @@ html.app #hud{bottom:auto;top:6px}
 
 /* the Android frames: the target's cast / attack bar under its frame, no icon */
 .uf.hud.ufenemy .ufcast:not(.onname){left:5%;right:31%;bottom:-17px;height:13px}
+
+/* ---------------------------------------------------------------- appearance (looks.js) */
+.cs-look{display:flex;gap:14px;align-items:center;margin:10px 0;padding:8px;border:1px solid var(--line);border-radius:6px;background:#15120d}
+.cs-lookpor,.lk-por{width:132px;height:132px;flex:none;border-radius:50%;overflow:hidden;border:3px solid var(--gold2);box-shadow:0 0 0 2px #000,0 4px 14px #000a;background:#0c0b0e;display:flex;align-items:center;justify-content:center}
+.cs-lookpor img,.lk-por img{width:100%;height:100%;display:block}
+.lk-wait{color:var(--gold2);font-size:20px}
+.lk-pick{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;max-width:280px}
+.lk-row{display:flex;align-items:center;gap:6px}.lk-lbl{flex:1;text-align:center;font-size:13px;white-space:nowrap}
+.lk-arr{width:30px;padding:3px 0}.lk-rnd{align-self:center;margin-top:3px}
+#lookwin{position:fixed;inset:0;background:#000a;z-index:60;display:flex;align-items:center;justify-content:center}#lookwin[hidden]{display:none}
+.lk-win{background:var(--panel);border:1px solid var(--gold2);border-radius:8px;padding:14px 16px;min-width:300px;max-width:96vw;box-shadow:0 10px 30px #000c}
+.lk-win h3{margin:0 0 10px;color:var(--gold)}.lk-body{display:flex;gap:14px;align-items:center}.lk-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.lk-open{display:block;margin:0 auto 6px}
+@media (max-width: 600px){.lk-body,.cs-look{flex-direction:column}}

@@ -157,7 +157,7 @@ function renderSheet() {
   const vs = SH.tab === 'vendor' && document.activeElement && document.activeElement.id === 'vsQ' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
   const left = SH.tab === 'vendor' ? '<div class="vendor">' + (typeof shopHtml === 'function' ? shopHtml(c) : '') + vendorHtml(c) + '</div>' : SH.tab === 'beh' ? behaviourHtml(c) : SH.tab === 'ah' ? ahHtml(c) : SH.tab === 'bank' ? '<div class="vendor">' + bankHtml(c) + '</div>' : SH.tab === 'trade' ? tradeHtml(c) :
     SH.tab === 'guild' ? guildHtml(c, 'info') : SH.tab === 'glog' ? guildHtml(c, 'log') : SH.tab === 'gbank' ? guildHtml(c, 'bank') : SH.tab === 'bags' ? bagSummaryHtml(c) : SH.tab === 'pet' ? petTabHtml(c) : SH.tab === 'rep' ? repTabHtml(c) :
-    '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
+    '<div class="doll"><div class="dcol">' + DOLL_LEFT.map((s) => slotHtml(c, s)).join('') + '</div><div class="dmid">' + (typeof looksReady === 'function' && looksReady() ? '<button class="mini lk-open" data-lookopen="1" title="Skin, face, hair, features - free">Appearance</button>' : '') + statsHtml(c) + '</div><div class="dcol">' + DOLL_RIGHT.map((s) => slotHtml(c, s)).join('') + '</div>' +
     '<div class="dbot">' + DOLL_BOTTOM.map((s) => slotHtml(c, s)).join('') + '</div></div>';
   $('sheetLeft').innerHTML = left;
   $('sheetBags').innerHTML = SH.tab === 'beh' ? '' : bagsHtml(c);
@@ -250,6 +250,7 @@ function bindSheet() {
       const n = L[(k + (e.target.id === 'sheetNext' ? 1 : -1) + L.length) % L.length]; const tab = SH.tab; switchCharacter(n.id); openSheet(tab); return;
     }
     const c = active();
+    if (e.target.closest('[data-lookopen]')) { openAppearance(c); return; }
     // mass disenchant: choosing items in the bags
     if (e.target.closest('[data-ccancel]')) { craftCancel(c); renderSheet(); return; }
     const dm = e.target.closest('[data-demode]');

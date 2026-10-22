@@ -31,11 +31,14 @@ function charScreen(first) {
     let el = $('charscreen');
     if (!el) { el = document.createElement('div'); el.id = 'charscreen'; document.body.appendChild(el); }
     el.hidden = false;
-    const st = { race: 2, cls: 1, gender: 0, name: randomName() };
+    const st = { race: 2, cls: 1, gender: 0, name: randomName(), look: null };
+    const newLook = () => { st.look = looksReady() ? lookRandom(st.race, st.gender) : null; };
+    looksInit().then(() => { if (looksReady() && !st.look) { newLook(); draw(); } });
+    let seenVer = LOOK.ver; const watch = setInterval(() => { if (el.hidden) { clearInterval(watch); return; } if (LOOK.ver !== seenVer) { seenVer = LOOK.ver; const p = el.querySelector('.cs-lookpor'); if (p && st.look) { const u = lookPortrait(st.race, st.gender, st.look); if (u) p.innerHTML = '<img src="' + u + '">'; } } }, 120);
     const list = () => {
       if (first || !G.state || !G.state.characters.length) return '';
       return '<div class="cs-list"><h3>Your characters</h3>' + G.state.characters.map((c) =>
-        '<div class="cs-char' + (c.id === G.state.activeId ? ' on' : '') + '"><img src="' + racePortrait(c.race, c.gender) + '"><div><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b><br>Level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</div>' +
+        '<div class="cs-char' + (c.id === G.state.activeId ? ' on' : '') + '"><img src="' + charPortrait(c) + '"><div><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b><br>Level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</div>' +
         '<button class="mini" data-play="' + c.id + '">' + (c.id === G.state.activeId ? 'Playing' : 'Play') + '</button><button class="mini red" data-del="' + c.id + '" title="Delete">&#10005;</button></div>').join('') +
         '<div class="muted" style="margin-top:6px">Only the character you play is in the world; the others wait where you left them.</div></div>';
     };
@@ -55,6 +58,10 @@ function charScreen(first) {
         h += '<button class="cs-class' + (st.cls === k ? ' on' : '') + '" data-cls="' + k + '"' + (ok ? '' : ' disabled title="A ' + RACE_NAMES[st.race] + ' cannot be a ' + CLASS_NAMES[k] + '"') + '><img src="../icons/' + CLASS_ICON[k] + '.jpg"><span style="color:' + (ok ? CLASS_COLOR[k] : '#666') + '">' + CLASS_NAMES[k] + '</span></button>';
       }
       h += '</div><div class="cs-desc">' + esc(CLASS_TEXT[st.cls]) + '</div>';
+      if (st.look) {          // the appearance: a big portrait and the choices (looks.js)
+        const u = lookPortrait(st.race, st.gender, st.look);
+        h += '<div class="cs-look"><div class="cs-lookpor">' + (u ? '<img src="' + u + '">' : '<div class="lk-wait">...</div>') + '</div>' + lookPickerHtml(st.race, st.gender, st.look) + '</div>';
+      }
       h += '<div class="cs-name"><input id="csName" maxlength="12" value="' + esc(st.name) + '"><button class="mini" data-rnd="1" title="Random name">&#9860;</button><button class="act" data-create="1">Create ' + esc(RACE_NAMES[st.race] + ' ' + CLASS_NAMES[st.cls]) + '</button></div>';
       h += '</div></div></div>';
       el.innerHTML = h;
@@ -62,9 +69,11 @@ function charScreen(first) {
     };
     el.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
-      if (d.race) { st.race = +d.race; draw(); }
+      if (d.race) { st.race = +d.race; newLook(); draw(); }
       else if (d.cls) { st.cls = +d.cls; draw(); }
-      else if (d.g != null) { st.gender = +d.g; draw(); }
+      else if (d.g != null) { st.gender = +d.g; newLook(); draw(); }
+      else if (d.lk && st.look) { const n = lookStep(st.race, st.gender, st.look, d.lk, +d.d); if (n) { st.look = n; draw(); } }
+      else if (d.lkrnd && st.look) { st.look = lookRandom(st.race, st.gender) || st.look; draw(); }
       else if (d.rnd) { st.name = randomName(); draw(); }
       else if (d.close) { el.hidden = true; }
       else if (d.play) { el.hidden = true; if (d.play !== G.state.activeId) switchCharacter(d.play); }
@@ -82,6 +91,7 @@ function charScreen(first) {
         const nm = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
         if (G.state && G.state.characters.some((x) => x.name === nm)) { alert('You already have a character called ' + nm + '.'); return; }
         const c = newCharacter(nm, st.race, st.cls, st.gender);
+        if (st.look) c.look = st.look;
         if (first) { el.hidden = true; resolve(c); return; }
         save(); G.state.characters.push(c); G.state.activeId = c.id; save(); location.reload();
       }
@@ -152,7 +162,7 @@ function renderCharSwitch(force) {
   }
   el._shape = shape;
   let h = '<div class="cw-win"><button class="mini cs-close" data-close="1">&#10005;</button><h2>Characters</h2>';
-  for (const x of parts) h += '<div class="cw-row' + (x.on ? ' on' : '') + '"><img src="' + racePortrait(x.c.race, x.c.gender) + '"><div class="cw-info">' + x.info + '</div><div class="cw-btns">' + x.btns + '</div></div>';
+  for (const x of parts) h += '<div class="cw-row' + (x.on ? ' on' : '') + '"><img src="' + charPortrait(x.c) + '"><div class="cw-info">' + x.info + '</div><div class="cw-btns">' + x.btns + '</div></div>';
   h += '<div class="cw-foot"><button class="mini" data-allgo="1">&#9654; All go</button><button class="mini" data-allpause="1">&#10074;&#10074; Pause all</button><button class="mini" data-manage="1">New / delete characters</button></div>' +
     '<div class="small muted" style="margin-top:6px">Characters set to Go keep playing - questing and leveling on their own - while you watch another one. Paused ones wait where they are. <span class="cw-run">' + foot + '</span></div></div>';
   el.innerHTML = h;
