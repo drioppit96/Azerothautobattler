@@ -39,7 +39,7 @@ function charScreen(first) {
       if (first || !G.state || !G.state.characters.length) return '';
       return '<div class="cs-list"><h3>Your characters</h3>' + G.state.characters.map((c) =>
         '<div class="cs-char' + (c.id === G.state.activeId ? ' on' : '') + '"><img src="' + charPortrait(c) + '"><div><b style="color:' + CLASS_COLOR[c.cls] + '">' + esc(c.name) + '</b><br>Level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls] + '</div>' +
-        '<button class="mini" data-play="' + c.id + '">' + (c.id === G.state.activeId ? 'Playing' : 'Play') + '</button><button class="mini red" data-del="' + c.id + '" title="Delete">&#10005;</button></div>').join('') +
+        (typeof looksReady === 'function' && looksReady() ? '<button class="mini" data-lookc="' + c.id + '" title="Change the look (skin, face, hair ...)">Appearance</button>' : '') + '<button class="mini" data-play="' + c.id + '">' + (c.id === G.state.activeId ? 'Playing' : 'Play') + '</button><button class="mini red" data-del="' + c.id + '" title="Delete">&#10005;</button></div>').join('') +
         '<div class="muted" style="margin-top:6px">Only the character you play is in the world; the others wait where you left them.</div></div>';
     };
     const draw = () => {
@@ -76,6 +76,7 @@ function charScreen(first) {
       else if (d.lkrnd && st.look) { st.look = lookRandom(st.race, st.gender) || st.look; draw(); }
       else if (d.rnd) { st.name = randomName(); draw(); }
       else if (d.close) { el.hidden = true; }
+      else if (d.lookc) { const c = G.state.characters.find((x) => x.id === d.lookc); if (c) { openAppearance(c); const w = setInterval(() => { const lw = $('lookwin'); if (!lw || lw.hidden) { clearInterval(w); draw(); } }, 300); } }
       else if (d.play) { el.hidden = true; if (d.play !== G.state.activeId) switchCharacter(d.play); }
       else if (d.del) {
         const c = G.state.characters.find((x) => x.id === d.del); if (!c) return;
