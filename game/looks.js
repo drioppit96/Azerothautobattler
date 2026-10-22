@@ -39,10 +39,8 @@ function lookOptions(race, sex, look) {
 }
 /* CharHairGeosets rows: [ID, race, sex, variation, geoset, bald] */
 function lookHairRows(R) { return (R.hairGeosets || []).map((r) => ({ var: r[3], geo: r[4], bald: r[5] })); }
-/* CharacterFacialHairStyles rows: [race, sex, variation, geoset x N] (or with an ID first) */
-function lookFacialRows(R) {
-  return (R.facialStyles || []).map((r) => { const off = r.length >= 9 && r[1] <= 8 && r[2] <= 1 ? 1 : 0; return { var: r[2 + off], geos: r.slice(3 + off) }; });
-}
+/* CharacterFacialHairStyles rows (as wow_charlooks.py keeps them): [race, sex, variation, geoset x 3] */
+function lookFacialRows(R) { return (R.facialStyles || []).map((r) => ({ var: r[2], geos: r.slice(3) })); }
 function lookValid(race, sex, look) {
   const o = lookOptions(race, sex, look); if (!o) return look;
   const pick = (v, list) => (list.includes(v) ? v : list[0] || 0);

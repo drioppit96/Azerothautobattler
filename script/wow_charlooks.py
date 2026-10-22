@@ -98,12 +98,17 @@ def char_sections(t):
     post = list(range(last + 1, t.fc))
     out = []
     for r in t.rows:
-        rec = {"race": r[pre[-3]], "sex": r[pre[-2]], "sec": r[pre[-1]],
-               "tex": [t.s(r[i]) for i in range(first, last + 1)]}
-        if len(post) >= 3:
-            rec["flags"], rec["var"], rec["col"] = r[post[0]], r[post[1]], r[post[2]]
-        elif len(post) == 2:
-            rec["flags"], rec["var"], rec["col"] = 0, r[post[0]], r[post[1]]
+        rec = {"tex": [t.s(r[i]) for i in range(first, last + 1)]}
+        if first >= 6:
+            # the 1.12 layout: ID, race, sex, section, variation, colour, textures x3, flags
+            rec["race"], rec["sex"], rec["sec"], rec["var"], rec["col"] = r[1], r[2], r[3], r[4], r[5]
+            rec["flags"] = r[post[0]] if post else 1
+        else:
+            # textures earlier: ID, race, sex, section, textures, flags, variation, colour
+            rec["race"], rec["sex"], rec["sec"] = r[pre[-3]], r[pre[-2]], r[pre[-1]]
+            rec["flags"] = r[post[0]] if len(post) >= 3 else 1
+            rec["var"] = r[post[-2]] if len(post) >= 2 else 0
+            rec["col"] = r[post[-1]] if post else 0
         out.append(rec)
     # sanity: playable races and sexes
     ok = sum(1 for x in out if x["race"] in RACES and x["sex"] in SEXES and 0 <= x["sec"] <= 4)
@@ -332,7 +337,8 @@ def main():
                 elif x["sec"] == 3:
                     R["hair"].append({"var": x["var"], "col": x["col"], "tex": t[0], "scalpLower": t[1] if len(t) > 1 else "", "scalpUpper": t[2] if len(t) > 2 else ""})
             R["hairGeosets"] = [r for r in hairgeo if len(r) >= 5 and r[1] == race and r[2] == sex]
-            R["facialStyles"] = [r for r in facial if len(r) >= 4 and ((r[0] == race and r[1] == sex) or (len(r) > 4 and r[1] == race and r[2] == sex))]
+            # CharacterFacialHairStyles 1.12: race, sex, variation, (3 unused), geosets x3 - kept as [race, sex, variation, g1, g2, g3]
+            R["facialStyles"] = [[r[0], r[1], r[2]] + list(r[-3:]) for r in facial if len(r) >= 6 and r[0] == race and r[1] == sex]
             looks["races"][key] = R
             rep("%s %s %s: %d pieces, skins %d, faces %d, facial hair %d, hair %d" % (key, rname, sname, len(plist), len(R["skins"]),
                 len(R["faces"]), len(R["facial"]), len(R["hair"])))
