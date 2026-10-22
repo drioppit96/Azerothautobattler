@@ -177,6 +177,7 @@ function bgStart(key, chars) {
     for (const t of [mine, theirs]) { const [n, x, y] = def.general[t]; const ex = B.units.filter((u) => u.team === t && !u.c); const avgHp = ex.reduce((a, u) => a + u.maxhp, 0) / Math.max(1, ex.length), avgD = ex.reduce((a, u) => a + u.dps, 0) / Math.max(1, ex.length);
       B.units.push(bgNewUnit({ id: 'gen' + t, name: n, team: t, general: true, cls: 1, level: 62, maxhp: Math.round(avgHp * 30), hp: Math.round(avgHp * 30), dps: avgD * 6, heal: 0, ranged: false, x, y, hx: x, hy: y, grp: 0 })); }
   }
+  B.dmgK = Math.max(1, Math.min(8, ref.maxhp / Math.max(1, ref.dps) / 10));          // battleground damage: an even fight one against one takes about 10 seconds
   G.bgs = G.bgs || []; G.bgs.push(B);
   for (const c of chars) bgEnterChar(B, c, B.units.find((x) => x.c === c));
   if (chars.some(isActive) && !G.headless) { if (typeof goToCharacter === 'function') goToCharacter(); if (G.state.settings.raidPanel !== false) RAID.show = true; }
@@ -240,6 +241,7 @@ function bgStep(B, dt) {
   for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgNearestGy(B, u.team, u.x, u.y); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; u.path = null; }
   const alive = B.units.filter((u) => u.alive);
   for (const u of alive) if (u.alive) bgUnitStep(B, u, dt, alive);
+  bgAiTick(B);
   bgEffects(B, dt);
   bgObjectives(B, dt, T);
   // your characters: where their fighter is
@@ -279,7 +281,7 @@ function bgUnitStep(B, u, dt, alive) {
   // healers: someone of the team hurt near them (not while silenced)
   if (u.heal && bgCanCast(u)) {
     const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * (x.carry ? 0.95 : 0.75) && bgDist(x, u) < 35).sort((a, b) => a.hp / a.maxhp - (a.carry ? 0.5 : 0) - b.hp / b.maxhp + (b.carry ? 0.5 : 0))[0];
-    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3) * bgHealMul(h)); h.hp += v; u.healed += v; u.healing = G.gameTime + 0.6; bgHealFx(B, u, h, v); } return; }
+    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3) * bgHealMul(h) * (B.dmgK || 1) * 0.85); h.hp += v; u.healed += v; u.healing = G.gameTime + 0.6; bgHealFx(B, u, h, v); } return; }
   }
   if (u.carry && t && bgDist(t, u) > 8) t = null;          // the flag carrier keeps running
   if (t && bgKite(B, u, dt)) return;          // casters and hunters: step away from a slowed / frozen melee first
@@ -336,8 +338,8 @@ function bgGo(B, u, gx, gy, dt, stop) {
 function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * bgSpeedMul(u) * dt); /* forms, Sprint, slows and roots (pvptactics.js) */ if (s <= 0) return; u.x += dx / d * s; u.y += dy / d * s; }
 function bgHit(B, u, t, v) {
   if (!t.alive || !u.alive) return;          // died earlier in this same step
-  if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 90 ? 1 : held > 45 ? 0.7 : 0.45; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
-  v = bgDmgMul(B, t, u, v); if (!(v > 0)) return;
+  if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 100 ? 0.9 : held > 50 ? 0.5 : 0.28; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
+  v = bgDmgMul(B, t, u, v * (B.dmgK || 1)); if (!(v > 0)) return;
   t.hp -= v; u.dmg += v; t.hit.add(u.id); bgSwing(B, u, t, v);
   if (t.hp <= 0) bgDie(B, t, u);
 }
@@ -384,7 +386,7 @@ function bgNote(B, s) { B.logs.unshift([G.gameTime, s]); if (B.logs.length > 8) 
 /* orders: saved per battleground - for each raid group and each of your characters (a strategy you set up once);
    the other players of your side can get one for this match. The enemy team plays by itself (Auto). */
 function bgStrat(key) { const S = G.state.bgStrat = G.state.bgStrat || {}; return (S[key] = S[key] || { grp: {}, chars: {} }); }
-function bgOrdOf(B, u) { if (u.team !== B.side || u.general) return 'auto'; const S = bgStrat(B.key); return (u.c && S.chars[u.c.id]) || B.uord[u.id] || S.grp[u.grp] || 'auto'; }
+function bgOrdOf(B, u) { if (u.general) return 'auto'; if (u.team !== B.side) return (B.ai && B.ai.grp[u.grp]) || 'auto'; const S = bgStrat(B.key); return (u.c && S.chars[u.c.id]) || B.uord[u.id] || S.grp[u.grp] || 'auto'; }
 function bgOrders(B) {
   const L = [['auto', 'Auto', 'Their own judgement (the default)'], ['roam', 'Roam', 'Hunt lone enemies all over the field'], ['focus', 'Focus their healers', 'Go after the enemy healers first, the nearest one']];
   if (B.key === 'wsg') L.push(['wsg:take', 'Capture the flag', 'Run into the enemy flag room, take the flag and bring it home'], ['wsg:esc', 'Defend the flag carrier', 'Stay with your flag carrier and keep it alive'],
@@ -401,12 +403,12 @@ function bgOrdShort(B, o) {
   return { roam: 'Roam', focus: 'Healers', 'wsg:take': 'Flag', 'wsg:esc': 'Escort', 'wsg:def': 'Defend', 'wsg:hunt': 'Hunt', 'wsg:mid': 'Mid', 'ab:cap': 'Capture', 'ab:defall': 'Defend', 'av:push': 'Push', 'av:gen': 'General', 'av:def': 'Defend' }[o] || o;
 }
 /* strategies: orders for the raid groups in one click */
-function bgStrategies(B) {
-  const n = bgGroups(B); const all = (o) => { const r = {}; for (let i = 1; i <= n; i++) r[i] = o; return r; };
+function bgStrategies(B, team) {
+  team = team || B.side; const n = bgGroups(B); const all = (o) => { const r = {}; for (let i = 1; i <= n; i++) r[i] = o; return r; };
   if (B.key === 'wsg') return [['Balanced', 'Everyone by their own judgement', {}], ['Offense', 'Group 1 takes the flag, group 2 guards the carrier', { 1: 'wsg:take', 2: 'wsg:esc' }],
-    ['Turtle', 'Group 1 guards the flag room, group 2 takes the flag', { 1: 'wsg:def', 2: 'wsg:take' }], ['Hunters', 'Group 1 hunts their carrier, group 2 takes the flag', { 1: 'wsg:hunt', 2: 'wsg:take' }]];
+    ['Turtle', 'Group 1 guards the flag room, group 2 takes the flag', { 1: 'wsg:def', 2: 'wsg:take' }], ['Hunters', 'Group 1 hunts their carrier, group 2 takes the flag', { 1: 'wsg:hunt', 2: 'wsg:take' }], ['All in', 'Everyone goes for the flag', { 1: 'wsg:take', 2: 'wsg:take' }]];
   if (B.key === 'ab') {
-    const base = B.def.base[B.side]; const near = B.def.nodes.map((x, i) => [i, Math.hypot(x[1] - base[0], x[2] - base[1])]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
+    const base = B.def.base[team]; const near = B.def.nodes.map((x, i) => [i, Math.hypot(x[1] - base[0], x[2] - base[1])]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
     return [['Balanced', 'Everyone by their own judgement', {}], ['Three bases', 'Take and hold the two bases nearest to you and the Blacksmith', { 1: 'ab:hold:' + near[0], 2: 'ab:hold:1', 3: 'ab:hold:' + (near[0] === 1 ? near[2] : near[1]) }],
       ['Five bases', 'Two groups capture, one defends', { 1: 'ab:cap', 2: 'ab:cap', 3: 'ab:defall' }], ['Roamers', 'One group hunts, one captures, one defends', { 1: 'roam', 2: 'ab:cap', 3: 'ab:defall' }]];
   }
@@ -424,6 +426,35 @@ function bgSetOrder(B, sel, o) {
 }
 function bgApplyStrategy(B, grp) { const S = bgStrat(B.key); S.grp = Object.assign({}, grp); S.chars = {}; B.uord = {}; for (const u of B.units) { u.node = null; u.roam = null; } save(); }
 
+/* the other side's commander: every 40-80 seconds it looks at the match and picks the strategy that seems to fit -
+   attack when behind or running out of time, guard a lead, hunt a carrier that has their flag, escort their own,
+   take more bases when holding few, rush the general when losing on reinforcements. Never the same for long. */
+function bgAiTick(B) {
+  const now = G.gameTime; if (now < (B.aiT || 0)) return; B.aiT = now + 40 + Math.random() * 40;
+  const T = B.side === 'Alliance' ? 'Horde' : 'Alliance', F = B.side; const S = bgStrategies(B, T); const w = {}; for (const x of S) w[x[0]] = 1;
+  const left = (B.def.time - (now - B.t0)) / B.def.time;
+  if (B.key === 'wsg') {
+    const lead = B.score[T] - B.score[F]; const myCar = B.units.some((x) => x.alive && x.team === T && x.carry), theirCar = B.units.some((x) => x.alive && x.team === F && x.carry);
+    w.Turtle = lead > 0 ? 3 : 0.3; w.Balanced = 1.5;
+    if (myCar) w.Offense += 3; if (theirCar) w.Hunters += 3;
+    if (lead < 0) { w.Offense += 1.5; w['All in'] = left < 0.4 ? 4 : 1; } else w['All in'] = 0.2;
+    if (lead <= 0 && left < 0.25) { w['All in'] += 3; w.Turtle = 0.1; }
+  } else if (B.key === 'ab') {
+    const mine = B.nodes.filter((n) => n.owner === T).length, lead = B.res[T] - B.res[F];
+    if (mine >= 3) { w['Three bases'] = 3; w.Roamers = 1.5; w['Five bases'] = lead < 0 ? 2 : 0.5; } else { w['Five bases'] = 4; w.Roamers = 1.5; w['Three bases'] = 1; }
+    w.Balanced = 1;
+  } else if (B.key === 'av') {
+    const lead = B.reinf[T] - B.reinf[F];
+    if (lead > 40) { w.Turtle = 2.5; w.Graveyards = 1.5; w.Rush = 0.5; } else if (lead < -40) { w.Rush = 3.5; w.Graveyards = 1.5; w.Turtle = 0.3; } else { w.Graveyards = 2; w.Rush = 1.2; w.Turtle = 0.8; }
+    w.Balanced = 1;
+  }
+  if (B.ai) w[B.ai.name] = (w[B.ai.name] || 1) * 0.6;          // likes a change
+  let tot = 0; for (const x of S) tot += w[x[0]] || 0; let r = Math.random() * tot, pick = S[0];
+  for (const x of S) { r -= w[x[0]] || 0; if (r <= 0) { pick = x; break; } }
+  if (B.ai && B.ai.name === pick[0]) return;
+  B.ai = { name: pick[0], grp: Object.assign({}, pick[2]) }; for (const u of B.units) if (u.team === T) { u.node = null; u.roam = null; u.path = null; }
+  if (B.aiSeen) bgNote(B, 'The ' + T + ' change their tactics: ' + pick[0].toLowerCase() + '.'); B.aiSeen = true;
+}
 /* what a fighter does now: { goal: [x, y, exact], anchor: [x, y, radius] (stays and fights there), hunt: a unit, range } */
 function bgPlan(B, u) {
   const def = B.def; const foe = u.team === 'Alliance' ? 'Horde' : 'Alliance'; let o = bgOrdOf(B, u);
@@ -734,7 +765,7 @@ function renderRaidCtl() {
   if (RAID.sel.kind === 'unit' && !mine.some((u) => String(u.id) === RAID.sel.id)) RAID.sel = { kind: 'raid', id: null };
   const sel = RAID.sel; const nm = (o) => (ords.find((x) => x[0] === o) || ['', 'Auto'])[1];
   let h = '<div class="rc-head"><b>Raid</b><span class="small muted">' + esc(B.def.name) + '</span><button class="mini" data-rcscore="1">Score</button><button class="mini" data-rcclose="1" title="Close (back to the log)">&#10005;</button></div>' +
-    '<div class="small muted">' + esc(bgScoreText(B)) + '</div>' + (B.over ? '' : '<div class="small rc-wave">Resurrection wave in ' + Math.ceil(bgNextWave(B) - G.gameTime) + 's' + bgDeadText(B, B.side) + '</div>');
+    '<div class="small muted">' + esc(bgScoreText(B)) + (B.ai ? ' &middot; enemy: ' + esc(B.ai.name.toLowerCase()) : '') + '</div>' + (B.over ? '' : '<div class="small rc-wave">Resurrection wave in ' + Math.ceil(bgNextWave(B) - G.gameTime) + 's' + bgDeadText(B, B.side) + '</div>');
   h += '<div class="rc-strat"><span class="small muted">Strategy</span>' + bgStrategies(B).map(([t, tip, g]) => '<button class="mini" data-rcstrat="' + esc(t) + '" title="' + esc(tip) + '">' + esc(t) + '</button>').join('') + '</div>';
   h += '<div class="rc-grid' + (n > 4 ? ' many' : '') + '">';
   for (let g = 1; g <= n; g++) {

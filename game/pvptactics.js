@@ -186,7 +186,7 @@ function bgTactics(B, u, t, P) {
       if (inCast && bgReady(u, 'coil')) { const x = (eCar && Math.hypot(eCar.x - u.x, eCar.y - u.y) < 30) ? eCar : u.hp < u.maxhp * 0.5 ? bgNearestEnemy(B, u, 20, (e) => e.tgt === u) : null; if (x) { bgUse(u, 'coil', 120); bgApply(B, u, x, 'fear', 3, 'Death Coil'); u.hp = Math.min(u.maxhp, u.hp + u.maxhp * 0.15); } }
       if (inCast && bgReady(u, 'fear')) { const x = bgEnemiesIn(B, u, 20, (e) => e.tgt === u && !e.ranged && !bgHas(e, 'fear'))[0]; if (x) { bgUse(u, 'fear', 8); bgApply(B, u, x, 'fear', 10, 'Fear'); } }
       if (bgReady(u, 'lock')) { const h = bgEnemiesIn(B, u, 30, bgCasting)[0]; if (h) { bgUse(u, 'lock', 24); bgApply(B, u, h, 'silence', 3, 'Spell Lock'); } }
-      if (inCast && t && dT < 30 && u.hp < u.maxhp * 0.6) u.hp = Math.min(u.maxhp, u.hp + u.dps * 0.25 * 0.4);          // Drain Life
+      if (inCast && t && dT < 30 && u.hp < u.maxhp * 0.6) u.hp = Math.min(u.maxhp, u.hp + u.dps * 0.25 * 0.4 * (B.dmgK || 1));          // Drain Life
       break;
     }
     case 11: {          // druid: Travel Form (the best flag carrier), Bear Form when caught, Entangling Roots, Bash, Barkskin
