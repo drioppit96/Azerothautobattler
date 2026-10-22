@@ -16,7 +16,12 @@ const AWAY_MIN = 2;              // real seconds of gap that are caught up at al
 /* rendering and saving are skipped while catching up (restored after) */
 const AWAY_QUIET = ['save', 'renderQuests', 'renderOrder', 'renderChar', 'refreshGear', 'renderGroup', 'renderSheet', 'renderInfo', 'renderAbar', 'renderCharSwitch', 'renderGearCard', 'renderMeter', 'renderUnitFrames'];
 
-function awayOn(c) { return cset(c, 'offlineProgress') !== false; }
+/* offline progress is one setting for all characters (an older save: off for any character = off) */
+function awayOn() {
+  const S = G.state.settings;
+  if (!S.awayMig) { S.awayMig = 1; if (G.state.characters.some((x) => x.auto && x.auto.offlineProgress === false)) S.offlineProgress = false; for (const x of G.state.characters) if (x.auto) delete x.auto.offlineProgress; }
+  return S.offlineProgress !== false;
+}
 function awayInDungeon(c) { return (typeof inDungeon === 'function' && inDungeon(c)) || !!(c.order && c.order.type === 'dungeon'); }
 /* who is played while away: the characters in the world; a group goes as one (its leader's setting; any of it in a
    dungeon keeps all of it waiting when the game was closed) */
@@ -37,6 +42,7 @@ let AWAY_BUSY = false;
 async function awayCatchUp(realSec, why) {
   if (AWAY_BUSY || !(realSec > AWAY_MIN)) return;
   const sp = G.state.settings.speed || 0; if (!sp) return;               // paused: nothing goes on
+  if (!awayOn()) { G.acc = 0; G.lastReal = Date.now(); return; }          // offline progress off: the game just waits (closed or in the background)
   let closed = why === 'closed';
   let game = closed ? realSec : realSec * sp;           // closed: real time; in the background: at the game's speed
   if (!closed && game > AWAY_FULL) closed = true;       // a long time in the background counts like the game being closed

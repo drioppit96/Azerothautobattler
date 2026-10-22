@@ -64,11 +64,11 @@ function vfxSpell(c, m, sp, text, crit) {
 function vfxOff(e, sx, sy) {
   const now = vnow(); let ox = 0, oy = 0;
   const lay = VFX.lay && VFX.lay.get(e); if (lay) { ox += lay[0]; oy += lay[1]; }          // pushed apart from what it stands on (vfxLayout)
-  const L = e._ln; if (L) { const p = (now - L.t) / 180; if (p >= 1) e._ln = null; else { const [tx, ty] = w2s(L.x, L.y); const dx = tx - sx, dy = ty - sy, n = Math.hypot(dx, dy) || 1; const k = Math.sin(Math.PI * p) * Math.min(6, n * 0.45); ox += dx / n * k; oy += dy / n * k; } }
-  const K = e._kb; if (K) { const p = (now - K.t) / 160; if (p >= 1) e._kb = null; else { const [tx, ty] = w2s(K.x, K.y); const dx = sx - tx, dy = sy - ty, n = Math.hypot(dx, dy) || 1; const k = Math.sin(Math.PI * Math.min(1, p * 1.4)) * 3; ox += dx / n * k; oy += dy / n * k; } }
+  const L = e._ln; if (L) { const p = (now - L.t) / 180; if (p >= 1 || p < 0) e._ln = null; else { const [tx, ty] = w2s(L.x, L.y); const dx = tx - sx, dy = ty - sy, n = Math.hypot(dx, dy) || 1; const k = Math.sin(Math.PI * p) * Math.min(6, n * 0.45); ox += dx / n * k; oy += dy / n * k; } }
+  const K = e._kb; if (K) { const p = (now - K.t) / 160; if (p >= 1 || p < 0) e._kb = null; else { const [tx, ty] = w2s(K.x, K.y); const dx = sx - tx, dy = sy - ty, n = Math.hypot(dx, dy) || 1; const k = Math.sin(Math.PI * Math.min(1, p * 1.4)) * 3; ox += dx / n * k; oy += dy / n * k; } }
   return [sx + ox, sy + oy];
 }
-function vfxFlashA(e) { if (!e || !e._hit) return 0; const p = (vnow() - e._hit) / 220; return p >= 1 ? 0 : 1 - p; }
+function vfxFlashA(e) { if (!e || !e._hit) return 0; const p = (vnow() - e._hit) / 220; if (p >= 1 || p < 0) { e._hit = 0; return 0; } return 1 - p; }          /* p < 0: a time from before a reload */
 /* the screen shake (draw() calls it right after the transform) */
 function vfxShake(ctx) {
   const S = VFX.shake; if (!S) return; const p = (vnow() - S.t) / 260; if (p >= 1) { VFX.shake = null; return; }

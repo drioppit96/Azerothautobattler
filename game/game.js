@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-22 j (BG combat visuals and targeting fixes)';
+const GAME_VERSION = '2026-10-22 k (red flash fix, offline progress for all)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -270,6 +270,7 @@ function migrate(c) {
   if (c._gear) { for (const k in c._gear.equip) c.equip[k] = makeInst(c._gear.equip[k], 1); for (const [id, n] of c._gear.bags) addItem(c, id, n); delete c._gear; }
   for (const k in c.equip) c.equip[k] = normInst(c.equip[k]);
   if (typeof ammoMigrate === 'function') ammoMigrate(c);
+  for (const k of ['_hit', '_ln', '_kb', '_aggro', '_aggroLast', '_img']) delete c[k];          // drawing state saved by an older version (a hit flash that never faded)
   if (typeof pvpMigrate === 'function') pvpMigrate(c);          // loaded in the middle of a battleground: back out (pvp.js)          // ammo stacks from before: one each, the best one worn
   for (const s of c.bags) { const m = maxDur(s.id); if (m && s.dur == null) s.dur = m; }
   c.cfg = Object.assign(defaultCfg(), c.cfg || {}); c.talents = c.talents || {}; c.taxi = c.taxi || {};
@@ -294,9 +295,10 @@ function baseStats(c) {
   const hp = base + Math.min(s[2], 20) + Math.max(0, s[2] - 20) * 10;
   return { str: s[0], agi: s[1], sta: s[2], int: s[3], spi: s[4], maxHp: hp, power: cs ? cs[1] : 0 };
 }
+const SAVE_SKIP = new Set(['_hit', '_ln', '_kb', '_aggro', '_aggroLast']);          // drawing state (vfx.js), never saved
 function save() {
   if (G.state) { G.state.gameTime = G.gameTime; G.state.lastReal = Date.now(); }       // lastReal: when the game was last running (away.js)       // order timers are in game time: keep the clock across sessions
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.state, (k, v) => (k === 'rt' || k === '_set' ? undefined : v))); } catch (e) { /* ignore */ }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.state, (k, v) => (k === 'rt' || k === '_set' || SAVE_SKIP.has(k) ? undefined : v))); } catch (e) { /* ignore */ }
 }
 function loadSave() {
   try { const t = localStorage.getItem(SAVE_KEY); if (t) return JSON.parse(t); } catch (e) { /* ignore */ }
@@ -456,20 +458,23 @@ const AUTO_GROUPS = [
   ['Travel', [['autoMount', 'Ride the mount on long ways (from level 40)', true], ['autoRiding', 'Learn riding and buy a mount by itself at level 40 and 60, when there is money for it', true]]],
   ['PvP', [['autoBg', 'Auto battlegrounds: queue by itself and again after every match (which one: PvP - Battlegrounds)']]],
   ['Fighting', [['rogueStealth', 'Rogues: slip into Stealth when not fighting (creatures rarely notice them)', true]]],
-  ['Away', [['offlineProgress', 'Offline progress: keeps playing while the game is closed - up to 2 hours, the first 30 minutes in full, the rest at half rate; no dungeons', true]]],
+  ['Away', [['offlineProgress', 'Offline progress (all characters): keeps playing while the game is closed or its tab is in the background - up to 2 hours, the first 30 minutes in full, the rest at half rate; no dungeons. Off: the game just waits', true]]],
 ];
+const AUTO_GLOBAL = new Set(['offlineProgress']);          // settings for all characters at once
 function renderSettingsCard() {
   const el = $('setCard'); if (!el) return; const c = active(); const on = cardOpen('auto', false);
   let h = cardHead('auto', 'Automation <span class="small muted">(' + esc(c.name) + ')</span>', false);
   if (on) {
     for (const [title, list] of AUTO_GROUPS) {
-      h += '<div class="aset"><h5>' + title + '</h5>' + list.map(([k, t, defTrue]) => '<label class="chk"><input type="checkbox" data-aset="' + k + '"' + ((defTrue ? cset(c, k) !== false : cset(c, k)) ? ' checked' : '') + '> ' + t + '</label>').join('') + '</div>';
+      h += '<div class="aset"><h5>' + title + '</h5>' + list.map(([k, t, defTrue]) => { const v = AUTO_GLOBAL.has(k) ? G.state.settings[k] : cset(c, k); return '<label class="chk"><input type="checkbox" data-aset="' + k + '"' + ((defTrue ? v !== false : v) ? ' checked' : '') + '> ' + t + '</label>'; }).join('') + '</div>';
     }
     if (typeof farmCardHtml === 'function') h += farmCardHtml(c);
     h += '<div class="small muted">Resting, food, potions, playstyle and abilities: <a href="#" data-abeh="1">Behaviour</a></div>';
   }
   el.innerHTML = h; el.dataset.def = '0';
-  el.onchange = (e) => { if (typeof farmCardChange === 'function' && farmCardChange(e)) return; const k = e.target.dataset && e.target.dataset.aset; if (!k) return; const a = active(); a.auto = a.auto || {}; a.auto[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
+  el.onchange = (e) => { if (typeof farmCardChange === 'function' && farmCardChange(e)) return; const k = e.target.dataset && e.target.dataset.aset; if (!k) return; const a = active();
+    if (AUTO_GLOBAL.has(k)) { G.state.settings[k] = e.target.checked; for (const x of G.state.characters) if (x.auto) delete x.auto[k]; save(); renderSettingsCard(); return; }          /* one setting for all the characters */
+    a.auto = a.auto || {}; a.auto[k] = e.target.checked; save(); if (k === 'sellWhiteGear' || k === 'autoEquip') refreshGear(); };
   el.onclick = (e) => { if (typeof farmCardClick === 'function' && farmCardClick(e)) return; if (e.target.dataset && e.target.dataset.abeh) { e.preventDefault(); openSheet('beh'); } };
 }
 function orderText(c) {
@@ -1076,6 +1081,7 @@ async function boot() {
     $('loading').style.display = 'none';
     G.lastReal = Date.now(); requestAnimationFrame(frame);
     window.G = G;
+    if (typeof awayOn === 'function') awayOn();          // (moves an older per-character offline progress setting to the one for all)
     if (lastReal && typeof awayCatchUp === 'function') awayCatchUp((Date.now() - lastReal) / 1000, 'closed');          // offline progress
   } catch (e) {
     $('loading').innerHTML = '<div><b style="color:#e0453a">Could not start</b><div id="loadmsg" style="max-width:520px">' + esc(e.message) + '<br><br>Start the game with start_game.bat (it serves your "wow excel" folder), then open http://localhost:8000/game/</div></div>';
