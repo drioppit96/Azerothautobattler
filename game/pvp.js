@@ -270,13 +270,16 @@ function bgUnitStep(B, u, dt, alive) {
     for (const x of alive) { if (!x.alive || x.team === u.team || x.general || !inA(x) || !seen(x)) continue; const d = bgDist(x, u) - (x.carry ? 25 : 0); if (d < bd) { bd = d; best = x; } }
     t = best;
   }
+  // someone right on it and hitting it: fight back (not the flag carrier; runners only when hurt) - unless what it is
+  // after is close by anyway
+  if (!u.carry && (!t || bgDist(t, u) > 12) && !(P.runner && u.hp > u.maxhp * 0.5)) { const on = bgNearestEnemy(B, u, 10, (x) => x.tgt === u && seen(x)); if (on) t = on; }
   u.tgt = t;
   // the class: abilities a few times a second (pvptactics.js)
   if (G.gameTime >= (u.tacT || 0)) { u.tacT = G.gameTime + 0.35 + Math.random() * 0.2; bgBreakOut(B, u); bgTactics(B, u, t, P); if (!bgCanAct(u)) return; }
   // healers: someone of the team hurt near them (not while silenced)
   if (u.heal && bgCanCast(u)) {
     const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * (x.carry ? 0.95 : 0.75) && bgDist(x, u) < 35).sort((a, b) => a.hp / a.maxhp - (a.carry ? 0.5 : 0) - b.hp / b.maxhp + (b.carry ? 0.5 : 0))[0];
-    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3) * bgHealMul(h)); h.hp += v; u.healed += v; u.healing = G.gameTime + 0.6; } return; }
+    if (h) { u.form = null; if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3) * bgHealMul(h)); h.hp += v; u.healed += v; u.healing = G.gameTime + 0.6; bgHealFx(B, u, h, v); } return; }
   }
   if (u.carry && t && bgDist(t, u) > 8) t = null;          // the flag carrier keeps running
   if (t && bgKite(B, u, dt)) return;          // casters and hunters: step away from a slowed / frozen melee first
@@ -335,9 +338,25 @@ function bgHit(B, u, t, v) {
   if (!t.alive || !u.alive) return;          // died earlier in this same step
   if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 90 ? 1 : held > 45 ? 0.7 : 0.45; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
   v = bgDmgMul(B, t, u, v); if (!(v > 0)) return;
-  t.hp -= v; u.dmg += v; t.hit.add(u.id);
-  if (u.c && isActive(u.c) && Math.random() < 0.06) fx(t.x, t.y, '' + Math.round(v * 20), '#fff');
+  t.hp -= v; u.dmg += v; t.hit.add(u.id); bgSwing(B, u, t, v);
   if (t.hp <= 0) bgDie(B, t, u);
+}
+/* what a fight looks like: every 1.5-2.5 s an attack shows - melee lunges, hunters shoot arrows, casters bolts of
+   their school; the damage since the last one floats up for your own characters' fights */
+const BG_SCHOOL = { 2: 1, 5: 1, 7: 3, 8: 4, 9: 5, 11: 3 };
+function bgSwing(B, u, t, v) {
+  u.swD = (u.swD || 0) + v; if (G.gameTime < (u.swT || 0) || G.headless) return; u.swT = G.gameTime + 1.5 + Math.random();
+  if (!G.map || G.map.map !== B.map || typeof vfxShot !== 'function') { u.swD = 0; return; }
+  const mine = (u.c && rt(u.c).bg === B) || (t.c && rt(t.c).bg === B); const n = mine ? '' + Math.round(u.swD) : null; u.swD = 0;
+  const col = t.c && rt(t.c).bg === B ? '#ff7a6a' : '#ffffff';
+  if (!u.ranged) { vfxLunge(u, t); vfxFlash(t); if (n) fx(t.x, t.y, n, col); }
+  else if (u.cls === 3) vfxShot(u, t, 0, n, col, false, true);
+  else vfxShot(u, t, u.cls === 8 && u.id.length % 2 ? 2 : BG_SCHOOL[u.cls] || 0, n, col, false, false);
+}
+function bgHealFx(B, u, h, v) {
+  u.hfD = (u.hfD || 0) + v; if (G.gameTime < (u.hfT || 0) || G.headless) return; u.hfT = G.gameTime + 2 + Math.random();
+  if (!G.map || G.map.map !== B.map || typeof vfxShot !== 'function') { u.hfD = 0; return; }
+  const mine = (h.c && rt(h.c).bg === B); vfxShot(u, h, 3, mine ? '+' + Math.round(u.hfD) : null, '#5eff7a', false, false); u.hfD = 0;
 }
 function bgUScale(u) { return Math.max(0.15, Math.min(1, (u.c ? u.c.level : u.level) / 60)); }
 function bgGive(u, h) { if (!h) return; u.honor += h; if (u.c) pvpGain(u.c, Math.round(h)); }
@@ -415,13 +434,14 @@ function bgPlan(B, u) {
     if (u.carry) return { goal: [myFlag[0], myFlag[1], true], range: 10 };
     const eCar = B.units.find((x) => x.alive && x.carry === u.team), mCar = B.units.find((x) => x.alive && x.carry === foe);
     if (o === 'auto') {
-      if (eCar && (u.role !== 'offense' || bgDist(eCar, u) < 120)) o = 'wsg:hunt';
+      const dc = eCar ? bgDist(eCar, u) : 1e9;
+      if (eCar && (u.role === 'defense' ? dc < 110 : u.role === 'mid' ? dc < 230 : dc < 60)) o = 'wsg:hunt';
       else o = u.role === 'offense' ? 'wsg:take' : u.role === 'defense' ? 'wsg:def' : mCar ? 'wsg:esc' : (u.jx > 0 ? 'wsg:take' : 'wsg:mid');
     }
-    if (o === 'wsg:take') { if (eCar && bgDist(eCar, u) < 40) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return mCar ? { goal: [mCar.x, mCar.y], anchor: [mCar.x, mCar.y, 35] } : { goal: [theirFlag[0], theirFlag[1], true], range: 9 }; }          /* runners: straight for the flag room */
+    if (o === 'wsg:take') { if (eCar && bgDist(eCar, u) < 40) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return mCar ? { goal: [mCar.x, mCar.y], anchor: [mCar.x, mCar.y, 35] } : { goal: [theirFlag[0], theirFlag[1], true], range: 9, runner: true }; }          /* runners: straight for the flag room */
     if (o === 'wsg:esc') { if (mCar) return { goal: [mCar.x + u.jx * 0.4, mCar.y + u.jy * 0.4, true], anchor: [mCar.x, mCar.y, 30] }; if (eCar) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return { goal: [theirFlag[0], theirFlag[1]] }; }
     if (o === 'wsg:def') { const g = { goal: [myFlag[0], myFlag[1]], anchor: [myFlag[0], myFlag[1], 45] }; if (eCar && bgDist(eCar, u) < 70) g.hunt = eCar; return g; }
-    if (o === 'wsg:hunt') return eCar ? { goal: [eCar.x, eCar.y, true], hunt: bgDist(eCar, u) < 30 ? eCar : null, range: 22 } : { goal: bgLanePoint(B, u, def.mid) };          /* the escort is in the way first */
+    if (o === 'wsg:hunt') return eCar ? { goal: [eCar.x, eCar.y, true], hunt: bgDist(eCar, u) < 35 ? eCar : null, range: 28 } : { goal: bgLanePoint(B, u, def.mid) };          /* the escort is in the way first */
     const mid = bgLanePoint(B, u, def.mid); return { goal: mid, anchor: [mid[0], mid[1], 70] };
   }
   if (B.key === 'ab') {
@@ -612,6 +632,7 @@ function bgDraw(ctx, m) {
     if (u.heal) { ctx.fillStyle = '#000'; ctx.fillRect(x + r - 5, y + r - 5, 8, 8); ctx.fillStyle = '#5eff7a'; ctx.fillRect(x + r - 4, y + r - 2, 6, 2); ctx.fillRect(x + r - 2, y + r - 4, 2, 6); }
     const bw = r * 2.4; ctx.fillStyle = '#000'; ctx.fillRect(x - bw / 2 - 1, y - r - 8, bw + 2, 5); ctx.fillStyle = u.team === B.side ? '#3fae5a' : '#d64a3a'; ctx.fillRect(x - bw / 2, y - r - 7, bw * Math.max(0, u.hp / u.maxhp), 3);
     ctx.globalAlpha = 1;
+    if (typeof vfxUnitFlash === 'function') vfxUnitFlash(ctx, u, x, y, r);
     bgDrawStatus(ctx, u, x, y, r);
     if (u.carry) bgFlagIcon(ctx, x + r * 0.8, y - r - 4, BG_TEAM_COL[u.carry], true, 0.9);
   }
@@ -625,13 +646,15 @@ function bgDraw(ctx, m) {
 /* where each fighter is drawn: its place on screen, pushed apart from the ones it overlaps (smoothly, a little) */
 function bgLayout(B, R) {
   const pts = []; for (const u of B.units) if (u.alive) { const [x, y] = w2s(u.x, u.y); pts.push({ u, x, y, ox: 0, oy: 0, fix: !!(u.c && rt(u.c).bg === B) }); }
-  const D = R * 2.1;
-  for (let it = 0; it < 5; it++) for (let i = 0; i < pts.length; i++) { const a = pts[i];
-    for (let j = i + 1; j < pts.length; j++) { const b = pts[j]; const dx = b.x + b.ox - a.x - a.ox, dy = b.y + b.oy - a.y - a.oy; if (Math.abs(dx) >= D || Math.abs(dy) >= D) continue; const d = Math.hypot(dx, dy); if (d >= D) continue;
-      const nx = d > 0.01 ? dx / d : Math.cos(i * 2.4 + j), ny = d > 0.01 ? dy / d : Math.sin(i * 2.4 + j); const push = (D - d) / (a.fix || b.fix ? 1 : 2);
+  const D = R * 1.25;          // icons may touch and overlap a bit; only the ones nearly on top of each other move
+  for (let it = 0; it < 2; it++) for (let i = 0; i < pts.length; i++) { const a = pts[i];
+    for (let j = i + 1; j < pts.length; j++) { const b = pts[j]; if (a.u.tgt === b.u || b.u.tgt === a.u) continue;          // fighting each other: they stay in touch
+      const dx = b.x + b.ox - a.x - a.ox, dy = b.y + b.oy - a.y - a.oy; if (Math.abs(dx) >= D || Math.abs(dy) >= D) continue; const d = Math.hypot(dx, dy); if (d >= D) continue;
+      const nx = d > 0.01 ? dx / d : Math.cos(i * 2.4 + j), ny = d > 0.01 ? dy / d : Math.sin(i * 2.4 + j); const push = (D - d) / 2 * 0.6;
       if (!a.fix) { a.ox -= nx * push; a.oy -= ny * push; } if (!b.fix) { b.ox += nx * push; b.oy += ny * push; } } }
-  const out = new Map(); const cap = R * 4;
-  for (const p of pts) { const m = Math.hypot(p.ox, p.oy); if (m > cap) { p.ox *= cap / m; p.oy *= cap / m; } const u = p.u; u.lx = (u.lx || 0) * 0.75 + p.ox * 0.25; u.ly = (u.ly || 0) * 0.75 + p.oy * 0.25; out.set(u, [p.x + u.lx, p.y + u.ly]); }
+  const out = new Map(); const cap = R * 0.9;
+  for (const p of pts) { const m = Math.hypot(p.ox, p.oy); if (m > cap) { p.ox *= cap / m; p.oy *= cap / m; } const u = p.u; u.lx = (u.lx || 0) * 0.8 + p.ox * 0.2; u.ly = (u.ly || 0) * 0.8 + p.oy * 0.2;
+    const q = typeof vfxOff === 'function' ? vfxOff(u, p.x + u.lx, p.y + u.ly) : [p.x + u.lx, p.y + u.ly]; out.set(u, q); }          /* + the lunge / knockback of the swings */
   return out;
 }
 function bgFlagIcon(ctx, x, y, col, up, k) {
