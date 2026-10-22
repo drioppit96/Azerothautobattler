@@ -716,11 +716,11 @@ html.app #hud{bottom:auto;top:6px}
 #btnRaid.on{background:var(--gold2);color:#1a1409}
 #groupCard .grp-sub{margin:6px 0 2px;color:var(--gold)}
 /* battleground raid panel */
-#raidCtl{position:absolute;left:8px;top:8px;width:430px;max-width:calc(100% - 16px);max-height:calc(100% - 60px);overflow:auto;background:#120e08ee;border:1px solid #6b5631;border-radius:7px;padding:6px 7px;z-index:7;font-size:12px;box-shadow:0 4px 16px #000a;user-select:none}
+#raidCtl{overflow:auto;font-size:12px;user-select:none;min-height:0}
 #raidCtl[hidden]{display:none}
 .rc-head{display:flex;gap:6px;align-items:center;margin-bottom:4px}.rc-head b{font:600 14px Georgia,serif;color:var(--gold)}.rc-head .small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rc-strat{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:5px}.rc-strat .small{margin-right:2px}
-.rc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.rc-grid.many{grid-template-columns:repeat(4,1fr)}
+.rc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}
 .rc-g{background:#0007;border:1px solid #3a2f1c;border-radius:4px;padding:2px}
 .rc-gh{font-size:11px;color:var(--gold);padding:1px 3px;cursor:pointer;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rc-gh em{color:#9fd0ff;font-style:normal}
 .rc-gh.sel,.rc-m.sel{outline:2px solid #ffd866;outline-offset:-1px}
@@ -744,6 +744,7 @@ table.bs{width:100%;border-collapse:collapse}
 .bs .bs-n{text-align:left}.bs td.bs-n{display:flex;align-items:center;gap:4px}.bs td.bs-n img{width:15px;height:15px;border-radius:50%}
 .bs tr.alliance td{background:#16305a80}.bs tr.horde td{background:#5a161280}.bs tr.me td{background:#7a5a1aa0;font-weight:600}
 .bs-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;border-top:1px solid #8a6d35}.bs-close{color:#ffd866}
-html.app #raidCtl{width:calc(100% - 16px);font-size:11px}
 .bs td.bs-n .bs-rk{display:inline-block;min-width:16px;font-size:10px;color:#ffd866;text-align:center}
 .rc-m .rc-h{color:#5eff7a;margin-right:2px}
+.rc-wave{color:#9fd0ff}
+#logCard[hidden],#raidCtl[hidden]{display:none!important}

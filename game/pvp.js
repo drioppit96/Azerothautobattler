@@ -209,6 +209,18 @@ function bgSpawnPoint(B, team) {
   }
   return B.def.gy[team];
 }
+/* resurrection like the game: the spirit healers raise everyone waiting every 30 seconds (one timer for the whole
+   battleground), at the side's graveyard - the one nearest to where they died: the base, the bases held (Arathi Basin)
+   or the graveyards held (Alterac Valley) */
+function bgNextWave(B) { const k = Math.floor((G.gameTime - B.t0) / BG_RES) + 1; return B.t0 + k * BG_RES; }
+function bgGraveyards(B, team) {
+  const out = [B.def.gy[team]];
+  if (B.key === 'ab' && B.nodes) for (const n of B.nodes) if (n.owner === team) out.push([n.x, n.y]);
+  if (B.key === 'av' && B.gys) for (const g of B.gys) if (g.owner === team) out.push([g.x, g.y]);
+  return out;
+}
+function bgNearestGy(B, team, x, y) { let best = null, bd = 1e9; for (const g of bgGraveyards(B, team)) { const d = Math.hypot(g[0] - x, g[1] - y); if (d < bd) { bd = d; best = g; } } return best; }
+function bgDeadText(B, team) { const n = B.units.filter((u) => u.team === team && !u.alive && !u.general).length; return n ? ' (' + n + ' waiting)' : ''; }
 /* ------------------------------------------------------------------ the simulation (worldTick) */
 const BG_CLOSE = 120;          // the battleground closes 2 minutes after the end (the scoreboard shows until then)
 const BG_AUTO_LEAVE = 15;      // auto battlegrounds: leave after a look at the scoreboard
@@ -225,7 +237,7 @@ function bgStep(B, dt) {
     return;
   }
   // resurrection waves
-  for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgSpawnPoint(B, u.team); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; }
+  for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgNearestGy(B, u.team, u.x, u.y); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; }
   const alive = B.units.filter((u) => u.alive);
   for (const u of alive) if (u.alive) bgUnitStep(B, u, dt, alive);
   bgObjectives(B, dt, T);
@@ -279,7 +291,9 @@ function bgUScale(u) { return Math.max(0.15, Math.min(1, (u.c ? u.c.level : u.le
 function bgGive(u, h) { if (!h) return; u.honor += h; if (u.c) pvpGain(u.c, Math.round(h)); }
 function bgDie(B, t, killer) {
   t.alive = false; t.hp = 0; t.deaths++; t.tgt = null; killer.kills++;
-  const now = G.gameTime; t.resAt = B.t0 + Math.ceil((now - B.t0 + 5) / BG_RES) * BG_RES;
+  const now = G.gameTime; t.resAt = bgNextWave(B);
+  // released: the spirit waits at its side's nearest graveyard for the next wave
+  const gy = bgNearestGy(B, t.team, t.x, t.y); t.x = gy[0] + rnd(-3, 3); t.y = gy[1] + rnd(-3, 3);
   if (t.carry) { const f = B.flag[t.carry]; f.carrier = null; const back = t.carry; t.carry = null; if (killer.team === back) killer.od++; bgNote(B, killer.name + ' (' + killer.team + ') returned the ' + back + ' flag!'); }
   if (B.key === 'av' && !t.general && B.reinf) { B.reinf[t.team] = Math.max(0, B.reinf[t.team] - 1); if (B.reinf[t.team] <= 0) bgFinish(B, t.team === 'Alliance' ? 'Horde' : 'Alliance', 'out of reinforcements'); }
   if (t.general) { bgNote(B, t.name + ' is dead!'); bgFinish(B, t.team === 'Alliance' ? 'Horde' : 'Alliance', t.name + ' was killed'); return; }
@@ -526,6 +540,11 @@ function bgDraw(ctx, m) {
     if (n.capTeam) { ctx.strokeStyle = BG_TEAM_COL[n.capTeam]; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 13, -1.57, -1.57 + 6.283 * n.capT / (B.key === 'ab' ? 12 : 15)); ctx.stroke(); }
     ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff'; ctx.strokeText(n.n, x, y - 13); ctx.fillText(n.n, x, y - 13);
   }
+  // the dead, waiting at the graveyards for the next wave
+  if (!B.over) { const wv = Math.ceil(bgNextWave(B) - G.gameTime); const at = new Map();
+    for (const u of B.units) if (!u.alive && !u.general) { const g = bgNearestGy(B, u.team, u.x, u.y); const k = g[0] + ',' + g[1] + u.team; const e = at.get(k) || { x: g[0], y: g[1], n: 0, t: u.team }; e.n++; at.set(k, e); }
+    ctx.font = 'bold 10px Segoe UI'; ctx.lineWidth = 3;
+    for (const e of at.values()) { const [x, y] = w2s(e.x, e.y); const s = e.n + ' dead \u00b7 ' + wv + 's'; ctx.strokeStyle = '#000'; ctx.strokeText(s, x, y + 20); ctx.fillStyle = BG_TEAM_COL[e.t]; ctx.fillText(s, x, y + 20); } }
   // the fighters (your own characters are drawn by the map itself)
   for (const u of B.units) {
     if (!u.alive || (u.c && rt(u.c).bg === B)) continue;
@@ -559,7 +578,8 @@ function renderBgCard() {
     const me = B.units.find((u) => u.c === c);
     h = '<h3>' + esc(B.def.name) + ' <span class="small muted">' + fmtTime((B.over ? B.over.t : G.gameTime) - B.t0) + '</span></h3><div class="small">' + esc(bgScoreText(B)) + '</div>';
     if (B.over) h += '<div class="bgres ' + (B.over.winner === B.side ? 'won' : 'lost') + '">' + (B.over.winner ? (B.over.winner === B.side ? 'Victory!' : 'Defeat') : 'Draw') + '</div><div class="small muted">Closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) + '</div>';
-    if (me) h += '<div class="small">You: ' + me.kills + ' killing blows, ' + me.hks + ' honorable kills, ' + me.deaths + ' deaths, +' + Math.round(me.honor) + ' honor' + (me.alive || B.over ? '' : ' - <span style="color:#ff6a5a">dead, back in ' + Math.ceil(Math.max(0, me.resAt - G.gameTime)) + 's</span>') + '</div>';
+    if (!B.over) h += '<div class="small rc-wave">Resurrection wave in ' + Math.ceil(bgNextWave(B) - G.gameTime) + 's' + bgDeadText(B, B.side) + '</div>';
+    if (me) h += '<div class="small">You: ' + me.kills + ' killing blows, ' + me.hks + ' honorable kills, ' + me.deaths + ' deaths, +' + Math.round(me.honor) + ' honor' + (me.alive || B.over ? '' : ' - <span style="color:#ff6a5a">dead, at the graveyard - back in ' + Math.ceil(Math.max(0, me.resAt - G.gameTime)) + 's</span>') + '</div>';
     if (me && !B.over) { const o = bgOrdOf(B, me); h += '<div class="small">Order: <b>' + esc((bgOrders(B).find((x) => x[0] === o) || ['', 'Auto'])[1]) + '</b></div>'; }
     h += '<div class="bglog">' + B.logs.slice(0, 4).map(([t, s]) => '<div class="small muted">' + fmtTime(t - B.t0) + ' ' + esc(s) + '</div>').join('') + '</div>';
     h += '<button class="mini" data-bgq="raid">Raid</button> <button class="mini" data-bgq="score">Scoreboard</button> <button class="mini red" data-bgq="out">Leave battleground</button>';
@@ -605,15 +625,17 @@ function bgScoreClick(e) {
 
 /* ------------------------------------------------------------------ the raid panel: orders for groups and players */
 const RAID = { show: false, sel: { kind: 'raid', id: null } };
-function toggleRaid() { RAID.show = !RAID.show; G.state.settings.raidPanel = RAID.show; save(); renderBgCard(); }
+function toggleRaid() { RAID.show = !RAID.show; G.state.settings.raidPanel = RAID.show; save(); if (RAID.show && window.matchMedia && matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1100px)').matches) { const b = document.querySelector('#mnav [data-p="left"]'); if (b) b.click(); } renderBgCard(); }
 function renderRaidCtl() {
-  let el = $('raidCtl'); const c = active(); const B = rt(c).bg;
-  if (!B || !RAID.show) { if (el && !el.hidden) { el.hidden = true; el._h = ''; } return; }
-  if (!el) { el = document.createElement('div'); el.id = 'raidCtl'; $('mapwrap').appendChild(el); el.addEventListener('pointerdown', raidClick); }
+  const el = $('raidCtl'); if (!el) return; const c = active(); const B = rt(c).bg; const logC = $('logCard');
+  if (!B || !RAID.show) { if (!el.hidden) { el.hidden = true; el._h = ''; } if (logC && logC.hidden) logC.hidden = false; return; }
+  if (!el._bound) { el._bound = true; el.addEventListener('pointerdown', raidClick); }
+  if (logC && !logC.hidden) logC.hidden = true;          /* the raid panel takes the place of the log while it is open */
   const S = bgStrat(B.key); const n = bgGroups(B); const mine = B.units.filter((u) => u.team === B.side && !u.general); const ords = bgOrders(B);
   if (RAID.sel.kind === 'unit' && !mine.some((u) => String(u.id) === RAID.sel.id)) RAID.sel = { kind: 'raid', id: null };
   const sel = RAID.sel; const nm = (o) => (ords.find((x) => x[0] === o) || ['', 'Auto'])[1];
-  let h = '<div class="rc-head"><b>Raid</b><span class="small muted">' + esc(B.def.name) + ' &middot; ' + esc(bgScoreText(B)) + '</span><button class="mini" data-rcscore="1">Score</button><button class="mini" data-rcclose="1" title="Close">&#10005;</button></div>';
+  let h = '<div class="rc-head"><b>Raid</b><span class="small muted">' + esc(B.def.name) + '</span><button class="mini" data-rcscore="1">Score</button><button class="mini" data-rcclose="1" title="Close (back to the log)">&#10005;</button></div>' +
+    '<div class="small muted">' + esc(bgScoreText(B)) + '</div>' + (B.over ? '' : '<div class="small rc-wave">Resurrection wave in ' + Math.ceil(bgNextWave(B) - G.gameTime) + 's' + bgDeadText(B, B.side) + '</div>');
   h += '<div class="rc-strat"><span class="small muted">Strategy</span>' + bgStrategies(B).map(([t, tip, g]) => '<button class="mini" data-rcstrat="' + esc(t) + '" title="' + esc(tip) + '">' + esc(t) + '</button>').join('') + '</div>';
   h += '<div class="rc-grid' + (n > 4 ? ' many' : '') + '">';
   for (let g = 1; g <= n; g++) {
