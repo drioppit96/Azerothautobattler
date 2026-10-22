@@ -114,23 +114,52 @@ function bgNewUnit(o) { return Object.assign({ alive: true, x: 0, y: 0, kills: 0
 function bgUnitFromChar(c, team) {
   const s = charStats(c); const heal = typeof grpRole === 'function' && groupOf(c) && grpRole(c) === 'healer';
   const dps = Math.max(5, (typeof classDps === 'function' ? classDps(c, s, 0.25) : s.mhDps) * 0.9);
-  return bgNewUnit({ id: c.id, c, name: c.name, team, cls: c.cls, race: c.race, level: c.level, maxhp: s.maxHp, hp: s.maxHp, dps, heal: heal ? dps * 1.1 : 0, ranged: [3, 5, 8, 9].includes(c.cls) || heal });
+  return bgNewUnit({ id: c.id, c, name: c.name, team, cls: c.cls, race: c.race, level: c.level, maxhp: s.maxHp, hp: s.maxHp, dps, heal: heal ? dps * 1.1 : 0, ranged: [3, 5, 8, 9].includes(c.cls) || heal, rank: pvpRank(c) });
 }
-function bgBot(B, team, ref) {
+/* the other players: mercenaries from the roster (free here) - their gear, skill and honor rank are random; level 60s
+   are rank 6 or higher, the others rank 0-5. Healers: 1 to one per raid group on each side. */
+const BG_CLASSES = { Alliance: [1, 2, 3, 4, 5, 8, 9, 11], Horde: [1, 3, 4, 5, 7, 8, 9, 11] };
+const BG_HEAL_CLASSES = { Alliance: [5, 5, 2, 2, 11], Horde: [5, 5, 7, 7, 11] };
+function bgHealerCount(B) { const n = bgGroups(B); return 1 + Math.floor(Math.random() * n); }
+function bgMercPool(B) {
+  if (!B.pool) { const R = typeof roster === 'function' ? roster().slice() : []; for (let i = R.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [R[i], R[j]] = [R[j], R[i]]; } B.pool = R; B.usedNames = new Set(); }
+  return B.pool;
+}
+function bgMerc(B, team, healer) {
+  const ok = (healer ? BG_HEAL_CLASSES : BG_CLASSES)[team];
+  const pool = bgMercPool(B); const i = pool.findIndex((m) => ok.includes(m.cls) && (m.role === 'healer') === healer && !B.usedNames.has(m.name));
+  if (i >= 0) { const m = pool.splice(i, 1)[0]; B.usedNames.add(m.name); return { name: m.name, cls: m.cls, skill: typeof execLevel === 'function' ? execLevel(m, null) : 3, rid: m.id }; }
+  // nobody fitting on the roster: a new face (not kept on the roster)
+  const pts = -Math.log(1 - Math.random() * 0.97) * 260; const apt = 0.7 + Math.random() * 0.3; let name; for (let k = 0; k < 20; k++) { name = bgName(team); if (!B.usedNames.has(name)) break; } B.usedNames.add(name);
+  return { name, cls: bgPick(ok), skill: (typeof curve === 'function' ? curve(pts, SKILL_K) : 3) * apt };
+}
+function bgBot(B, team, ref, healer) {
   const lo = B.bracket[0], hi = B.bracket[1]; const L = Math.max(lo, Math.min(hi, Math.round(lo + Math.pow(Math.random(), 0.6) * (hi - lo))));
-  let race, cls; for (let k = 0; k < 30; k++) { race = bgPick(BG_RACES[team]); cls = bgPick([1, 2, 3, 4, 5, 7, 8, 9, 11]); if (raceClassOk(race, cls)) break; }
+  const m = bgMerc(B, team, healer); const cls = m.cls;
+  let race; for (let k = 0; k < 30; k++) { race = bgPick(BG_RACES[team]); if (raceClassOk(race, cls)) break; }
+  const rank = L >= 60 ? 6 + Math.floor(Math.pow(Math.random(), 1.6) * 9) : Math.floor(Math.random() * 6);
+  const gear = rnd(0.82, 1.18) * (1 + rank * 0.012);          // random gear; higher ranks wear their rank gear
+  const eff = (0.65 + 0.35 * Math.min(10, m.skill) / 10) / 0.8;          // how well they play (the mercenary skill)
   const k = Math.pow(L / Math.max(1, ref.level), 1.5);
   const hpM = cls === 1 || cls === 2 ? 1.25 : [5, 8, 9].includes(cls) ? 0.85 : 1, dmM = cls === 4 || cls === 8 || cls === 9 ? 1.15 : cls === 2 || cls === 5 ? 0.85 : 1;
-  const maxhp = Math.round(ref.maxhp * k * hpM * rnd(0.85, 1.15)); const dps = ref.dps * k * dmM * rnd(0.85, 1.15);
-  const healer = [2, 5, 7, 11].includes(cls) && Math.random() < 0.45;
-  return bgNewUnit({ id: 'b' + (B.nid++), name: bgName(team), team, cls, race, level: L, maxhp, hp: maxhp, dps: healer ? dps * 0.45 : dps, heal: healer ? dps * 1.1 : 0, ranged: [3, 5, 8, 9].includes(cls) || healer });
+  const maxhp = Math.round(ref.maxhp * k * hpM * gear); const dps = ref.dps * k * dmM * gear * eff;
+  return bgNewUnit({ id: 'b' + (B.nid++), name: m.name, rid: m.rid, team, cls, race, level: L, maxhp, hp: maxhp, dps: healer ? dps * 0.45 : dps, heal: healer ? dps * 1.1 : 0,
+    ranged: [3, 5, 8, 9].includes(cls) || healer, rank, skill: Math.round(m.skill * 10) / 10, gear: Math.round(gear * 100) / 100 });
 }
+function bgFill(B, team, ref) {
+  const mine = B.units.filter((u) => u.team === team); let heals = Math.max(0, bgHealerCount(B) - mine.filter((u) => u.heal).length);
+  const free = B.def.size - mine.length; const hs = new Set(); while (hs.size < Math.min(heals, free)) hs.add((Math.random() * free) | 0);
+  for (let i = 0; i < free; i++) B.units.push(bgBot(B, team, ref, hs.has(i)));
+}
+function bgRankName(u) { return u.rank ? PVP_RANKS[u.team][u.rank - 1] : 'No rank'; }
 function bgGroups(B) { return Math.ceil(B.def.size / 5); }
 /* the raid groups (1 ..) of a team: your characters keep their raid group, the others fill the free places */
 function bgAssignGroups(B, team) {
   const n = bgGroups(B); const cnt = new Array(n + 1).fill(0); const list = B.units.filter((u) => u.team === team && !u.general);
   for (const u of list) if (u.c) { const g = groupOf(u.c); const i = g ? g.members.findIndex((m) => m.id === u.c.id) : 0; let k = Math.min(n, Math.floor(Math.max(0, i) / 5) + 1); while (cnt[k] >= 5 && k < n) k++; u.grp = k; cnt[k]++; }
-  for (const u of list) if (!u.c) { let k = 1; while (k < n && cnt[k] >= 5) k++; u.grp = k; cnt[k]++; }
+  const hg = new Set(list.filter((u) => u.c && u.heal).map((u) => u.grp));
+  for (const u of list) if (!u.c && u.heal) { let k = 1; while (k < n && (cnt[k] >= 5 || hg.has(k))) k++; if (cnt[k] >= 5) { k = 1; while (k < n && cnt[k] >= 5) k++; } u.grp = k; cnt[k]++; hg.add(k); }
+  for (const u of list) if (!u.c && !u.heal) { let k = 1; while (k < n && cnt[k] >= 5) k++; u.grp = k; cnt[k]++; }
 }
 function bgStart(key, chars) {
   const def = BGS[key]; const c0 = chars[0]; const [mine, theirs] = bgSides(pvpSide(c0));
@@ -138,8 +167,7 @@ function bgStart(key, chars) {
   // your characters, then the rest of both teams
   for (const c of chars) B.units.push(bgUnitFromChar(c, mine));
   const ref = B.units[0];
-  while (B.units.filter((u) => u.team === mine).length < def.size) B.units.push(bgBot(B, mine, ref));
-  while (B.units.filter((u) => u.team === theirs).length < def.size) B.units.push(bgBot(B, theirs, ref));
+  bgFill(B, mine, ref); bgFill(B, theirs, ref);
   B.units.forEach((u, i) => { u.role = bgRole(B, u, i); const p = bgSpawnPoint(B, u.team); u.x = p[0] + rnd(-6, 6); u.y = p[1] + rnd(-6, 6); u.jx = rnd(-14, 14); u.jy = rnd(-14, 14); });
   bgAssignGroups(B, mine); bgAssignGroups(B, theirs);
   if (key === 'wsg') { B.score = { Alliance: 0, Horde: 0 }; B.flag = { Alliance: { carrier: null }, Horde: { carrier: null } }; B.firstCap = null; }
@@ -273,7 +301,7 @@ function bgNote(B, s) { B.logs.unshift([G.gameTime, s]); if (B.logs.length > 8) 
 function bgStrat(key) { const S = G.state.bgStrat = G.state.bgStrat || {}; return (S[key] = S[key] || { grp: {}, chars: {} }); }
 function bgOrdOf(B, u) { if (u.team !== B.side || u.general) return 'auto'; const S = bgStrat(B.key); return (u.c && S.chars[u.c.id]) || B.uord[u.id] || S.grp[u.grp] || 'auto'; }
 function bgOrders(B) {
-  const L = [['auto', 'Auto', 'Their own judgement (the default)'], ['roam', 'Roam', 'Hunt lone enemies all over the field']];
+  const L = [['auto', 'Auto', 'Their own judgement (the default)'], ['roam', 'Roam', 'Hunt lone enemies all over the field'], ['focus', 'Focus their healers', 'Go after the enemy healers first, the nearest one']];
   if (B.key === 'wsg') L.push(['wsg:take', 'Capture the flag', 'Run into the enemy flag room, take the flag and bring it home'], ['wsg:esc', 'Defend the flag carrier', 'Stay with your flag carrier and keep it alive'],
     ['wsg:def', 'Defend our flag', 'Guard your own flag room'], ['wsg:hunt', 'Kill their flag carrier', 'Chase the enemy carrier and return your flag'], ['wsg:mid', 'Hold the middle', 'Fight in the middle of the field']);
   if (B.key === 'ab') { L.push(['ab:cap', 'Capture bases', 'Take the bases you do not hold, the nearest first'], ['ab:defall', 'Defend our bases', 'Spread over the bases you hold, the attacked ones first']);
@@ -285,7 +313,7 @@ function bgOrders(B) {
 function bgOrdShort(B, o) {
   if (!o || o === 'auto') return ''; const m = /^(ab|av):hold:(\d+)$/.exec(o);
   if (m) { const n = (m[1] === 'ab' ? B.def.nodes : B.def.lane)[+m[2]][0]; return n.replace(/ (Graveyard|Station|Hut)$/, '').split(' ').pop(); }
-  return { roam: 'Roam', 'wsg:take': 'Flag', 'wsg:esc': 'Escort', 'wsg:def': 'Defend', 'wsg:hunt': 'Hunt', 'wsg:mid': 'Mid', 'ab:cap': 'Capture', 'ab:defall': 'Defend', 'av:push': 'Push', 'av:gen': 'General', 'av:def': 'Defend' }[o] || o;
+  return { roam: 'Roam', focus: 'Healers', 'wsg:take': 'Flag', 'wsg:esc': 'Escort', 'wsg:def': 'Defend', 'wsg:hunt': 'Hunt', 'wsg:mid': 'Mid', 'ab:cap': 'Capture', 'ab:defall': 'Defend', 'av:push': 'Push', 'av:gen': 'General', 'av:def': 'Defend' }[o] || o;
 }
 /* strategies: orders for the raid groups in one click */
 function bgStrategies(B) {
@@ -315,6 +343,7 @@ function bgApplyStrategy(B, grp) { const S = bgStrat(B.key); S.grp = Object.assi
 function bgPlan(B, u) {
   const def = B.def; const foe = u.team === 'Alliance' ? 'Horde' : 'Alliance'; let o = bgOrdOf(B, u);
   if (o === 'roam') return bgRoam(B, u);
+  if (o === 'focus') { const h = bgFocusHealer(B, u); if (h) return h; o = 'auto'; }
   if (B.key === 'wsg') {
     const myFlag = def.flag[u.team], theirFlag = def.flag[foe];
     if (u.carry) return { goal: [myFlag[0], myFlag[1], true], range: 10 };
@@ -347,6 +376,11 @@ function bgPlan(B, u) {
     return { goal: def.base[foe] };
   }
   return { goal: null };
+}
+/* focusing healers: the nearest enemy healer alive (back to the battleground's own order when none is left) */
+function bgFocusHealer(B, u) {
+  if (!u.foc || !u.foc.alive || G.gameTime > (u.focT || 0)) { u.focT = G.gameTime + 3; let best = null, bd = 1e9; for (const x of B.units) if (x.alive && x.team !== u.team && x.heal && !x.general) { const d = bgDist(x, u); if (d < bd) { bd = d; best = x; } } u.foc = best; }
+  const h = u.foc; return h ? { goal: [h.x, h.y, true], hunt: bgDist(h, u) < 50 ? h : null, range: 12 } : null;
 }
 /* roaming: the enemy with the fewest friends around it, not too far */
 function bgRoam(B, u) {
@@ -554,7 +588,7 @@ function renderBgScore() {
     '<div class="bs-wrap"><table class="bs"><thead><tr><th class="bs-n">Name</th>' + cols.map(([k, t]) => '<th data-bssort="' + k + '"' + (SCORE.sort === k ? ' class="on"' : '') + '>' + t + '</th>').join('') + '</tr></thead><tbody>';
   for (const u of list) {
     const me = u.c && G.state.characters.includes(u.c);
-    h += '<tr class="' + u.team.toLowerCase() + (me ? ' me' : '') + '"><td class="bs-n"><img src="img/class/' + u.cls + '.png" alt=""><span style="color:' + (CLASS_COLOR[u.cls] || '#fff') + '">' + esc(u.name) + '</span></td>' +
+    h += '<tr class="' + u.team.toLowerCase() + (me ? ' me' : '') + '"><td class="bs-n"><img src="img/class/' + u.cls + '.png" alt=""><b class="bs-rk" title="' + esc(bgRankName(u)) + '">' + (u.rank || '') + '</b><span style="color:' + (CLASS_COLOR[u.cls] || '#fff') + '" title="' + esc(bgRankName(u) + ' - level ' + u.level + (u.skill != null ? ' - skill ' + u.skill + '/10' : '')) + '">' + esc(u.name) + '</span></td>' +
       cols.map(([k]) => '<td>' + (k === 'dmg' || k === 'healed' || k === 'honor' ? bgK(u[k] || 0) : (u[k] || 0)) + '</td>').join('') + '</tr>';
   }
   const n = (t) => B.units.filter((u) => u.team === t && !u.general).length;
@@ -587,8 +621,8 @@ function renderRaidCtl() {
     h += '<div class="rc-g"><div class="rc-gh' + (sel.kind === 'grp' && +sel.id === g ? ' sel' : '') + '" data-rcg="' + g + '">Group ' + g + (go !== 'auto' ? ' <em>' + esc(bgOrdShort(B, go)) + '</em>' : '') + '</div>';
     for (const u of mine.filter((x) => x.grp === g)) {
       const own = (u.c && S.chars[u.c.id]) || B.uord[u.id]; const col = CLASS_COLOR[u.cls] || '#bbb'; const me = u.c && G.state.characters.includes(u.c);
-      h += '<div class="rc-m' + (sel.kind === 'unit' && sel.id === String(u.id) ? ' sel' : '') + (u.alive ? '' : ' dead') + (me ? ' me' : '') + '" data-rcu="' + esc(u.id) + '" title="' + esc(u.name + ' - level ' + u.level + ' ' + (CLASS_NAMES[u.cls] || '') + (u.heal ? ' (healer)' : '') + ' - ' + nm(bgOrdOf(B, u))) + '">' +
-        '<i style="width:' + Math.max(0, 100 * u.hp / u.maxhp) + '%;background:' + col + '"></i><span>' + (me ? '&#9733;' : '') + esc(u.name) + '</span>' + (own ? '<em>' + esc(bgOrdShort(B, own)) + '</em>' : u.carry ? '<em>&#9873;</em>' : '') + '</div>';
+      h += '<div class="rc-m' + (sel.kind === 'unit' && sel.id === String(u.id) ? ' sel' : '') + (u.alive ? '' : ' dead') + (me ? ' me' : '') + '" data-rcu="' + esc(u.id) + '" title="' + esc(u.name + ' - level ' + u.level + ' ' + (CLASS_NAMES[u.cls] || '') + (u.heal ? ' (healer)' : '') + ' - ' + bgRankName(u) + (u.skill != null ? ', skill ' + u.skill + '/10' : '') + ' - ' + nm(bgOrdOf(B, u))) + '">' +
+        '<i style="width:' + Math.max(0, 100 * u.hp / u.maxhp) + '%;background:' + col + '"></i><span>' + (me ? '&#9733;' : '') + (u.heal ? '<b class="rc-h">+</b>' : '') + esc(u.name) + '</span>' + (own ? '<em>' + esc(bgOrdShort(B, own)) + '</em>' : u.carry ? '<em>&#9873;</em>' : '') + '</div>';
     }
     h += '</div>';
   }
