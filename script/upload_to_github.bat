@@ -20,7 +20,8 @@ echo.
 echo Checking for files over 95 MB ^(GitHub refuses files over 100 MB^) ...
 set BIG=0
 if not exist ".git" git init -q
-for /r %%F in (*) do if %%~zF GEQ 95000000 git check-ignore -q "%%F" || (echo   %%F  %%~zF bytes & set BIG=1)
+rem only the files that would be uploaded (new or changed, not ignored) - git's own storage in .git is not checked
+for /f "delims=" %%F in ('git ls-files -o -m --exclude-standard') do if %%~zF GEQ 95000000 (echo   %%F  %%~zF bytes & set BIG=1)
 if "%BIG%"=="1" (
   echo.
   echo The files above are too big. Add them to .gitignore ^(open it with Notepad^) or move them out, then run this again.
@@ -29,8 +30,10 @@ if "%BIG%"=="1" (
 )
 echo   none - good.
 echo.
-set /p REPO=Paste your repository address, e.g. https://github.com/NAME/auto-battler.git : 
-if "%REPO%"=="" exit /b
+set REPO=https://github.com/drioppit96/Azerothautobattler.git
+echo Repository: %REPO%
+set /p REPO2=Press Enter to upload there (or paste another address): 
+if not "%REPO2%"=="" set REPO=%REPO2%
 git config user.name "auto-battler"
 git config user.email "auto-battler@localhost"
 git config core.autocrlf false
