@@ -16,6 +16,8 @@ const LOOK_BASE = '../charlooks/';
 const LOOK_FEATURE = { 1: ['Facial Hair', 'Piercings'], 2: ['Features', 'Piercings'], 3: ['Facial Hair', 'Piercings'], 4: ['Features', 'Markings'],
   5: ['Features', 'Features'], 6: ['Facial Hair', 'Hair'], 7: ['Facial Hair', 'Earrings'], 8: ['Tusks', 'Features'] };
 const LOOK_HAIR = { 6: ['Horn Style', 'Horn Color'] };          // tauren: horns instead of hair
+/* framing touch-ups of the painted portrait per race_sex: [shift right, shift down (parts of the picture), zoom] */
+const LOOK_CROP = {};
 
 function looksInit() {
   if (LOOK.loading) return LOOK.loading;
@@ -30,7 +32,8 @@ const uniq = (a) => [...new Set(a)].sort((x, y) => x - y);
 /* what can be chosen for a race / sex (and, for faces and colours, the rest of the look) */
 function lookOptions(race, sex, look) {
   const R = lookRace(race, sex); if (!R) return null; look = look || {};
-  const skins = uniq(R.skins.map((x) => x.col));
+  const pl = (a) => { const p = a.filter((x) => !x.fl); return p.length ? p : a; };          // flags 1: the skins only creatures have
+  const skins = uniq(pl(R.skins).map((x) => x.col));
   const faces = uniq(R.faces.filter((x) => x.col === look.skin).map((x) => x.var)); const facesAll = uniq(R.faces.map((x) => x.var));
   const hair = uniq(R.hair.map((x) => x.var).concat(lookHairRows(R).map((r) => r.var)));
   const hairColors = uniq(R.hair.filter((x) => x.var === look.hair).map((x) => x.col)); const hairColorsAll = uniq(R.hair.map((x) => x.col));
@@ -60,10 +63,23 @@ function lookRandom(race, sex) {
 function lookKey(race, sex, L) { return race + '_' + (sex ? 1 : 0) + ':' + (L ? [L.skin, L.face, L.hair, L.hairColor, L.facial].join('.') : 'x'); }
 
 /* ------------------------------------------------------------------ loading pictures */
-function lookImg(name) {
+function lookImg(name, solid) {
   if (!name) return Promise.resolve(null);
-  if (!LOOK.img[name]) LOOK.img[name] = new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = LOOK_BASE + 'tex/' + name; });
-  return LOOK.img[name];
+  const key = name + (solid ? '|s' : '');
+  if (!LOOK.img[key]) LOOK.img[key] = new Promise((res) => {
+    const im = new Image(); im.onerror = () => res(null);
+    im.onload = () => {
+      if (/\.jpe?g$/i.test(name) || !solid) { res(im); return; }
+      // a texture without an alpha channel comes out fully see-through: it is solid in the game
+      const cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height; const x = cv.getContext('2d', { willReadFrequently: true });
+      x.drawImage(im, 0, 0); const id = x.getImageData(0, 0, cv.width, cv.height); const d = id.data; let mx = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > mx) { mx = d[i]; if (mx > 0) break; }
+      if (mx > 0) { res(im); return; }
+      for (let i = 3; i < d.length; i += 4) d[i] = 255; x.putImageData(id, 0, 0); res(cv);
+    };
+    im.src = LOOK_BASE + 'tex/' + name;
+  });
+  return LOOK.img[key];
 }
 function lookPixels(im, w, h) {
   const cv = document.createElement('canvas'); cv.width = w || im.width; cv.height = h || im.height; const x = cv.getContext('2d', { willReadFrequently: true });
@@ -104,7 +120,7 @@ function lookGeosets(R, L) {
 async function lookPaint(race, sex, L) {
   await looksInit(); const R = lookRace(race, sex); if (!R) return null;
   L = lookValid(race, sex, L || {}); const key = race + '_' + (sex ? 1 : 0); const S = LOOK.data.size;
-  const skin = R.skins.find((x) => x.col === L.skin) || R.skins[0];
+  const skin = R.skins.find((x) => x.col === L.skin && !x.fl) || R.skins.find((x) => x.col === L.skin) || R.skins[0];
   const face = R.faces.find((x) => x.var === L.face && x.col === L.skin) || R.faces.find((x) => x.var === L.face);
   const hair = R.hair.find((x) => x.var === L.hair && x.col === L.hairColor) || R.hair.find((x) => x.var === L.hair);
   const fac = R.facial.find((x) => x.var === L.facial && x.col === L.hairColor) || R.facial.find((x) => x.var === L.facial);
@@ -117,8 +133,8 @@ async function lookPaint(race, sex, L) {
   if (fac) { await lay(fac.lower, rg.faceLower); await lay(fac.upper, rg.faceUpper); }
   if (hair) { await lay(hair.scalpLower, rg.faceLower); await lay(hair.scalpUpper, rg.faceUpper); }
   const tex = { 1: { w: SK, h: SK, d: x.getImageData(0, 0, SK, SK).data } };
-  const hi = hair && await lookImg(hair.tex); if (hi) tex[6] = lookPixels(hi);
-  const ei = skin && skin.extra && await lookImg(skin.extra); if (ei) tex[8] = lookPixels(ei);
+  const hi = hair && await lookImg(hair.tex, true); /* hair: solid when it has no alpha channel */ if (hi) tex[6] = lookPixels(hi);
+  const ei = skin && skin.extra && await lookImg(skin.extra, true); if (ei) tex[8] = lookPixels(ei);
   // the pieces, the nearest one at each pixel
   const on = lookGeosets(R, L); const list = R.pieces.filter((p) => on.has(p.geo) && tex[p.slot]);
   const parts = await Promise.all(list.map((p) => lookPart(key, p.file)));
@@ -136,7 +152,8 @@ async function lookPaint(race, sex, L) {
   const pc = document.createElement('canvas'); pc.width = pc.height = S; const px = pc.getContext('2d'); px.putImageData(new ImageData(out, S, S), 0, 0);
   const fin = document.createElement('canvas'); fin.width = fin.height = 128; const fx2 = fin.getContext('2d');
   const g = fx2.createRadialGradient(64, 54, 10, 64, 64, 90); g.addColorStop(0, '#2c2a30'); g.addColorStop(1, '#0c0b0e'); fx2.fillStyle = g; fx2.fillRect(0, 0, 128, 128);
-  fx2.imageSmoothingEnabled = true; fx2.imageSmoothingQuality = 'high'; fx2.drawImage(pc, 0, 0, 128, 128);
+  const cr = LOOK_CROP[key] || [0, 0, 1]; const cw = S / cr[2]; const sx = (S - cw) / 2 + cr[0] * S, sy = (S - cw) / 2 + cr[1] * S;          // per race framing touch-ups
+  fx2.imageSmoothingEnabled = true; fx2.imageSmoothingQuality = 'high'; fx2.drawImage(pc, sx, sy, cw, cw, 0, 0, 128, 128);
   return fin.toDataURL('image/png');
 }
 /* the portrait of a look: ready (a picture address) or null while it is painted (LOOK.ver goes up when done) */

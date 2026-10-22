@@ -144,7 +144,7 @@ def head_box(model):
     if m.sum() < 20:
         return None
     P = model.pos[m]
-    lo, hi = P.min(axis=0), P.max(axis=0)
+    lo, hi = np.percentile(P, 4, axis=0), np.percentile(P, 96, axis=0)          # not the odd far vertex (ears, spikes)
     return (lo + hi) / 2, hi - lo
 
 
@@ -155,10 +155,11 @@ def portrait_camera(model, key=""):
     if cam is None:
         cam = {"fov": 0.785, "near": 0.2, "far": 30.0, "pos": (1.0, -0.6, 1.8), "target": (0.0, 0.0, 1.8)}
     hb = head_box(model)
-    fr, dz = FRAME.get(key, (2.3, 0.1))
+    fr, dz = FRAME.get(key, (2.75, 0.1))
     if hb is not None:
         c, size = hb
-        hs = max(size[2], size[1], 0.6 * size[0])
+        H = model.pos[:, 2].max() - model.pos[:, 2].min()
+        hs = min(max(size[2], size[1], 0.6 * size[0]), 0.16 * H)          # long ears / horns: not a bigger head
         tgt = c + np.array([0.0, 0.0, dz * hs]); half = fr * hs * 0.5
     else:
         P = model.pos; top, bot = P[:, 2].max(), P[:, 2].min(); H = top - bot
@@ -258,6 +259,88 @@ def save_piece(path, U, V, S, D, dmin, dmax):
 
 
 # ------------------------------------------------------------------ textures
+# the client's BLP2 textures read here (Pillow loses the alpha of the palette ones: beards, scalps and faces came
+# out without their see-through parts)
+
+def _rgb565(c):
+    r = ((c >> 11) & 31) * 255 // 31; g = ((c >> 5) & 63) * 255 // 63; b = (c & 31) * 255 // 31
+    return np.stack([r, g, b], -1).astype(np.int32)
+
+def _dxt_colors(blocks, dxt1):
+    """blocks: (N,8) uint8 colour part -> (N,16,4) uint8"""
+    c0 = blocks[:, 0].astype(np.int32) | (blocks[:, 1].astype(np.int32) << 8)
+    c1 = blocks[:, 2].astype(np.int32) | (blocks[:, 3].astype(np.int32) << 8)
+    bits = blocks[:, 4].astype(np.uint32) | (blocks[:, 5].astype(np.uint32) << 8) | (blocks[:, 6].astype(np.uint32) << 16) | (blocks[:, 7].astype(np.uint32) << 24)
+    p0, p1 = _rgb565(c0), _rgb565(c1)
+    four = (c0 > c1) | (not dxt1)
+    p2 = np.where(four[:, None], (2 * p0 + p1) // 3, (p0 + p1) // 2)
+    p3 = np.where(four[:, None], (p0 + 2 * p1) // 3, 0)
+    pal = np.stack([p0, p1, p2, p3], 1)                         # (N,4,3)
+    alpha = np.full((len(blocks), 4), 255, np.int32)
+    if dxt1:
+        alpha[:, 3] = np.where(four, 255, 0)
+    idx = np.stack([(bits >> (2 * i)) & 3 for i in range(16)], 1).astype(np.int64)   # (N,16)
+    rgb = np.take_along_axis(pal, idx[..., None].repeat(3, -1), 1)
+    a = np.take_along_axis(alpha, idx, 1)
+    return np.concatenate([rgb, a[..., None]], -1)
+
+def _unblock(px, w, h):
+    bw, bh = max(1, (w + 3) // 4), max(1, (h + 3) // 4)
+    img = px.reshape(bh, bw, 4, 4, 4).transpose(0, 2, 1, 3, 4).reshape(bh * 4, bw * 4, 4)
+    return img[:h, :w]
+
+def decode_blp2(data):
+    """1.12 BLP2 textures (palette with 0/1/4/8-bit alpha, DXT1/3/5, raw BGRA) -> HxWx4 uint8"""
+    if data[:4] != b"BLP2":
+        return None
+    typ, enc, adepth, aenc, mips, w, h = struct.unpack_from("<IBBBBII", data, 4)
+    offs = struct.unpack_from("<16I", data, 20); sizes = struct.unpack_from("<16I", data, 84)
+    raw = np.frombuffer(data, np.uint8, sizes[0], offs[0])
+    if enc == 1:
+        pal = np.frombuffer(data, np.uint8, 1024, 148).reshape(256, 4)[:, [2, 1, 0]]
+        n = w * h; ix = raw[:n]
+        rgb = pal[ix]
+        if adepth == 8:
+            a = raw[n:n + n]
+        elif adepth == 4:
+            b = raw[n:n + (n + 1) // 2]; a = np.stack([b & 15, b >> 4], 1).reshape(-1)[:n] * 17
+        elif adepth == 1:
+            b = raw[n:n + (n + 7) // 8]; a = np.unpackbits(b, bitorder="little")[:n] * 255
+        else:
+            a = np.full(n, 255, np.uint8)
+        return np.concatenate([rgb, a.reshape(-1, 1).astype(np.uint8)], 1).reshape(h, w, 4)
+    if enc == 2:
+        nb = max(1, (w + 3) // 4) * max(1, (h + 3) // 4)
+        if aenc == 0:            # DXT1
+            px = _dxt_colors(raw[:nb * 8].reshape(nb, 8), True)
+            if adepth == 0:
+                px[..., 3] = 255
+        else:
+            blk = raw[:nb * 16].reshape(nb, 16)
+            px = _dxt_colors(blk[:, 8:], False)
+            if aenc == 1:        # DXT3: 4-bit explicit alpha
+                ab = blk[:, :8]; a = np.stack([ab & 15, ab >> 4], 2).reshape(nb, 16) * 17
+            else:                # DXT5: interpolated alpha
+                a0 = blk[:, 0].astype(np.int32); a1 = blk[:, 1].astype(np.int32)
+                bits = np.zeros(nb, np.uint64)
+                for i in range(6):
+                    bits |= blk[:, 2 + i].astype(np.uint64) << np.uint64(8 * i)
+                tab = np.zeros((nb, 8), np.int32); tab[:, 0] = a0; tab[:, 1] = a1
+                big = a0 > a1
+                for i in range(1, 7):
+                    tab[:, i + 1] = np.where(big, ((7 - i) * a0 + i * a1) // 7, 0)
+                for i in range(1, 5):
+                    tab[:, i + 1] = np.where(big, tab[:, i + 1], ((5 - i) * a0 + i * a1) // 5)
+                tab[:, 6] = np.where(big, tab[:, 6], 0); tab[:, 7] = np.where(big, tab[:, 7], 255)
+                idx = np.stack([((bits >> np.uint64(3 * i)) & np.uint64(7)).astype(np.int64) for i in range(16)], 1)
+                a = np.take_along_axis(tab, idx, 1)
+            px[..., 3] = a
+        return _unblock(px.astype(np.uint8), w, h)
+    if enc == 3:
+        return raw[:w * h * 4].reshape(h, w, 4)[..., [2, 1, 0, 3]].copy()
+    return None
+
+
 class Textures(object):
     def __init__(self, read):
         self.read = read
@@ -276,9 +359,13 @@ class Textures(object):
             arr = None
             if data:
                 try:
-                    arr = wow_m2.load_blp(data)
+                    px = decode_blp2(data)
+                    arr = px.astype(np.float64) / 255.0 if px is not None else wow_m2.load_blp(data)
                 except Exception:
-                    arr = None
+                    try:
+                        arr = wow_m2.load_blp(data)
+                    except Exception:
+                        arr = None
             if len(self.cache) > 300:
                 self.cache.clear()
             self.cache[k] = arr
