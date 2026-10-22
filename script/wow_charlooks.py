@@ -117,28 +117,58 @@ def char_sections(t):
 
 
 # ------------------------------------------------------------------ the pieces as seen from the portrait camera
-# framing per race/gender: (how much of the body height the view shows, head centre shift up in body heights)
+# framing per race/gender: (view height in head sizes, aim shift up in head sizes)
 FRAME = {}
 
 
+def head_box(model):
+    """the head: the vertices moved by the head and jaw bones (key bones 6 and 7) in the skin-textured pieces (not the
+       hair) - their box centre and size; None when the model has no such bones"""
+    d, w = model.d, model.w
+    nb, ob, nk, ok = w[13], w[14], w[15], w[16]
+    if not nk or not nb:
+        return None
+    kb = struct.unpack_from("<%dh" % nk, d, ok)
+    bones = set(kb[i] for i in (6, 7) if i < len(kb) and kb[i] >= 0)
+    if not bones:
+        return None
+    raw = np.frombuffer(d, dtype=np.dtype([("pos", "<f4", 3), ("bw", "u1", 4), ("bi", "u1", 4), ("nrm", "<f4", 3),
+                                           ("uv", "<f4", 2), ("uv2", "<f4", 2)]), count=model.nverts, offset=model.ofs_verts)
+    skin = np.zeros(model.nverts, bool)
+    for tu in model.texunits:
+        lk = model.texlookup[tu["tex"]] if tu["tex"] < len(model.texlookup) else 0
+        if lk < len(model.textures) and model.textures[lk][0] == 1:
+            sm = model.submeshes[tu["sub"]]
+            skin[model.indices[sm["vstart"]:sm["vstart"] + sm["vcount"]]] = True
+    m = skin & np.isin(raw["bi"][:, 0], list(bones)) & (raw["bw"][:, 0] > 128)
+    if m.sum() < 20:
+        return None
+    P = model.pos[m]
+    lo, hi = P.min(axis=0), P.max(axis=0)
+    return (lo + hi) / 2, hi - lo
+
+
 def portrait_camera(model, key=""):
-    """the model's portrait camera direction, aimed at the head (in the pose of the model file the camera of the
-       model misses the head a little) and close enough that the head fills the picture"""
+    """the model's portrait camera direction, aimed at the middle of the head and as close as needed for the head
+       (with room for hair, horns and ears) to fill the picture"""
     cam = dict(model.camera) if model.camera else None
     if cam is None:
         cam = {"fov": 0.785, "near": 0.2, "far": 30.0, "pos": (1.0, -0.6, 1.8), "target": (0.0, 0.0, 1.8)}
-    P = model.pos
-    vs = [model.indices[s["vstart"]:s["vstart"] + s["vcount"]] for s in model.submeshes if s["id"] == 0]
-    B = P[np.unique(np.concatenate(vs))] if vs else P
-    top, bot = B[:, 2].max(), B[:, 2].min(); H = top - bot
-    head = B[B[:, 2] > top - 0.14 * H]
-    fr, dz = FRAME.get(key, (0.135, -0.005))
-    tgt = head.mean(axis=0) + np.array([0.0, 0.0, dz * H])
+    hb = head_box(model)
+    fr, dz = FRAME.get(key, (2.3, 0.1))
+    if hb is not None:
+        c, size = hb
+        hs = max(size[2], size[1], 0.6 * size[0])
+        tgt = c + np.array([0.0, 0.0, dz * hs]); half = fr * hs * 0.5
+    else:
+        P = model.pos; top, bot = P[:, 2].max(), P[:, 2].min(); H = top - bot
+        tgt = P[P[:, 2] > top - 0.14 * H].mean(axis=0); half = 0.15 * H
     d = np.array(cam["pos"], dtype=np.float64) - np.array(cam["target"], dtype=np.float64)
     d /= max(np.linalg.norm(d), 1e-9)
-    dist = fr * H / math.tan(cam["fov"] / 2.0)
+    dist = half / math.tan(cam["fov"] / 2.0)
     cam["target"] = tuple(tgt); cam["pos"] = tuple(tgt + d * dist); cam["near"] = min(cam.get("near", 0.2), dist * 0.3)
     cam["basis"] = wow_m2.look_at(cam["pos"], cam["target"])
+    rep("  %s camera: head box %s, view half-height %.3f" % (key, None if hb is None else [round(float(x), 3) for x in hb[1]], half))
     return cam
 
 
