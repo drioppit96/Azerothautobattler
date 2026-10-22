@@ -55,6 +55,7 @@ function statsHtml(c) {
   if (s.sd || s.heal || s.mp5 || s.hp5) h += '<div class="sgroup"><h5>Other</h5>' + (s.sd ? statRow('Spell damage', s.sd) : '') + (s.heal ? statRow('Healing', s.heal) : '') + (s.mp5 ? statRow('Mana / 5 s', s.mp5) : '') + (s.hp5 ? statRow('Health / 5 s', s.hp5) : '') + '</div>';
   const r = rt(c); if (r.buffs && r.buffs.length) h += '<div class="sgroup"><h5>Buffs</h5>' + r.buffs.map((x) => '<div class="small">' + esc(x.name) + ' (' + Math.ceil(x.until - G.gameTime) + 's)</div>').join('') + '</div>';
   if (typeof masterySheetHtml === 'function') h += masterySheetHtml(c);
+  if (typeof ridingHtml === 'function') h += ridingHtml(c);          // riding and the mount (mounts.js)
   h += '<div class="sgroup"><h5>Gear</h5>' + statRow('Durability', Math.round(durabilityPct(c) * 100) + '%') + statRow('Repair cost', money(repairCost(c))) + '</div>';
   return h;
 }
@@ -251,6 +252,7 @@ function bindSheet() {
     }
     const c = active();
     if (e.target.closest('[data-lookopen]')) { openAppearance(c); return; }
+    if (e.target.closest('[data-riding]')) { orderRiding(c); renderSheet(); return; }
     // mass disenchant: choosing items in the bags
     if (e.target.closest('[data-ccancel]')) { craftCancel(c); renderSheet(); return; }
     const dm = e.target.closest('[data-demode]');

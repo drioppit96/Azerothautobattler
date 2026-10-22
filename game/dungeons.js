@@ -357,7 +357,7 @@ function partyStep(c, dt) {
       return;
     }
     if (typeof msUnitStep === 'function' && msUnitStep(c, u, dt)) return;      // stunned (creature spells); its damage over time
-    const mv = (tx, ty, stop) => { const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy); if (d > stop) { const st = Math.min(d - stop, 7.5 * dt); u.x += dx / d * st; u.y += dy / d * st; return false; } return true; };
+    const mv = (tx, ty, stop) => { const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy); if (d > stop) { const st = Math.min(d - stop, 7.5 * dt * (r.mounted ? 1 + r.mounted.speed / 100 : 1)); u.x += dx / d * st; u.y += dy / d * st; return false; } return true; };
     if (!threats.length && u.role === 'tank' && r.tankPull && r.tankPull.st === 'alive') {
       const m = r.tankPull; const far = Math.hypot(m.x - u.x, m.y - u.y);
       if (G.state.settings.dgRangedPull !== false && isDungeonMap(c.pos.map) && far <= 30 && (typeof dgStraight !== 'function' || dgStraight(c.pos.map, { x: u.x, y: u.y, z: c.pos.z }, m))) {      // a shot from where it stands

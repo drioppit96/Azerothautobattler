@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-22 b (character looks and portraits)';
+const GAME_VERSION = '2026-10-22 c (riding and mounts)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -128,6 +128,12 @@ function drawOnScreen(ctx, im, dx, dy, dw, dh) {
   // whole source pixels (no smoothing: the edges stay where they are)
   let sx = Math.floor((x0 - dx) * kx), sy = Math.floor((y0 - dy) * ky), ex = Math.min(iw, Math.ceil((x1 - dx) * kx)), ey = Math.min(ih, Math.ceil((y1 - dy) * ky));
   ctx.drawImage(im, sx, sy, ex - sx, ey - sy, dx + sx / kx, dy + sy / ky, (ex - sx) / kx, (ey - sy) / ky);
+}
+/* riding: the mount's icon at the character's feet (mounts.js) */
+function mountBadge(ctx, c, x, y) {
+  const m = c.rt && c.rt.mounted; if (!m || typeof vfxRound !== 'function') return; const R = 6; const im = vfxRound('../icons/' + (m.ic || 'ability_mount_ridinghorse').toLowerCase() + '.jpg', Math.round(R * 2 * (G.dpr || 1)));
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x + 8, y + 8, R + 1.5, 0, 6.3); ctx.fill(); if (im) ctx.drawImage(im, x + 8 - R, y + 8 - R, R * 2, R * 2);
+  ctx.strokeStyle = '#ffd866'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(x + 8, y + 8, R + 0.5, 0, 6.3); ctx.stroke();
 }
 function drawClassIcon(ctx, cls, x, y, rad) {
   const src = 'img/class/' + cls + '.png'; const im = mapSprite(src); if (!im) return false;
@@ -443,6 +449,7 @@ const AUTO_GROUPS = [
   ['Selling and junk', [['autoSellJunk', 'Sell junk (grey and vendor trash) when near a vendor, and when the bags are full'], ['sellWhiteGear', 'Count white gear that is no upgrade as junk']]],
   ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)'], ['groupQuests', 'Do group quests (elites out in the world) with a hired group', true]]],
   ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself'], ['autoDisenchant', 'Enchanters: disenchant green gear that is no upgrade (instead of selling it)']]],
+  ['Travel', [['autoMount', 'Ride the mount on long ways (from level 40)', true], ['autoRiding', 'Learn riding and buy a mount by itself at level 40 and 60, when there is money for it', true]]],
   ['Fighting', [['rogueStealth', 'Rogues: slip into Stealth when not fighting (creatures rarely notice them)', true]]],
   ['Away', [['offlineProgress', 'Offline progress: keeps playing while the game is closed - up to 2 hours, the first 30 minutes in full, the rest at half rate; no dungeons', true]]],
 ];
@@ -721,7 +728,7 @@ function draw() {
     const ang = Math.atan2(-Math.sin(c.pos.o), -Math.cos(c.pos.o));
     const dx = -Math.sin(c.pos.o), dy = -Math.cos(c.pos.o);
     ctx.fillStyle = '#fff3d0'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(dx * 17, dy * 17); ctx.lineTo(dx * 10 - dy * 5, dy * 10 + dx * 5); ctx.lineTo(dx * 10 + dy * 5, dy * 10 - dx * 5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.restore(); vfxUnitFlash(ctx, c, x, y, 10);
+    ctx.restore(); vfxUnitFlash(ctx, c, x, y, 10); mountBadge(ctx, c, x, y);
     const hm = charStats(c).maxHp; ctx.fillStyle = '#000'; ctx.fillRect(x - 14, y - 19, 28, 5); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 14, y - 19, 28 * Math.max(0, c.hp / hm), 5);
   }
   // the other characters (running in the background, or waiting where they were left)
@@ -729,7 +736,7 @@ function draw() {
     if (o === c || o.pos.map !== m.map || !inMap(m, o.pos.x, o.pos.y)) continue;
     const live = o.bg || (typeof sameGroup === 'function' && sameGroup(c, o)); const [x, y] = vfxOff(o, ...w2s(o.pos.x, o.pos.y)); ctx.globalAlpha = live ? 1 : 0.6;
     if (!drawClassIcon(ctx, o.cls, x, y, 8)) { ctx.fillStyle = CLASS_COLOR[o.cls] || '#9fc7ff'; ctx.strokeStyle = '#1a1409'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.3); ctx.fill(); ctx.stroke(); }
-    vfxUnitFlash(ctx, o, x, y, 8); if (live && vfxTokenMode(m)) vfxHpBar(ctx, x, y - 14, 18, o.hp / charStats(o).maxHp, '#3fae5a');
+    vfxUnitFlash(ctx, o, x, y, 8); mountBadge(ctx, o, x, y); if (live && vfxTokenMode(m)) vfxHpBar(ctx, x, y - 14, 18, o.hp / charStats(o).maxHp, '#3fae5a');
     if (!live) { ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.fillStyle = '#cfe3ff'; ctx.strokeText('paused', x, y - 11); ctx.fillText('paused', x, y - 11); ctx.textAlign = 'start'; }
     ctx.globalAlpha = 1;
   }

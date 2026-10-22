@@ -425,7 +425,9 @@ function castStep(c, dt) {
   if (enemy && (k.tgt.st === 'dead' || k.tgt.st === 'evade')) { r.cast = null; return false; }
   if (r.flying || r.riding || r.ghost) { r.cast = null; return false; }
   if (k.hearth && r.threats && r.threats.length) { hearthInterrupted(c); return false; }       // a hit breaks the Hearthstone
+  if (k.mount && r.threats && r.threats.length) { r.cast = null; return false; }               // and mounting up (mounts.js)
   k.t += dt;
+  if (k.onDone && k.t >= k.total) { r.cast = null; k.onDone(); return true; }
   if (k.t >= k.total) { r.cast = null; if (!k.ch) finishSpell(c, k.name, k.sp, k.tgt); else if (k.onEnd) k.onEnd(); }
   return true;
 }

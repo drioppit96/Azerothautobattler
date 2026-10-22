@@ -635,6 +635,7 @@ function petTarget(c, P) {
 }
 function petSpeed(c, P) {
   let s = PET_SPEED; const now = G.gameTime;
+  if (rt(c).mounted) s *= 1 + rt(c).mounted.speed / 100;          // runs along with the mounted owner (mounts.js)
   const d = petBuff(P, 'Dash') || petBuff(P, 'Dive'); if (d) s *= 1 + d.speed / 100;
   if (c.pet.kind === 'hunter' && petTalent(c, 'Bestial Swiftness') && !(typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map))) s *= 1.3;
   if (P.prowl) s *= 0.5;

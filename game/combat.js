@@ -818,6 +818,7 @@ function steer(c, dx, dy, step) {
 /* ------------------------------------------------------------ movement api */
 /* A movement plan {path, idx, done, total} is advanced by advance(); travel orders use the same record. */
 function advance(c, mv, dt) {
+  if (typeof mountTick === 'function' && mountTick(c, mv)) return false;          // a long way: mount up first (mounts.js)
   // stuck detection (steering around dangerous creatures can dead-end); a pause (a fight, resting, the group leader
   // waiting for the others) is not being stuck: the check starts over after it
   if (mv.lastT != null && G.gameTime - mv.lastT > 0.5) mv.chk = null; mv.lastT = G.gameTime;
@@ -996,10 +997,12 @@ function killText(c, o) {
 /* ------------------------------------------------------------- char update */
 function updateChar(c, dt) {
   const r = rt(c);
+  if (r.mounted && typeof mountCheck === 'function') mountCheck(c);          // off the mount when it is time (mounts.js)
   if (r.ghost) { ghostStep(c, dt); return; }
   if (r.flying) { flyStep(c, dt); return; }
   if (r.riding) { rideStep(c, dt); return; }
   regenStep(c, dt);
+  if (c.level >= 40 && typeof ridingAuto === 'function') { ridingAuto(c); classMountNews(c); }          // riding and the mount (mounts.js)
   if (typeof trailStep === 'function' && isLeader(c)) trailStep(c);          // group.js: the way the leader walked (dungeons)
   if (r.charging) { chargeStep(c, dt); return; }
   if (c.cls === 4) stealthStep(c);

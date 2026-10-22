@@ -357,7 +357,7 @@ function charCcStep(c, dt) {
   }
   return true;
 }
-function charSpeed(c) { const r = rt(c); const s = r.snare; return c.speed * (s && s.until > G.gameTime ? s.f : 1) * (r.stealthed ? 0.85 : 1); }          // Stealth: a little slower
+function charSpeed(c) { const r = rt(c); const s = r.snare; return c.speed * (s && s.until > G.gameTime ? s.f : 1) * (r.stealthed ? 0.85 : 1) * (r.mounted ? 1 + r.mounted.speed / 100 : 1); }          // Stealth: a little slower; a mount: 60 / 100% faster          // Stealth: a little slower
 function charSilenced(c) { return (rt(c).silenceUntil || 0) > G.gameTime; }
 /* damage over time from creatures (hotStep) */
 function charDotStep(c, dt) {
