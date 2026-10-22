@@ -47,7 +47,8 @@
   "Thousand Needles.jpg",
   "Thunder Bluff.jpg",
   "Un'Goro Crater.jpg",
-  "Winterspring.jpg"
+  "Winterspring.jpg",
+  "Warsong Gulch.jpg"
  ],
  "note": "made by script/make_hd_maps.py - same world area as maps/<name>.png"
 }

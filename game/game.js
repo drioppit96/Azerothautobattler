@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-22 h (BG class tactics, bigger BG icons)';
+const GAME_VERSION = '2026-10-22 i (BG routes, scoreboard pause, WSG HD map)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });

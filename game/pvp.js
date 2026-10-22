@@ -222,7 +222,7 @@ function bgGraveyards(B, team) {
 function bgNearestGy(B, team, x, y) { let best = null, bd = 1e9; for (const g of bgGraveyards(B, team)) { const d = Math.hypot(g[0] - x, g[1] - y); if (d < bd) { bd = d; best = g; } } return best; }
 function bgDeadText(B, team) { const n = B.units.filter((u) => u.team === team && !u.alive && !u.general).length; return n ? ' (' + n + ' waiting)' : ''; }
 /* ------------------------------------------------------------------ the simulation (worldTick) */
-const BG_CLOSE = 120;          // the battleground closes 2 minutes after the end (the scoreboard shows until then)
+const BG_CLOSE = 120;          // (old: the battleground used to close 2 minutes after the end)
 const BG_AUTO_LEAVE = 15;      // auto battlegrounds: leave after a look at the scoreboard
 function bgTick(dt) {
   if (!G.bgs || !G.bgs.length) return;
@@ -233,11 +233,11 @@ function bgStep(B, dt) {
   const now = G.gameTime; const T = now - B.t0;
   if (B.over) {          // the scoreboard: nobody acts; auto battlegrounds leave after a moment, the rest when it closes
     for (const u of B.units) if (u.c && rt(u.c).bg === B && cset(u.c, 'autoBg') && now - B.over.t > BG_AUTO_LEAVE) bgLeaveChar(u.c, false);
-    if (now - B.over.t > BG_CLOSE) bgEnd(B);
+    // without auto battlegrounds it stays (the scoreboard, the game paused) until you press Leave Battleground
     return;
   }
   // resurrection waves
-  for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgNearestGy(B, u.team, u.x, u.y); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; }
+  for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgNearestGy(B, u.team, u.x, u.y); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; u.path = null; }
   const alive = B.units.filter((u) => u.alive);
   for (const u of alive) if (u.alive) bgUnitStep(B, u, dt, alive);
   bgEffects(B, dt);
@@ -283,10 +283,52 @@ function bgUnitStep(B, u, dt, alive) {
   if (t && (u.form === 'travel' || u.form === 'wolf' || u.form === 'cheetah') && !u.carry) u.form = null;
   if (t && !(u.form === 'travel' && u.carry)) {
     const d = bgDist(t, u); const range = u.ranged ? 26 : 4;
-    if (d > range) bgMove(u, t.x, t.y, dt, range - 1); else if (u.ranged && !bgCanCast(u) && [5, 8, 9].includes(u.cls)) bgMove(u, t.x, t.y, dt, 3); else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));
+    if (d > range) { if (d > 70) bgGo(B, u, t.x, t.y, dt, range - 1); else bgMove(u, t.x, t.y, dt, range - 1); } else if (u.ranged && !bgCanCast(u) && [5, 8, 9].includes(u.cls)) bgMove(u, t.x, t.y, dt, 3); else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));
     return;
   }
-  const g = P.goal; if (g) bgMove(u, g[0] + (g[2] ? 0 : u.jx), g[1] + (g[2] ? 0 : u.jy), dt, 1);
+  const g = P.goal; if (g) bgGo(B, u, g[0] + (g[2] ? 0 : u.jx), g[1] + (g[2] ? 0 : u.jy), dt, 1);
+}
+/* ------------------------------------------------------------------ routes: the walkable ground of each battleground
+   (points on its map picture, joined to their neighbours). Fighters going somewhere far take a route over it - each
+   their own way (a little randomness per fighter), flag carriers around the enemies - so the whole field gets used. */
+const BG_NAV = {
+  wsg: { r: 125, cx: 510, half: 140, pts: [[490, 76], [495, 130], [470, 185], [439, 172], [590, 170], [430, 240], [520, 250], [620, 250], [390, 330], [510, 320], [640, 320], [420, 420], [510, 440], [610, 440], [500, 480], [440, 510], [580, 505], [570, 522], [520, 570], [440, 575], [532, 610], [350, 280], [660, 380], [360, 400], [470, 360], [570, 370]] },
+  ab: { r: 110, pts: [[324, 136], [376, 195], [420, 165], [500, 190], [576, 206], [463, 303], [405, 372], [561, 401], [649, 450], [360, 280], [520, 250], [620, 300], [470, 400], [440, 240], [600, 360], [300, 180], [540, 330], [640, 400]] },
+  av: { r: 88, cx: 488, half: 45, pts: [] },
+};
+for (let py = 70; py <= 600; py += 50) BG_NAV.av.pts.push([445, py], [530, py]);
+function bgNav(B) {
+  const N = BG_NAV[B.key]; if (!N) return null; if (N.w) return N;
+  const m = DATA.maps.find((x) => x.map === B.map); if (!m) return null; const W = 1002, H = 668;
+  N.w = N.pts.map(([px, py]) => [m.xt - py / H * (m.xt - m.xb), m.yl - px / W * (m.yl - m.yr)]);
+  N.lat = N.pts.map(([px]) => N.half ? Math.max(-1, Math.min(1, (px - N.cx) / N.half)) : 0); N.adj = N.w.map(() => []);
+  N.pts.forEach((a, i) => N.pts.forEach((b, j) => { if (i < j && Math.hypot(a[0] - b[0], a[1] - b[1]) <= N.r) { const d = Math.hypot(N.w[i][0] - N.w[j][0], N.w[i][1] - N.w[j][1]); N.adj[i].push([j, d]); N.adj[j].push([i, d]); } }));
+  return N;
+}
+/* a point across the field on the fighter's lane (the middle of Warsong Gulch is wide) */
+function bgLanePoint(B, u, p) { const N = bgNav(B); if (!N || !N.half) return p; if (u.lane == null) u.lane = bgPick([-1, -0.6, 0, 0.6, 1]); const m = DATA.maps.find((x) => x.map === B.map); const dy = -u.lane * N.half * 0.9 * (m.yl - m.yr) / 1002; return [p[0], p[1] + dy]; }
+function bgNearNode(N, x, y) { let b = 0, bd = 1e9; N.w.forEach((p, i) => { const d = Math.hypot(p[0] - x, p[1] - y); if (d < bd) { bd = d; b = i; } }); return b; }
+function bgRoute(B, u, gx, gy) {
+  const N = bgNav(B); if (!N) return null; const s = bgNearNode(N, u.x, u.y), e = bgNearNode(N, gx, gy); if (s === e) return null;
+  const seed = u.pseed || (u.pseed = 1 + Math.random() * 1000); if (u.lane == null || (u.carry && G.gameTime > (u.laneT || 0))) { u.lane = bgPick([-1, -0.6, 0, 0.6, 1]); u.laneT = G.gameTime + 30; } const noise = (i, j) => { const v = Math.sin((i * 73.1 + j * 37.7) * seed) * 43758.5; return v - Math.floor(v); };
+  const foes = u.carry ? B.units.filter((x) => x.alive && x.team !== u.team) : null;
+  const dist = N.w.map(() => Infinity), prev = N.w.map(() => -1), done = N.w.map(() => false); dist[s] = 0;
+  for (;;) { let i = -1, bd = Infinity; for (let k = 0; k < dist.length; k++) if (!done[k] && dist[k] < bd) { bd = dist[k]; i = k; } if (i < 0 || i === e) break; done[i] = true;
+    for (const [j, d] of N.adj[i]) { let w = d * (1 + 0.6 * noise(Math.min(i, j), Math.max(i, j)) + (N.half ? 1.6 * Math.abs(N.lat[j] - u.lane) : 0));          /* each fighter keeps to its lane: west, middle or east */
+      if (foes) { const p = N.w[j]; for (const f of foes) if (Math.abs(f.x - p[0]) < 30 && Math.abs(f.y - p[1]) < 30) w += 60; }
+      if (dist[i] + w < dist[j]) { dist[j] = dist[i] + w; prev[j] = i; } } }
+  const out = []; for (let k = e; k >= 0 && k !== s; k = prev[k]) out.unshift(N.w[k]); if (!out.length) return null;
+  const sc = Math.max(4, Math.min(12, Math.hypot(u.jx || 0, u.jy || 0)));
+  return out.map((p) => [p[0] + (u.jx || 0) / 14 * sc, p[1] + (u.jy || 0) / 14 * sc]);
+}
+/* walking to a far goal: along a route; close by: straight */
+function bgGo(B, u, gx, gy, dt, stop) {
+  const d = Math.hypot(gx - u.x, gy - u.y);
+  if (d < 70) { u.path = null; bgMove(u, gx, gy, dt, stop); return; }
+  const P = u.path; const stale = !P || Math.hypot(P.gx - gx, P.gy - gy) > 40 || G.gameTime > P.t || (u.carry && G.gameTime > P.t - 12);
+  if (stale) { const r = bgRoute(B, u, gx, gy); u.path = { pts: r || [], gx, gy, t: G.gameTime + 25 }; }
+  const pts = u.path.pts; while (pts.length && Math.hypot(pts[0][0] - u.x, pts[0][1] - u.y) < 9) pts.shift();
+  if (pts.length) bgMove(u, pts[0][0], pts[0][1], dt, 0); else bgMove(u, gx, gy, dt, stop);
 }
 function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * bgSpeedMul(u) * dt); /* forms, Sprint, slows and roots (pvptactics.js) */ if (s <= 0) return; u.x += dx / d * s; u.y += dy / d * s; }
 function bgHit(B, u, t, v) {
@@ -379,8 +421,8 @@ function bgPlan(B, u) {
     if (o === 'wsg:take') { if (eCar && bgDist(eCar, u) < 40) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return mCar ? { goal: [mCar.x, mCar.y], anchor: [mCar.x, mCar.y, 35] } : { goal: [theirFlag[0], theirFlag[1], true], range: 9 }; }          /* runners: straight for the flag room */
     if (o === 'wsg:esc') { if (mCar) return { goal: [mCar.x + u.jx * 0.4, mCar.y + u.jy * 0.4, true], anchor: [mCar.x, mCar.y, 30] }; if (eCar) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return { goal: [theirFlag[0], theirFlag[1]] }; }
     if (o === 'wsg:def') { const g = { goal: [myFlag[0], myFlag[1]], anchor: [myFlag[0], myFlag[1], 45] }; if (eCar && bgDist(eCar, u) < 70) g.hunt = eCar; return g; }
-    if (o === 'wsg:hunt') return eCar ? { goal: [eCar.x, eCar.y, true], hunt: bgDist(eCar, u) < 30 ? eCar : null, range: 22 } : { goal: def.mid };          /* the escort is in the way first */
-    return { goal: def.mid, anchor: [def.mid[0], def.mid[1], 70] };
+    if (o === 'wsg:hunt') return eCar ? { goal: [eCar.x, eCar.y, true], hunt: bgDist(eCar, u) < 30 ? eCar : null, range: 22 } : { goal: bgLanePoint(B, u, def.mid) };          /* the escort is in the way first */
+    const mid = bgLanePoint(B, u, def.mid); return { goal: mid, anchor: [mid[0], mid[1], 70] };
   }
   if (B.key === 'ab') {
     const m = /^ab:hold:(\d+)$/.exec(o);
@@ -524,7 +566,7 @@ function bgLeave(c) { const g = typeof groupOf === 'function' ? groupOf(c) : nul
 function pvpMigrate(c) { if (c.bgReturn && !rt(c).bg) { const b = c.bgReturn; c.pos = { map: b.map, x: b.x, y: b.y, z: b.z || 0, o: 0 }; c.order = c.bgResume || null; delete c.bgReturn; delete c.bgResume; } if (c.pvp) delete c.pvp.q; }
 function bgOrderText(c) {
   const B = rt(c).bg; if (!B) return { t: 'Battleground', d: '' };
-  return { t: B.def.name, d: B.over ? (B.over.winner ? B.over.winner + ' wins' : 'Draw') + ' - closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) : bgScoreText(B) + ' - ' + fmtTime(G.gameTime - B.t0) };
+  return { t: B.def.name, d: B.over ? (B.over.winner ? B.over.winner + ' wins' : 'Draw') + ' - the scoreboard' : bgScoreText(B) + ' - ' + fmtTime(G.gameTime - B.t0) };
 }
 function bgScoreText(B) {
   if (B.key === 'wsg') return 'flags ' + B.score.Alliance + ' : ' + B.score.Horde + ' (Alliance : Horde)';
@@ -608,7 +650,7 @@ function renderBgCard() {
   else {
     const me = B.units.find((u) => u.c === c);
     h = '<h3>' + esc(B.def.name) + ' <span class="small muted">' + fmtTime((B.over ? B.over.t : G.gameTime) - B.t0) + '</span></h3><div class="small">' + esc(bgScoreText(B)) + '</div>';
-    if (B.over) h += '<div class="bgres ' + (B.over.winner === B.side ? 'won' : 'lost') + '">' + (B.over.winner ? (B.over.winner === B.side ? 'Victory!' : 'Defeat') : 'Draw') + '</div><div class="small muted">Closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) + '</div>';
+    if (B.over) h += '<div class="bgres ' + (B.over.winner === B.side ? 'won' : 'lost') + '">' + (B.over.winner ? (B.over.winner === B.side ? 'Victory!' : 'Defeat') : 'Draw') + '</div><div class="small muted">' + (cset(c, 'autoBg') ? 'Leaving after the scoreboard (auto battlegrounds)' : 'Press Leave battleground to go on') + '</div>';
     if (!B.over) h += '<div class="small rc-wave">Resurrection wave in ' + Math.ceil(bgNextWave(B) - G.gameTime) + 's' + bgDeadText(B, B.side) + '</div>';
     if (me) h += '<div class="small">You: ' + me.kills + ' killing blows, ' + me.hks + ' honorable kills, ' + me.deaths + ' deaths, +' + Math.round(me.honor) + ' honor' + (me.alive || B.over ? '' : ' - <span style="color:#ff6a5a">dead, at the graveyard - back in ' + Math.ceil(Math.max(0, me.resAt - G.gameTime)) + 's</span>') + '</div>';
     if (me && !B.over) { const o = bgOrdOf(B, me); h += '<div class="small">Order: <b>' + esc((bgOrders(B).find((x) => x[0] === o) || ['', 'Auto'])[1]) + '</b></div>'; }
@@ -617,7 +659,7 @@ function renderBgCard() {
   }
   if (el._h !== h) { el._h = h; el.innerHTML = h; }
   el.onclick = (e) => { const b = e.target.closest('[data-bgq]'); if (!b) return; const d = b.dataset.bgq;
-    if (d === 'leave') bgLeaveQueue(active()); else if (d === 'out') bgLeave(active()); else if (d === 'raid') toggleRaid(); else if (d === 'score') { SCORE.show = !SCORE.show; SCORE.forced = SCORE.show; }
+    if (d === 'leave') bgLeaveQueue(active()); else if (d === 'out') bgLeaveNow(active()); else if (d === 'raid') toggleRaid(); else if (d === 'score') { SCORE.show = !SCORE.show; SCORE.forced = SCORE.show; }
     renderBgCard(); };
 }
 
@@ -627,14 +669,15 @@ function bgK(v) { v = Math.round(v); return v >= 100000 ? Math.round(v / 1000) +
 function bgObjCols(B) { return B.key === 'wsg' ? ['Flags Captured', 'Flags Returned'] : B.key === 'ab' ? ['Bases Assaulted', 'Bases Defended'] : ['Graveyards Assaulted', 'Graveyards Defended']; }
 function renderBgScore() {
   let el = $('bgScore'); const c = active(); const B = rt(c).bg;
-  if (B && B.over && !B.scoreShown) { B.scoreShown = true; SCORE.show = true; }
+  if (B && B.over && !B.scoreShown) { B.scoreShown = true; SCORE.show = true; if (!cset(c, 'autoBg') && !G.headless) { SCORE.paused = true; SCORE.prevSpeed = G.state.settings.speed || G.lastSpeed || 1; setSpeed(0); } }
+  const manual = B && B.over && !cset(c, 'autoBg'); if (manual) SCORE.show = true;          /* stays up until Leave */
   if (!B || !SCORE.show) { if (el && !el.hidden) { el.hidden = true; el._h = ''; } if (!B) SCORE.show = false; return; }
   if (!el) { el = document.createElement('div'); el.id = 'bgScore'; $('mapwrap').appendChild(el); el.addEventListener('pointerdown', bgScoreClick); }
   const oc = bgObjCols(B);
   const cols = [['kills', 'Killing Blows'], ['deaths', 'Deaths'], ['hks', 'Honorable Kills'], ['dmg', 'Damage Done'], ['healed', 'Healing Done'], ['oa', oc[0]], ['od', oc[1]], ['honor', 'Honor Gained']];
   const list = B.units.filter((u) => !u.general && (SCORE.team === 'all' || u.team === SCORE.team)).sort((a, b) => (b[SCORE.sort] || 0) - (a[SCORE.sort] || 0) || b.kills - a.kills);
   const title = B.over ? (B.over.winner ? B.over.winner + ' Wins' : 'Draw') : B.def.name;
-  let h = '<div class="bs-title ' + (B.over && B.over.winner ? B.over.winner.toLowerCase() : '') + '">' + esc(title) + '<button class="mini" data-bsclose="1" title="Close">&#10005;</button></div>' +
+  let h = '<div class="bs-title ' + (B.over && B.over.winner ? B.over.winner.toLowerCase() : '') + '">' + esc(title) + (manual ? '' : '<button class="mini" data-bsclose="1" title="Close">&#10005;</button>') + '</div>' +
     '<div class="bs-tabs">' + [['all', 'All'], ['Alliance', 'Alliance'], ['Horde', 'Horde']].map(([k, t]) => '<button class="mini' + (SCORE.team === k ? ' on' : '') + '" data-bsteam="' + k + '">' + t + '</button>').join('') + '<span class="small muted">' + esc(bgScoreText(B)) + '</span></div>' +
     '<div class="bs-wrap"><table class="bs"><thead><tr><th class="bs-n">Name</th>' + cols.map(([k, t]) => '<th data-bssort="' + k + '"' + (SCORE.sort === k ? ' class="on"' : '') + '>' + t + '</th>').join('') + '</tr></thead><tbody>';
   for (const u of list) {
@@ -644,16 +687,18 @@ function renderBgScore() {
   }
   const n = (t) => B.units.filter((u) => u.team === t && !u.general).length;
   h += '</tbody></table></div><div class="bs-foot"><span class="small">' + n('Alliance') + ' Alliance Players / ' + n('Horde') + ' Horde Players<br>Time Elapsed: ' + Math.floor(((B.over ? B.over.t : G.gameTime) - B.t0) / 60) + ' Min</span>' +
-    (B.over ? '<span class="small bs-close">Battleground closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) + '</span>' : '<span></span>') + '<button class="act red" data-bsleave="1">Leave Battleground</button></div>';
+    (B.over ? '<span class="small bs-close">' + (manual ? 'Game paused - press Leave Battleground to go on' : 'Leaving in ' + Math.max(0, Math.ceil(BG_AUTO_LEAVE - (G.gameTime - B.over.t))) + 's (auto battlegrounds)') + '</span>' : '<span></span>') + '<button class="act red" data-bsleave="1">Leave Battleground</button></div>';
   if (el._h !== h) { el._h = h; const sc = el.querySelector('.bs-wrap'); const top = sc ? sc.scrollTop : 0; el.innerHTML = h; const sc2 = el.querySelector('.bs-wrap'); if (sc2) sc2.scrollTop = top; }
   el.hidden = false;
 }
 function bgScoreClick(e) {
   const t = e.target.closest('[data-bsclose],[data-bsteam],[data-bssort],[data-bsleave]'); if (!t) return; e.preventDefault(); const d = t.dataset;
-  if (d.bsclose) SCORE.show = false; else if (d.bsteam) SCORE.team = d.bsteam; else if (d.bssort) SCORE.sort = d.bssort; else if (d.bsleave) { SCORE.show = false; bgLeave(active()); }
+  if (d.bsclose) SCORE.show = false; else if (d.bsteam) SCORE.team = d.bsteam; else if (d.bssort) SCORE.sort = d.bssort; else if (d.bsleave) bgLeaveNow(active());
   renderBgCard();
 }
 
+/* Leave Battleground (scoreboard, BG card, PvP window): out, and the game goes on if the scoreboard paused it */
+function bgLeaveNow(c) { SCORE.show = false; bgLeave(c); if (SCORE.paused) { SCORE.paused = false; setSpeed(SCORE.prevSpeed || 1); } }
 /* ------------------------------------------------------------------ the raid panel: orders for groups and players */
 const RAID = { show: false, sel: { kind: 'raid', id: null } };
 function toggleRaid() { RAID.show = !RAID.show; G.state.settings.raidPanel = RAID.show; save(); if (RAID.show && window.matchMedia && matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1100px)').matches) { const b = document.querySelector('#mnav [data-p="left"]'); if (b) b.click(); } renderBgCard(); }
@@ -749,7 +794,7 @@ function pvpClick(e) {
   const c = active(); const t = e.target.closest('[data-bgjoin],[data-bgleaveq],[data-bgout],[data-hbuy],[data-bgauto],[data-bgakey]'); if (!t) return false; const d = t.dataset;
   if (d.bgauto) { if (e.type !== 'click' || e.target !== t) return true; c.auto = c.auto || {}; c.auto.autoBg = t.checked; if (!t.checked && c.pvp && c.pvp.q && c.pvp.q.lead === c.id) bgLeaveQueue(c); save(); renderSheet(); renderBgCard(); if (typeof renderSettingsCard === 'function') renderSettingsCard(); return true; }
   if (d.bgakey) { c.auto = c.auto || {}; c.auto.autoBgKey = d.bgakey; save(); renderSheet(); return true; }
-  if (d.bgjoin) bgQueue(c, d.bgjoin); else if (d.bgleaveq) bgLeaveQueue(c); else if (d.bgout) bgLeave(c); else if (d.hbuy) honorBuy(c, +d.hbuy);
+  if (d.bgjoin) bgQueue(c, d.bgjoin); else if (d.bgleaveq) bgLeaveQueue(c); else if (d.bgout) bgLeaveNow(c); else if (d.hbuy) honorBuy(c, +d.hbuy);
   renderSheet(); renderBgCard(); return true;
 }
 
