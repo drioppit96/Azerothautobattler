@@ -146,10 +146,18 @@ function bgBot(B, team, ref, healer) {
   return bgNewUnit({ id: 'b' + (B.nid++), name: m.name, rid: m.rid, team, cls, race, level: L, maxhp, hp: maxhp, dps: healer ? dps * 0.45 : dps, heal: healer ? dps * 1.1 : 0,
     ranged: [3, 5, 8, 9].includes(cls) || healer, rank, skill: Math.round(m.skill * 10) / 10, gear: Math.round(gear * 100) / 100 });
 }
-function bgFill(B, team, ref) {
-  const mine = B.units.filter((u) => u.team === team); let heals = Math.max(0, bgHealerCount(B) - mine.filter((u) => u.heal).length);
-  const free = B.def.size - mine.length; const hs = new Set(); while (hs.size < Math.min(heals, free)) hs.add((Math.random() * free) | 0);
-  for (let i = 0; i < free; i++) B.units.push(bgBot(B, team, ref, hs.has(i)));
+/* both sides at once, taking turns: the roster's mercenaries (often your own cheap volunteers) end up on both sides,
+   not all on yours */
+function bgFillBoth(B, teams, ref) {
+  const plan = teams.map((team) => { const mine = B.units.filter((u) => u.team === team); const heals = Math.max(0, bgHealerCount(B) - mine.filter((u) => u.heal).length);
+    const free = B.def.size - mine.length; const hs = new Set(); while (hs.size < Math.min(heals, free)) hs.add((Math.random() * free) | 0); return { team, free, hs, i: 0 }; });
+  for (let more = true; more;) { more = false; for (const p of plan) if (p.i < p.free) { B.units.push(bgBot(B, p.team, ref, p.hs.has(p.i))); p.i++; more = true; } }
+  // fair teams: the other players of the weaker side get a little better until both are within a few percent
+  const pw = (team) => B.units.filter((u) => u.team === team && !u.general).reduce((a, u) => a + Math.sqrt(Math.max(1, u.dps + u.heal) * u.maxhp), 0);
+  const [a, b] = teams; const pa = pw(a), pb = pw(b); const weak = pa < pb ? a : b, strong = weak === a ? b : a; const want = Math.max(pa, pb) * rnd(0.96, 1.0), have = Math.min(pa, pb);
+  if (have < want) { const bots = B.units.filter((u) => u.team === weak && !u.c && !u.general); const botP = bots.reduce((x, u) => x + Math.sqrt(Math.max(1, u.dps + u.heal) * u.maxhp), 0);
+    const f = Math.min(1.6, 1 + (want - have) / Math.max(1, botP)); for (const u of bots) { u.dps *= f; u.heal *= f; u.maxhp = Math.round(u.maxhp * f); u.hp = u.maxhp; } }
+  B.power = { [a]: Math.round(pw(a)), [b]: Math.round(pw(b)) };
 }
 function bgRankName(u) { return u.rank ? PVP_RANKS[u.team][u.rank - 1] : 'No rank'; }
 function bgGroups(B) { return Math.ceil(B.def.size / 5); }
@@ -167,7 +175,7 @@ function bgStart(key, chars) {
   // your characters, then the rest of both teams
   for (const c of chars) B.units.push(bgUnitFromChar(c, mine));
   const ref = B.units[0];
-  bgFill(B, mine, ref); bgFill(B, theirs, ref);
+  bgFillBoth(B, [mine, theirs], ref);
   B.units.forEach((u, i) => { u.role = bgRole(B, u, i); const p = bgSpawnPoint(B, u.team); u.x = p[0] + rnd(-6, 6); u.y = p[1] + rnd(-6, 6); u.jx = rnd(-14, 14); u.jy = rnd(-14, 14); });
   bgAssignGroups(B, mine); bgAssignGroups(B, theirs);
   if (key === 'wsg') { B.score = { Alliance: 0, Horde: 0 }; B.flag = { Alliance: { carrier: null }, Horde: { carrier: null } }; B.firstCap = null; }
