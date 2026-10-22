@@ -233,6 +233,7 @@ class Textures(object):
         self.read = read
         self.saved = {}
         self.cache = {}
+        self.opaque = False
         os.makedirs(os.path.join(OUT, "tex"), exist_ok=True)
 
     def get(self, path):
@@ -265,8 +266,13 @@ class Textures(object):
             self.saved[k] = ""
             return ""
         stem = re.sub(r"[^a-z0-9_]+", "_", k.rsplit("\\", 1)[-1].rsplit(".", 1)[0])
-        fn = stem + "_" + hashlib.md5(k.encode()).hexdigest()[:6] + ".png"
-        Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(OUT, "tex", fn), optimize=True)
+        px = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
+        if px[..., 3].min() >= 250 or self.opaque:          # no see-through parts (the skins): a JPEG, much smaller
+            fn = stem + "_" + hashlib.md5(k.encode()).hexdigest()[:6] + ".jpg"
+            Image.fromarray(px[..., :3], "RGB").save(os.path.join(OUT, "tex", fn), quality=88)
+        else:
+            fn = stem + "_" + hashlib.md5(k.encode()).hexdigest()[:6] + ".png"
+            Image.fromarray(px, "RGBA").save(os.path.join(OUT, "tex", fn), optimize=True)
         self.saved[k] = fn
         return fn
 
@@ -323,19 +329,29 @@ def main():
                 plist.append({"geo": gid, "slot": ttype, "blend": blend, "file": fn, "px": int(np.isfinite(D).sum())})
             # the choices (playable ones: flags & 1; when no row has the flag, all)
             mine = [x for x in secs if x["race"] == race and x["sex"] == sex]
-            play = [x for x in mine if x.get("flags", 1) & 1] or mine
+            # all of them, with their flags: which ones the original character creation offered is decided in the game
+            play = mine
+            fl = {}
+            for x in mine:
+                fl.setdefault((x["sec"], x.get("flags", 0)), 0); fl[(x["sec"], x.get("flags", 0))] += 1
+            rep("  %s rows by (section, flags): %s" % (key, sorted(fl.items())))
             R = {"model": path, "pieces": plist, "skins": [], "faces": [], "facial": [], "hair": [],
                  "modelTextures": [[t, fl, n] for t, fl, n in model.textures]}
             for x in sorted(play, key=lambda q: (q["sec"], q.get("var", 0), q.get("col", 0))):
-                t = [tex.name(p) for p in x["tex"]]
+                t = []
+                for i, p in enumerate(x["tex"]):
+                    tex.opaque = x["sec"] == 0 and i == 0          # the skin base: never see-through (a JPEG)
+                    t.append(tex.name(p))
+                tex.opaque = False
+                src = (x["tex"][0] or "").lower().rsplit("\\", 1)[-1]
                 if x["sec"] == 0:
-                    R["skins"].append({"col": x["col"], "base": t[0], "extra": t[1] if len(t) > 1 else ""})
+                    R["skins"].append({"col": x["col"], "base": t[0], "extra": t[1] if len(t) > 1 else "", "fl": x.get("flags", 0), "src": src})
                 elif x["sec"] == 1:
-                    R["faces"].append({"var": x["var"], "col": x["col"], "lower": t[0], "upper": t[1] if len(t) > 1 else ""})
+                    R["faces"].append({"var": x["var"], "col": x["col"], "lower": t[0], "upper": t[1] if len(t) > 1 else "", "fl": x.get("flags", 0), "src": src})
                 elif x["sec"] == 2:
-                    R["facial"].append({"var": x["var"], "col": x["col"], "lower": t[0], "upper": t[1] if len(t) > 1 else ""})
+                    R["facial"].append({"var": x["var"], "col": x["col"], "lower": t[0], "upper": t[1] if len(t) > 1 else "", "fl": x.get("flags", 0), "src": src})
                 elif x["sec"] == 3:
-                    R["hair"].append({"var": x["var"], "col": x["col"], "tex": t[0], "scalpLower": t[1] if len(t) > 1 else "", "scalpUpper": t[2] if len(t) > 2 else ""})
+                    R["hair"].append({"var": x["var"], "col": x["col"], "tex": t[0], "scalpLower": t[1] if len(t) > 1 else "", "scalpUpper": t[2] if len(t) > 2 else "", "fl": x.get("flags", 0), "src": src})
             R["hairGeosets"] = [r for r in hairgeo if len(r) >= 5 and r[1] == race and r[2] == sex]
             # CharacterFacialHairStyles 1.12: race, sex, variation, (3 unused), geosets x3 - kept as [race, sex, variation, g1, g2, g3]
             R["facialStyles"] = [[r[0], r[1], r[2]] + list(r[-3:]) for r in facial if len(r) >= 6 and r[0] == race and r[1] == sex]
