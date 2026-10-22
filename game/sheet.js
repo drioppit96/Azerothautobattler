@@ -13,6 +13,7 @@ const SH_GROUPS = [
   { k: 'trade', n: 'Trade', key: 'T', tabs: [['vendor', 'Vendor'], ['ah', 'Auction house'], ['trade', 'Trade']] },
   { k: 'prof', n: 'Professions', key: 'P', tabs: [['prof', 'Professions'], ['gcraft', 'Guild crafters']] },
   { k: 'guild', n: 'Guild', key: 'G', tabs: [['guild', 'Members'], ['glog', 'Guild log']] },
+  { k: 'pvp', n: 'PvP', key: 'H', tabs: [['pvp', 'Honor'], ['bgs', 'Battlegrounds'], ['honorv', 'Honor vendor']] },
 ];
 function shGroupOf(tab) { return SH_GROUPS.find((g) => g.tabs.some((t) => t[0] === tab)) || SH_GROUPS[0]; }
 function shTabShown(c, tab) { return tab !== 'pet' || c.cls === 3 || c.cls === 9; }
@@ -143,7 +144,7 @@ function renderSheet() {
   const nav = $('sheetTabs'); if (nav._h !== tabs) { nav.innerHTML = tabs; nav._h = tabs; }
   const gt = $('sheetGroup'); if (gt) gt.textContent = grp.n;
   $('sheetTitle').textContent = c.name + (guildOf(c) ? ' <' + guildOf(c).name + '>' : '') + ' - level ' + c.level + ' ' + RACE_NAMES[c.race] + ' ' + CLASS_NAMES[c.cls];
-  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep' || SH.tab === 'beh');
+  $('sheet').classList.toggle('wide', SH.tab === 'talents' || SH.tab === 'gcraft' || SH.tab === 'rep' || SH.tab === 'beh' || SH.tab === 'pvp' || SH.tab === 'bgs');
   $('sheet').dataset.group = grp.k;
   if (SH.tab === 'talents') { $('sheetLeft').innerHTML = talentsHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'prof') {
@@ -153,6 +154,7 @@ function renderSheet() {
     return;
   }
   if (SH.tab === 'gcraft') { $('sheetLeft').innerHTML = gcraftHtml(c); $('sheetBags').innerHTML = ''; return; }
+  if (SH.tab === 'pvp' || SH.tab === 'bgs' || SH.tab === 'honorv') { $('sheetLeft').innerHTML = pvpTabHtml(c, SH.tab); $('sheetBags').innerHTML = SH.tab === 'honorv' ? bagsHtml(c) : ''; return; }          // pvp.js
   if (SH.tab === 'rep') { $('sheetLeft').innerHTML = repTabHtml(c); $('sheetBags').innerHTML = ''; return; }
   if (SH.tab === 'tac') SH.tab = 'beh';            // the tactics are in the abilities list now
   const vs = SH.tab === 'vendor' && document.activeElement && document.activeElement.id === 'vsQ' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
@@ -278,6 +280,7 @@ function bindSheet() {
     if (SH.tab === 'trade' && tradeClick(e)) return;
     if ((SH.tab === 'guild' || SH.tab === 'glog' || SH.tab === 'gbank') && guildClick(e)) return;
     if (SH.tab === 'gcraft' && typeof gcraftClick === 'function' && gcraftClick(e)) return;
+    if ((SH.tab === 'pvp' || SH.tab === 'bgs' || SH.tab === 'honorv') && typeof pvpClick === 'function' && pvpClick(e)) return;
     if (SH.tab === 'vendor' && typeof shopClick === 'function' && shopClick(e)) return;
     if (SH.tab === 'bags' && bagSummaryClick(e)) return;
     if (SH.tab === 'pet' && petTabClick(e)) return;

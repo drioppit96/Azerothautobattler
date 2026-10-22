@@ -699,3 +699,16 @@ html.app #hud{bottom:auto;top:6px}
 .lk-win h3{margin:0 0 10px;color:var(--gold)}.lk-body{display:flex;gap:14px;align-items:center}.lk-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 .lk-open{display:block;margin:0 auto 6px}
 @media (max-width: 600px){.lk-body,.cs-look{flex-direction:column}}
+
+/* ---------------------------------------------------------------- PvP (pvp.js) */
+.pvp .pvphead{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.pvprank{width:54px;height:54px;border-radius:50%;border:3px solid var(--gold2);background:radial-gradient(#3a2c14,#120d07);display:flex;align-items:center;justify-content:center;color:var(--gold);font:700 22px Georgia,serif;box-shadow:0 0 0 2px #000}
+.pvpname{font:600 18px Georgia,serif;color:var(--gold)}
+.pvpranks{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-bottom:6px}
+.pvpranks div{display:flex;gap:6px;font-size:13px;padding:2px 4px;border-radius:3px;color:#9a8f77}.pvpranks div span{width:18px;text-align:right;color:var(--gold2)}
+.pvpranks div em{margin-left:auto;font-style:normal;font-size:11px;color:#6d634f}
+.pvpranks div.done{color:var(--text)}.pvpranks div.on{background:#2c2416;outline:1px solid var(--gold2);color:#ffe9a8}
+.bgrow{border:1px solid var(--line);border-radius:5px;padding:8px;margin:6px 0;background:#15120d}.bgname{font:600 15px Georgia,serif;color:var(--gold);margin-bottom:2px}
+.bgrow .act{margin-top:6px}
+.bgcard .bgres{font:700 18px Georgia,serif;text-align:center;margin:4px 0}.bgcard .bgres.won{color:#1eff00}.bgcard .bgres.lost{color:#ff6a5a}
+.bgcard .bglog{margin:4px 0}

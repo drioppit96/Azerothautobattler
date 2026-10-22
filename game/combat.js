@@ -401,6 +401,7 @@ function worldTick(dt) {
   const now = G.gameTime;
   if (typeof marketTick === 'function') marketTick();
   if (typeof wcTick === 'function') wcTick(dt);             // guild crafting orders (workshop.js)
+  if (typeof bgTick === 'function') bgTick(dt);             // battlegrounds (pvp.js)
   for (const id in G.world) {
     const W = G.world[id];
     if (W.lazy) lwUpdate(W);
@@ -998,6 +999,9 @@ function killText(c, o) {
 function updateChar(c, dt) {
   const r = rt(c);
   if (r.mounted && typeof mountCheck === 'function') mountCheck(c);          // off the mount when it is time (mounts.js)
+  if (r.bg) return;          // in a battleground: pvp.js moves and fights for it (bgTick)
+  if (c.order && c.order.type === 'bg') { c.order = c.bgResume || null; delete c.bgResume; }
+  if (c.pvp && c.pvp.q && typeof pvpQueueStep === 'function' && pvpQueueStep(c)) return;          // the battleground queue pops
   if (r.ghost) { ghostStep(c, dt); return; }
   if (r.flying) { flyStep(c, dt); return; }
   if (r.riding) { rideStep(c, dt); return; }

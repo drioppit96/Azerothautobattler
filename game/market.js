@@ -97,14 +97,15 @@ function updateNpcOrder(c, o) {
   }
   if (o.kind === 'vendor') { shopArrive(c, o); return; }
   if (o.kind === 'inn') { innArrive(c, o); return; }
-  if (o.kind === 'riding') { ridingArrive(c, o); return; }          // mounts.js: riding trainer / mount vendor
+  if (o.kind === 'riding') { ridingArrive(c, o); return; }
+  if (o.kind === 'honor') { honorArrive(c, o); return; }          // pvp.js: the honor vendor          // mounts.js: riding trainer / mount vendor
   if (o.kind === 'bank' && o.deposit && typeof farmDeposit === 'function') { farmDeposit(c, o); return; }          // farm.js: full bags                  // hearth.js: a new home            // shop.js: Go and buy
   c.order = o.resume || null; if (c.order) { c.order.wait = 0; c.order.noSell = false; }
   collectMail(c, true);
   renderOrder(); save();
   if (!G.headless && isActive(c)) openSheet(o.kind === 'bank' ? 'bank' : 'ah');
 }
-function npcOrderText(c, o) { return { t: (o.kind === 'ah' ? 'Auction house: ' : o.kind === 'bank' ? 'Bank: ' : o.kind === 'vendor' ? 'Buy ' + (o.buy ? itemName(o.buy) + ' at ' : 'at ') : o.kind === 'inn' ? 'New home: ' : o.kind === 'riding' ? (o.step === 'train' ? 'Learn riding: ' : 'Buy a mount: ') : 'Mail: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'walking there' }; }
+function npcOrderText(c, o) { return { t: (o.kind === 'ah' ? 'Auction house: ' : o.kind === 'bank' ? 'Bank: ' : o.kind === 'vendor' ? 'Buy ' + (o.buy ? itemName(o.buy) + ' at ' : 'at ') : o.kind === 'inn' ? 'New home: ' : o.kind === 'riding' ? (o.step === 'train' ? 'Learn riding: ' : 'Buy a mount: ') : o.kind === 'honor' ? 'Honor vendor: ' : 'Mail: ') + o.label, d: o.trip && o.trip.legs[o.trip.i] ? tripText(o.trip) : 'walking there' }; }
 
 /* ------------------------------------------------------------------ what things are worth */
 function marketIndex() {

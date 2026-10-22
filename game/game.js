@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-22 c (riding and mounts)';
+const GAME_VERSION = '2026-10-22 d (PvP: honor, ranks, battlegrounds)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -168,6 +168,7 @@ function fitMap() {
   G.ox = (G.cw - W * G.scale) / 2; G.oy = (G.ch - H * G.scale) / 2;
 }
 function bestMapFor(pos) {
+  if (typeof bgMapFor === 'function') { const bm = bgMapFor(pos); if (bm) return bm; }          // a battleground (pvp.js)
   if (typeof dungeonMapAt === 'function') { const dm = dungeonMapAt(pos); if (dm) return dm; }
   let best = null;
   for (const m of G.maps) {
@@ -203,7 +204,8 @@ function setMap(m, keepView, onChar) {
   if (m.world) G.mobs = []; else buildMobsForMap();
   const done = () => {
     if (G.map !== m) return;
-    if (onChar) { const c = active(); centerOn(c.pos.x, c.pos.y, m.cont ? 1 : 1.8); }
+    if (onChar && !(typeof isBgMap === 'function' && isBgMap(m.map))) { const c = active(); centerOn(c.pos.x, c.pos.y, m.cont ? 1 : 1.8); }          /* a battleground shows all of it */
+    else if (onChar) fitMap();
     else if (!keepView) fitMap();
   };
   if (!G.img[m.name]) {
@@ -218,6 +220,7 @@ function setMap(m, keepView, onChar) {
 /* ------------------------------------------------------------------ mobs */
 function buildMobsForMap() {
   const m = G.map; const c = active ? active() : null; const out = [];
+  if (typeof isBgMap === 'function' && isBgMap(m.map)) { G.mobs = []; return; }          // battlegrounds: their own fighters (pvp.js)
   const W = ensureWorld(m.map);
   for (const mob of W.list) {
     if (!inMap(m, mob.hx, mob.hy)) continue;
@@ -266,7 +269,8 @@ function migrate(c) {
   c.bagSlots = c.bagSlots || [null, null, null, null];
   if (c._gear) { for (const k in c._gear.equip) c.equip[k] = makeInst(c._gear.equip[k], 1); for (const [id, n] of c._gear.bags) addItem(c, id, n); delete c._gear; }
   for (const k in c.equip) c.equip[k] = normInst(c.equip[k]);
-  if (typeof ammoMigrate === 'function') ammoMigrate(c);          // ammo stacks from before: one each, the best one worn
+  if (typeof ammoMigrate === 'function') ammoMigrate(c);
+  if (typeof pvpMigrate === 'function') pvpMigrate(c);          // loaded in the middle of a battleground: back out (pvp.js)          // ammo stacks from before: one each, the best one worn
   for (const s of c.bags) { const m = maxDur(s.id); if (m && s.dur == null) s.dur = m; }
   c.cfg = Object.assign(defaultCfg(), c.cfg || {}); c.talents = c.talents || {}; c.taxi = c.taxi || {};
   if (!TALENT_BUILDS[c.cls] || !TALENT_BUILDS[c.cls][c.cfg.talentBuild]) c.cfg.talentBuild = Object.keys(TALENT_BUILDS[c.cls] || { none: 1 })[0];
@@ -478,6 +482,7 @@ function orderText(c) {
   if (o.type === 'patrol') return patrolText(c, o);
   if (o.type === 'dungeon') return dungeonText(c, o);
   if (o.type === 'npc') return npcOrderText(c, o);
+  if (o.type === 'bg' && typeof bgOrderText === 'function') return bgOrderText(c);
   if (o.type === 'farm') return farmText(c, o);
   if (o.type === 'kill') return killText(c, o);
   if (o.type === 'follow') return followText(c, o);
@@ -662,6 +667,7 @@ function draw() {
     const r = Math.max(2, Math.min(5, G.scale * 1.6));
     const tok = vfxTokenMode(m) ? Math.max(8, Math.min(16, vfxPpy(m) * 5)) : 0; const pad = tok ? tok + 12 : 12;
     vfxLayout(m, tok ? tok + 2 : r + 3);          // units in melee pushed apart where they are drawn
+    if (typeof bgDraw === 'function') bgDraw(ctx, m);          // a battleground: the fighters, flags and bases (pvp.js)
     for (const mob of G.mobs) {
       const [x, y] = w2s(mob.x, mob.y);
       if (x < -pad || y < -pad || x > G.cw + pad || y > G.ch + pad) continue;
@@ -980,7 +986,7 @@ function frame(ts) {
   if (ts - G.uiT > 250) {
     G.uiT = ts; renderChar(); renderAbar(); if (c.order) renderOrder();
     if (!G.qT || ts - G.qT > 1500) { G.qT = ts; if (!$('questCard').matches(':hover')) renderQuests(); }
-    if (typeof renderDgCard === 'function' && (!G.dgT || ts - G.dgT > 500)) { G.dgT = ts; renderDgCard(); }
+    if (typeof renderDgCard === 'function' && (!G.dgT || ts - G.dgT > 500)) { G.dgT = ts; renderDgCard(); if (typeof renderBgCard === 'function') renderBgCard(); }
     if (G.selected && G.selected.kind === 'mob') renderInfo(G.selected);
     if (!G.csT || ts - G.csT > 1000) { G.csT = ts; renderCharSwitch(); if (!$('groupCard').matches(':hover')) renderGroup(); }
     if (METER.show && (!G.mtT || ts - G.mtT > 500)) { G.mtT = ts; renderMeter(); }

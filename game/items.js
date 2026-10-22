@@ -341,6 +341,7 @@ function canEquip(c, id) {
   if ((it.rl || 0) > c.level) return 'requires level ' + it.rl;
   if (it.rq && it.rq.classes && !it.rq.classes.includes(c.cls)) return 'not for your class';
   if (it.rq && it.rq.races && !it.rq.races.includes(c.race)) return 'not for your race';
+  if (it.rq && it.rq.honor && typeof pvpRank === 'function' && pvpRank(c) < it.rq.honor - 4) return 'requires the rank ' + PVP_RANKS[pvpSide(c)][it.rq.honor - 5];          // pvp.js
   if (it.rf && typeof repItemOk === 'function' && G.d.rep && !repItemOk(c, id)) return 'requires ' + repItemReq(id);
   if (it.rq && it.rq.skill) return null;
   const pf = G.d.items.proficiency[c.cls]; if (!pf) return null;
