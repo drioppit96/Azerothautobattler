@@ -25,7 +25,7 @@ const BG_RES = 30;                // seconds between resurrection waves
 const BG_SPEED = 7;
 
 const BGS = {
-  wsg: { key: 'wsg', name: 'Warsong Gulch', map: 489, minL: 10, size: 10, time: 1200,
+  wsg: { key: 'wsg', name: 'Warsong Gulch', map: 489, minL: 10, size: 10, time: 1500,
     text: 'Capture the enemy flag and bring it home 3 times. 10 against 10, from level 10.',
     base: { Alliance: [1525, 1500], Horde: [930, 1420] }, gy: { Alliance: [1430, 1540], Horde: [1030, 1390] },
     flag: { Alliance: [1540.4, 1481.3], Horde: [916.5, 1433.8] }, mid: [1228, 1458] },
@@ -75,19 +75,34 @@ function bgQueue(c, key) {
   const bg = BGS[key]; const why = bgCanJoin(c, bg); if (why) { log('Cannot join ' + bg.name + ': ' + why + '.'); return false; }
   const g = typeof groupOf === 'function' ? groupOf(c) : null; const who = g ? groupChars(g) : [c];
   const pop = G.gameTime + 20 + Math.random() * 40 + (bg.size >= 40 ? 30 : 0);
-  for (const x of who) { if (x.level < bg.minL) continue; pvpOf(x).q = { bg: key, pop, lead: c.id, t0: G.gameTime }; }
-  log((who.length > 1 ? 'The group is' : c.name + ' is') + ' in the queue for ' + bg.name + '.'); save(); return true;
+  for (const x of who) { if (x.level < bg.minL || rt(x).bg) continue; pvpOf(x).q = { bg: key, pop, lead: c.id, t0: G.gameTime }; }
+  withLogC(c, () => log((who.length > 1 ? (g.raid ? 'The raid is' : 'The group is') : c.name + ' is') + ' in the queue for ' + bg.name + '.')); save(); return true;
 }
+function withLogC(c, fn) { const p = G.logCtx; G.logCtx = c; try { return fn(); } finally { G.logCtx = p; } }
 function bgLeaveQueue(c) { const g = typeof groupOf === 'function' ? groupOf(c) : null; for (const x of g ? groupChars(g) : [c]) if (x.pvp) delete x.pvp.q; log('Left the queue.'); save(); }
-/* every step of a character (combat.js updateChar): the queue pops */
+/* every step of a character (combat.js updateChar): the queue pops; auto battlegrounds queue again */
 function pvpQueueStep(c) {
-  const q = c.pvp && c.pvp.q; if (!q) return false; const r = rt(c);
+  const q = c.pvp && c.pvp.q; const r = rt(c);
+  if (!q) { pvpAutoQueue(c); return false; }
   if (G.gameTime < q.pop || q.lead !== c.id) return false;
   if (r.ghost || r.flying || r.riding || (r.threats || []).length || r.cast) return false;
   const g = typeof groupOf === 'function' ? groupOf(c) : null;
   const who = (g ? groupChars(g) : [c]).filter((x) => x.pvp && x.pvp.q && x.pvp.q.lead === c.id && !rt(x).bg);
   for (const x of who) delete x.pvp.q;
-  bgStart(q.bg, who); return true;
+  bgStart(q.bg, [c].concat(who.filter((x) => x !== c)).slice(0, BGS[q.bg].size)); return true;
+}
+/* Automation - auto battlegrounds: queue by itself (when it is the leader or alone), the chosen one or any it can */
+function bgAutoKey(c) { return (c.auto && c.auto.autoBgKey) || 'any'; }
+function bgAutoPick(c) {
+  const ok = Object.keys(BGS).filter((k) => !bgCanJoin(c, BGS[k])); const want = bgAutoKey(c);
+  if (want !== 'any') return ok.includes(want) ? want : null;
+  return ok.length ? bgPick(ok) : null;
+}
+function pvpAutoQueue(c) {
+  if (!cset(c, 'autoBg')) return; const r = rt(c); if (r.bg || G.gameTime < (r.bgAutoT || 0)) return; r.bgAutoT = G.gameTime + 5;
+  if (typeof groupOf === 'function' && groupOf(c) && !isLeader(c)) return;
+  if (r.ghost || r.flying || r.riding) return;
+  const k = bgAutoPick(c); if (k) withLogC(c, () => bgQueue(c, k));
 }
 
 /* ------------------------------------------------------------------ a battleground */
@@ -95,11 +110,11 @@ function bgName(side) { const a = BOT_NAMES.a, b = BOT_NAMES.b; return a[(Math.r
 function bgPick(list) { return list[(Math.random() * list.length) | 0]; }
 function bgSides(side) { return [side, side === 'Alliance' ? 'Horde' : 'Alliance']; }
 const BG_RACES = { Alliance: [1, 3, 4, 7], Horde: [2, 5, 6, 8] };
+function bgNewUnit(o) { return Object.assign({ alive: true, x: 0, y: 0, kills: 0, deaths: 0, hks: 0, honor: 0, dmg: 0, healed: 0, oa: 0, od: 0, hit: new Set() }, o); }
 function bgUnitFromChar(c, team) {
   const s = charStats(c); const heal = typeof grpRole === 'function' && groupOf(c) && grpRole(c) === 'healer';
   const dps = Math.max(5, (typeof classDps === 'function' ? classDps(c, s, 0.25) : s.mhDps) * 0.9);
-  return { id: c.id, c, name: c.name, team, cls: c.cls, race: c.race, level: c.level, maxhp: s.maxHp, hp: s.maxHp, dps, heal: heal ? dps * 1.1 : 0,
-    ranged: [3, 5, 8, 9].includes(c.cls) || heal, alive: true, x: 0, y: 0, kills: 0, deaths: 0, hks: 0, honor: 0, dmg: 0, hit: new Set() };
+  return bgNewUnit({ id: c.id, c, name: c.name, team, cls: c.cls, race: c.race, level: c.level, maxhp: s.maxHp, hp: s.maxHp, dps, heal: heal ? dps * 1.1 : 0, ranged: [3, 5, 8, 9].includes(c.cls) || heal });
 }
 function bgBot(B, team, ref) {
   const lo = B.bracket[0], hi = B.bracket[1]; const L = Math.max(lo, Math.min(hi, Math.round(lo + Math.pow(Math.random(), 0.6) * (hi - lo))));
@@ -108,35 +123,51 @@ function bgBot(B, team, ref) {
   const hpM = cls === 1 || cls === 2 ? 1.25 : [5, 8, 9].includes(cls) ? 0.85 : 1, dmM = cls === 4 || cls === 8 || cls === 9 ? 1.15 : cls === 2 || cls === 5 ? 0.85 : 1;
   const maxhp = Math.round(ref.maxhp * k * hpM * rnd(0.85, 1.15)); const dps = ref.dps * k * dmM * rnd(0.85, 1.15);
   const healer = [2, 5, 7, 11].includes(cls) && Math.random() < 0.45;
-  return { id: 'b' + (B.nid++), name: bgName(team), team, cls, race, level: L, maxhp, hp: maxhp, dps: healer ? dps * 0.45 : dps, heal: healer ? dps * 1.1 : 0,
-    ranged: [3, 5, 8, 9].includes(cls) || healer, alive: true, x: 0, y: 0, kills: 0, deaths: 0, hks: 0, honor: 0, dmg: 0, hit: new Set() };
+  return bgNewUnit({ id: 'b' + (B.nid++), name: bgName(team), team, cls, race, level: L, maxhp, hp: maxhp, dps: healer ? dps * 0.45 : dps, heal: healer ? dps * 1.1 : 0, ranged: [3, 5, 8, 9].includes(cls) || healer });
+}
+function bgGroups(B) { return Math.ceil(B.def.size / 5); }
+/* the raid groups (1 ..) of a team: your characters keep their raid group, the others fill the free places */
+function bgAssignGroups(B, team) {
+  const n = bgGroups(B); const cnt = new Array(n + 1).fill(0); const list = B.units.filter((u) => u.team === team && !u.general);
+  for (const u of list) if (u.c) { const g = groupOf(u.c); const i = g ? g.members.findIndex((m) => m.id === u.c.id) : 0; let k = Math.min(n, Math.floor(Math.max(0, i) / 5) + 1); while (cnt[k] >= 5 && k < n) k++; u.grp = k; cnt[k]++; }
+  for (const u of list) if (!u.c) { let k = 1; while (k < n && cnt[k] >= 5) k++; u.grp = k; cnt[k]++; }
 }
 function bgStart(key, chars) {
   const def = BGS[key]; const c0 = chars[0]; const [mine, theirs] = bgSides(pvpSide(c0));
-  const B = { id: 'bg' + Math.round(G.gameTime * 100), key, def, map: def.map, t0: G.gameTime, side: mine, units: [], nid: 1, over: null, logs: [], bracket: bgBracket(c0, def) };
+  const B = { id: 'bg' + Math.round(G.gameTime * 100), key, def, map: def.map, t0: G.gameTime, side: mine, units: [], nid: 1, over: null, logs: [], bracket: bgBracket(c0, def), uord: {} };
   // your characters, then the rest of both teams
   for (const c of chars) B.units.push(bgUnitFromChar(c, mine));
   const ref = B.units[0];
   while (B.units.filter((u) => u.team === mine).length < def.size) B.units.push(bgBot(B, mine, ref));
   while (B.units.filter((u) => u.team === theirs).length < def.size) B.units.push(bgBot(B, theirs, ref));
   B.units.forEach((u, i) => { u.role = bgRole(B, u, i); const p = bgSpawnPoint(B, u.team); u.x = p[0] + rnd(-6, 6); u.y = p[1] + rnd(-6, 6); u.jx = rnd(-14, 14); u.jy = rnd(-14, 14); });
-  if (key === 'wsg') { B.score = { Alliance: 0, Horde: 0 }; B.flag = { Alliance: { carrier: null }, Horde: { carrier: null } }; }
+  bgAssignGroups(B, mine); bgAssignGroups(B, theirs);
+  if (key === 'wsg') { B.score = { Alliance: 0, Horde: 0 }; B.flag = { Alliance: { carrier: null }, Horde: { carrier: null } }; B.firstCap = null; }
   if (key === 'ab') { B.res = { Alliance: 0, Horde: 0 }; B.nodes = def.nodes.map(([n, x, y]) => ({ n, x, y, owner: null, capT: 0, capTeam: null })); B.resT = 0; }
   if (key === 'av') {
     B.reinf = { Alliance: 400, Horde: 400 }; B.gys = def.lane.map(([n, x, y, o]) => ({ n, x, y, owner: o, capT: 0, capTeam: null }));
     for (const t of [mine, theirs]) { const [n, x, y] = def.general[t]; const ex = B.units.filter((u) => u.team === t && !u.c); const avgHp = ex.reduce((a, u) => a + u.maxhp, 0) / Math.max(1, ex.length), avgD = ex.reduce((a, u) => a + u.dps, 0) / Math.max(1, ex.length);
-      B.units.push({ id: 'gen' + t, name: n, team: t, general: true, cls: 1, level: 62, maxhp: Math.round(avgHp * 30), hp: Math.round(avgHp * 30), dps: avgD * 6, heal: 0, ranged: false, alive: true, x, y, hx: x, hy: y, kills: 0, deaths: 0, hks: 0, honor: 0, dmg: 0, hit: new Set() }); }
+      B.units.push(bgNewUnit({ id: 'gen' + t, name: n, team: t, general: true, cls: 1, level: 62, maxhp: Math.round(avgHp * 30), hp: Math.round(avgHp * 30), dps: avgD * 6, heal: 0, ranged: false, x, y, hx: x, hy: y, grp: 0 })); }
   }
   G.bgs = G.bgs || []; G.bgs.push(B);
-  for (const c of chars) {
-    const r = rt(c); const u = B.units.find((x) => x.c === c);
-    c.bgReturn = { map: c.pos.map, x: c.pos.x, y: c.pos.y, z: c.pos.z }; c.bgResume = c.order && c.order.type !== 'bg' ? c.order : null;
-    r.mv = null; r.tgt = null; r.threats = []; r.cast = null; r.resting = false; r.mounted = null; r.party = null; r.interact = null;
-    c.order = { type: 'bg', label: def.name }; r.bg = B; c.pos = { map: def.map, x: u.x, y: u.y, z: 0, o: 0 };
-    G.logCtx = c; log('Entered ' + def.name + ' (' + B.bracket[0] + '-' + B.bracket[1] + ', ' + def.size + ' against ' + def.size + ').'); G.logCtx = null;
-  }
-  if (chars.some(isActive) && !G.headless && typeof goToCharacter === 'function') goToCharacter();
+  for (const c of chars) bgEnterChar(B, c, B.units.find((x) => x.c === c));
+  if (chars.some(isActive) && !G.headless) { if (typeof goToCharacter === 'function') goToCharacter(); if (G.state.settings.raidPanel !== false) RAID.show = true; }
   save(); if (typeof renderOrder === 'function') renderOrder();
+}
+function bgEnterChar(B, c, u) {
+  const r = rt(c); const def = B.def;
+  c.bgReturn = { map: c.pos.map, x: c.pos.x, y: c.pos.y, z: c.pos.z }; c.bgResume = c.order && c.order.type !== 'bg' ? c.order : null;
+  r.mv = null; r.tgt = null; r.threats = []; r.cast = null; r.resting = false; r.mounted = null; r.party = null; r.interact = null;
+  c.order = { type: 'bg', label: def.name }; r.bg = B; c.pos = { map: def.map, x: u.x, y: u.y, z: 0, o: 0 };
+  withLogC(c, () => log('Entered ' + def.name + ' (' + B.bracket[0] + '-' + B.bracket[1] + ', ' + def.size + ' against ' + def.size + ').'));
+}
+/* a character invited into the raid while the raid is in a battleground: takes the place of one of the others */
+function bgJoinRaid(leader, c) {
+  const B = rt(leader).bg; if (!B || B.over || rt(c).bg || c.level < B.def.minL || pvpSide(c) !== B.side) return false;
+  const bot = B.units.filter((u) => u.team === B.side && !u.c && !u.general).sort((a, b) => (a.alive ? 1 : 0) - (b.alive ? 1 : 0))[0]; if (!bot) return false;
+  const u = bgUnitFromChar(c, B.side); u.grp = bot.grp; u.role = bot.role; u.jx = bot.jx; u.jy = bot.jy; const p = bgSpawnPoint(B, u.team); u.x = p[0]; u.y = p[1];
+  B.units[B.units.indexOf(bot)] = u; delete B.uord[bot.id];
+  if (c.pvp) delete c.pvp.q; bgEnterChar(B, c, u); bgNote(B, c.name + ' joined the raid.'); return true;
 }
 function bgRole(B, u, i) {
   if (u.general) return 'general';
@@ -151,6 +182,8 @@ function bgSpawnPoint(B, team) {
   return B.def.gy[team];
 }
 /* ------------------------------------------------------------------ the simulation (worldTick) */
+const BG_CLOSE = 120;          // the battleground closes 2 minutes after the end (the scoreboard shows until then)
+const BG_AUTO_LEAVE = 15;      // auto battlegrounds: leave after a look at the scoreboard
 function bgTick(dt) {
   if (!G.bgs || !G.bgs.length) return;
   for (const B of G.bgs.slice()) bgStep(B, dt);
@@ -158,97 +191,171 @@ function bgTick(dt) {
 function bgEnemies(B, u) { return B.units.filter((x) => x.alive && x.team !== u.team); }
 function bgStep(B, dt) {
   const now = G.gameTime; const T = now - B.t0;
-  if (B.over) { if (now - B.over.t > 12) bgEnd(B); return; }
+  if (B.over) {          // the scoreboard: nobody acts; auto battlegrounds leave after a moment, the rest when it closes
+    for (const u of B.units) if (u.c && rt(u.c).bg === B && cset(u.c, 'autoBg') && now - B.over.t > BG_AUTO_LEAVE) bgLeaveChar(u.c, false);
+    if (now - B.over.t > BG_CLOSE) bgEnd(B);
+    return;
+  }
   // resurrection waves
-  for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgSpawnPoint(B, u.team); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); }
+  for (const u of B.units) if (!u.alive && !u.general && now >= u.resAt) { u.alive = true; u.hp = u.maxhp; const p = bgSpawnPoint(B, u.team); u.x = p[0] + rnd(-5, 5); u.y = p[1] + rnd(-5, 5); u.tgt = null; u.hit = new Set(); u.node = null; }
   const alive = B.units.filter((u) => u.alive);
   for (const u of alive) if (u.alive) bgUnitStep(B, u, dt, alive);
   bgObjectives(B, dt, T);
   // your characters: where their fighter is
-  for (const u of B.units) if (u.c) {
+  for (const u of B.units) if (u.c && rt(u.c).bg === B) {
     const c = u.c; c.pos.x = u.x; c.pos.y = u.y; c.pos.map = B.map;
     const mx = charStats(c).maxHp; c.hp = Math.max(0, u.alive ? u.hp / u.maxhp * mx : 0);
   }
   if (!B.over && T > B.def.time) bgFinish(B, bgTimeWinner(B), 'time is up');
 }
+const bgDist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 function bgUnitStep(B, u, dt, alive) {
   if (u.general) {          // stays at home and fights whoever comes
-    const e = alive.filter((x) => x.alive && x.team !== u.team && Math.hypot(x.x - u.x, x.y - u.y) < 25).sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y))[0];
-    if (e) { if (Math.hypot(e.x - u.x, e.y - u.y) > 5) bgMove(u, e.x, e.y, dt, 5); else bgHit(B, u, e, u.dps * dt); }
+    const e = alive.filter((x) => x.alive && x.team !== u.team && Math.hypot(x.x - u.x, x.y - u.y) < 25).sort((a, b) => bgDist(a, u) - bgDist(b, u))[0];
+    if (e) { if (bgDist(e, u) > 5) bgMove(u, e.x, e.y, dt, 5); else bgHit(B, u, e, u.dps * dt); }
     else bgMove(u, u.hx, u.hy, dt, 1);
     return;
   }
+  const P = bgPlan(B, u); const A = P.anchor; const inA = (x) => !A || Math.hypot(x.x - A[0], x.y - A[1]) <= A[2];
   // healers: someone of the team hurt near them
   if (u.heal) {
-    const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * 0.75 && Math.hypot(x.x - u.x, x.y - u.y) < 35).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
-    if (h) { if (Math.hypot(h.x - u.x, h.y - u.y) > 28) bgMove(u, h.x, h.y, dt, 26); else h.hp = Math.min(h.maxhp, h.hp + u.heal * dt * rnd(0.7, 1.3)); return; }
+    const h = alive.filter((x) => x.alive && x.team === u.team && !x.general && x.hp < x.maxhp * (x.carry ? 0.95 : 0.75) && bgDist(x, u) < 35).sort((a, b) => a.hp / a.maxhp - (a.carry ? 0.5 : 0) - b.hp / b.maxhp + (b.carry ? 0.5 : 0))[0];
+    if (h) { if (bgDist(h, u) > 28) bgMove(u, h.x, h.y, dt, 26); else { const v = Math.min(h.maxhp - h.hp, u.heal * dt * rnd(0.7, 1.3)); h.hp += v; u.healed += v; } return; }
   }
-  // a target: keep the one it has, the enemy flag carrier first, else the nearest
-  let t = u.tgt && u.tgt.alive && Math.hypot(u.tgt.x - u.x, u.tgt.y - u.y) < 45 ? u.tgt : null;
+  // a target: the one the order names, else keep the one it has, else the enemy flag carrier first, else the nearest
+  let t = P.hunt && P.hunt.alive ? P.hunt : null;
+  if (!t && u.tgt && u.tgt.alive && !u.tgt.general && bgDist(u.tgt, u) < 45 && (!A || Math.hypot(u.tgt.x - A[0], u.tgt.y - A[1]) <= A[2] + 12)) t = u.tgt;
   if (!t) {
-    let best = null, bd = 34;
-    for (const x of alive) { if (!x.alive || x.team === u.team || x.general) continue; const d = Math.hypot(x.x - u.x, x.y - u.y) - (x.carry ? 25 : 0); if (d < bd) { bd = d; best = x; } }
-    t = best; u.tgt = t;
+    let best = null, bd = P.range || 34;
+    for (const x of alive) { if (!x.alive || x.team === u.team || x.general || !inA(x)) continue; const d = bgDist(x, u) - (x.carry ? 25 : 0); if (d < bd) { bd = d; best = x; } }
+    t = best;
   }
-  if (u.carry && t && Math.hypot(t.x - u.x, t.y - u.y) > 8) t = null;          // the flag carrier keeps running
+  u.tgt = t;
+  if (u.carry && t && bgDist(t, u) > 8) t = null;          // the flag carrier keeps running
   if (t) {
-    const d = Math.hypot(t.x - u.x, t.y - u.y); const range = u.ranged ? 26 : 4;
+    const d = bgDist(t, u); const range = u.ranged ? 26 : 4;
     if (d > range) bgMove(u, t.x, t.y, dt, range - 1); else bgHit(B, u, t, u.dps * dt * rnd(0.7, 1.3));
     return;
   }
-  const g = bgGoal(B, u); if (g) bgMove(u, g[0] + (g[2] ? 0 : u.jx), g[1] + (g[2] ? 0 : u.jy), dt, 1);
+  const g = P.goal; if (g) bgMove(u, g[0] + (g[2] ? 0 : u.jx), g[1] + (g[2] ? 0 : u.jy), dt, 1);
 }
 function bgMove(u, x, y, dt, stop) { const dx = x - u.x, dy = y - u.y, d = Math.hypot(dx, dy); if (d <= stop) return; const s = Math.min(d - stop, BG_SPEED * (u.carry ? 1.25 : 1) * dt); /* a flag carrier runs a bit faster */ u.x += dx / d * s; u.y += dy / d * s; }
 function bgHit(B, u, t, v) {
   if (!t.alive || !u.alive) return;          // died earlier in this same step
-  if (t.carry) v *= 0.6;          // carriers are the toughest and get healed most
+  if (t.carry) { const held = G.gameTime - (t.carryT || G.gameTime); v *= held > 90 ? 1 : held > 45 ? 0.6 : 0.35; }          // carriers are tough - until they hold it too long (Focused / Brutal Assault)
   t.hp -= v; u.dmg += v; t.hit.add(u.id);
   if (u.c && isActive(u.c) && Math.random() < 0.06) fx(t.x, t.y, '' + Math.round(v * 20), '#fff');
   if (t.hp <= 0) bgDie(B, t, u);
 }
+function bgUScale(u) { return Math.max(0.15, Math.min(1, (u.c ? u.c.level : u.level) / 60)); }
+function bgGive(u, h) { if (!h) return; u.honor += h; if (u.c) pvpGain(u.c, Math.round(h)); }
 function bgDie(B, t, killer) {
   t.alive = false; t.hp = 0; t.deaths++; t.tgt = null; killer.kills++;
   const now = G.gameTime; t.resAt = B.t0 + Math.ceil((now - B.t0 + 5) / BG_RES) * BG_RES;
-  if (t.carry) { const f = B.flag[t.carry]; f.carrier = null; t.carry = null; bgNote(B, t.team + ' dropped the flag - it returns.'); }
+  if (t.carry) { const f = B.flag[t.carry]; f.carrier = null; const back = t.carry; t.carry = null; if (killer.team === back) killer.od++; bgNote(B, killer.name + ' (' + killer.team + ') returned the ' + back + ' flag!'); }
   if (B.key === 'av' && !t.general && B.reinf) { B.reinf[t.team] = Math.max(0, B.reinf[t.team] - 1); if (B.reinf[t.team] <= 0) bgFinish(B, t.team === 'Alliance' ? 'Horde' : 'Alliance', 'out of reinforcements'); }
   if (t.general) { bgNote(B, t.name + ' is dead!'); bgFinish(B, t.team === 'Alliance' ? 'Horde' : 'Alliance', t.name + ' was killed'); return; }
   // honorable kill: everyone of the other team near it or who hit it; the honor is shared among them (like the game)
-  const cred = B.units.filter((u) => u.team !== t.team && !u.general && (t.hit.has(u.id) || (u.alive && Math.hypot(u.x - t.x, u.y - t.y) < 40)));
+  const cred = B.units.filter((u) => u.team !== t.team && !u.general && (t.hit.has(u.id) || (u.alive && bgDist(u, t) < 40)));
   const share = 1 / Math.max(1, cred.length / 2);
   for (const u of cred) {
-    if (!u.c) continue;
-    const h = Math.round(hkHonor(t.level, u.c.level) * share); if (!h) { pvpOf(u.c).hks++; u.hks++; continue; }
-    u.hks++; u.honor += h; pvpOf(u.c).hks++; pvpGain(u.c, h);
-    if (isActive(u.c)) fx(t.x, t.y, 'Honorable kill +' + h, '#ffd866');
+    u.hks++; if (u.c) pvpOf(u.c).hks++;
+    const h = hkHonor(t.level, u.c ? u.c.level : u.level) * share; bgGive(u, h);
+    if (u.c && h >= 0.5 && isActive(u.c)) fx(t.x, t.y, 'Honorable kill +' + Math.round(h), '#ffd866');
   }
-  if (t.c) { pvpOf(t.c).deaths++; G.logCtx = t.c; log(t.c.name + ' was killed by ' + killer.name + ' - back in the next wave.'); G.logCtx = null; }
+  if (t.c && rt(t.c).bg === B) { pvpOf(t.c).deaths++; withLogC(t.c, () => log(t.c.name + ' was killed by ' + killer.name + ' - back in the next wave.')); }
 }
-function bgNote(B, s) { B.logs.unshift([G.gameTime, s]); if (B.logs.length > 8) B.logs.pop(); for (const u of B.units) if (u.c) { G.logCtx = u.c; log(B.def.name + ': ' + s); G.logCtx = null; } }
+function bgNote(B, s) { B.logs.unshift([G.gameTime, s]); if (B.logs.length > 8) B.logs.pop(); for (const u of B.units) if (u.c && rt(u.c).bg === B) withLogC(u.c, () => log(B.def.name + ': ' + s)); }
 
-/* where a fighter goes when nobody is in reach */
-function bgGoal(B, u) {
-  const def = B.def; const foe = u.team === 'Alliance' ? 'Horde' : 'Alliance';
+/* ------------------------------------------------------------------ orders (the raid panel) and what a fighter does */
+/* orders: saved per battleground - for each raid group and each of your characters (a strategy you set up once);
+   the other players of your side can get one for this match. The enemy team plays by itself (Auto). */
+function bgStrat(key) { const S = G.state.bgStrat = G.state.bgStrat || {}; return (S[key] = S[key] || { grp: {}, chars: {} }); }
+function bgOrdOf(B, u) { if (u.team !== B.side || u.general) return 'auto'; const S = bgStrat(B.key); return (u.c && S.chars[u.c.id]) || B.uord[u.id] || S.grp[u.grp] || 'auto'; }
+function bgOrders(B) {
+  const L = [['auto', 'Auto', 'Their own judgement (the default)'], ['roam', 'Roam', 'Hunt lone enemies all over the field']];
+  if (B.key === 'wsg') L.push(['wsg:take', 'Capture the flag', 'Run into the enemy flag room, take the flag and bring it home'], ['wsg:esc', 'Defend the flag carrier', 'Stay with your flag carrier and keep it alive'],
+    ['wsg:def', 'Defend our flag', 'Guard your own flag room'], ['wsg:hunt', 'Kill their flag carrier', 'Chase the enemy carrier and return your flag'], ['wsg:mid', 'Hold the middle', 'Fight in the middle of the field']);
+  if (B.key === 'ab') { L.push(['ab:cap', 'Capture bases', 'Take the bases you do not hold, the nearest first'], ['ab:defall', 'Defend our bases', 'Spread over the bases you hold, the attacked ones first']);
+    B.def.nodes.forEach(([n], i) => L.push(['ab:hold:' + i, 'Defend ' + n, 'Go to the ' + n + ', take it if it is not yours and guard it'])); }
+  if (B.key === 'av') { L.push(['av:push', 'Push the graveyards', 'Take the graveyards down the valley, then the general'], ['av:gen', 'Kill the general', 'Rush past everything to the enemy general'], ['av:def', 'Defend our graveyards', 'Guard the graveyards you hold, the attacked first']);
+    B.def.lane.forEach(([n], i) => L.push(['av:hold:' + i, 'Defend ' + n.replace(' Graveyard', ''), 'Go to the ' + n + ', take it if it is not yours and guard it'])); }
+  return L;
+}
+function bgOrdShort(B, o) {
+  if (!o || o === 'auto') return ''; const m = /^(ab|av):hold:(\d+)$/.exec(o);
+  if (m) { const n = (m[1] === 'ab' ? B.def.nodes : B.def.lane)[+m[2]][0]; return n.replace(/ (Graveyard|Station|Hut)$/, '').split(' ').pop(); }
+  return { roam: 'Roam', 'wsg:take': 'Flag', 'wsg:esc': 'Escort', 'wsg:def': 'Defend', 'wsg:hunt': 'Hunt', 'wsg:mid': 'Mid', 'ab:cap': 'Capture', 'ab:defall': 'Defend', 'av:push': 'Push', 'av:gen': 'General', 'av:def': 'Defend' }[o] || o;
+}
+/* strategies: orders for the raid groups in one click */
+function bgStrategies(B) {
+  const n = bgGroups(B); const all = (o) => { const r = {}; for (let i = 1; i <= n; i++) r[i] = o; return r; };
+  if (B.key === 'wsg') return [['Balanced', 'Everyone by their own judgement', {}], ['Offense', 'Group 1 takes the flag, group 2 guards the carrier', { 1: 'wsg:take', 2: 'wsg:esc' }],
+    ['Turtle', 'Group 1 guards the flag room, group 2 takes the flag', { 1: 'wsg:def', 2: 'wsg:take' }], ['Hunters', 'Group 1 hunts their carrier, group 2 takes the flag', { 1: 'wsg:hunt', 2: 'wsg:take' }]];
+  if (B.key === 'ab') {
+    const base = B.def.base[B.side]; const near = B.def.nodes.map((x, i) => [i, Math.hypot(x[1] - base[0], x[2] - base[1])]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
+    return [['Balanced', 'Everyone by their own judgement', {}], ['Three bases', 'Take and hold the two bases nearest to you and the Blacksmith', { 1: 'ab:hold:' + near[0], 2: 'ab:hold:1', 3: 'ab:hold:' + (near[0] === 1 ? near[2] : near[1]) }],
+      ['Five bases', 'Two groups capture, one defends', { 1: 'ab:cap', 2: 'ab:cap', 3: 'ab:defall' }], ['Roamers', 'One group hunts, one captures, one defends', { 1: 'roam', 2: 'ab:cap', 3: 'ab:defall' }]];
+  }
+  if (B.key === 'av') return [['Balanced', 'Everyone by their own judgement (push)', {}], ['Rush', 'Six groups rush the general, two defend', Object.assign(all('av:gen'), { [n - 1]: 'av:def', [n]: 'av:def' })],
+    ['Turtle', 'Half defend the graveyards, half push', Object.assign(all('av:push'), { 1: 'av:def', 2: 'av:def', 3: 'av:def', 4: 'av:def' })], ['Graveyards', 'Everyone pushes the graveyards', all('av:push')]];
+  return [];
+}
+function bgSetOrder(B, sel, o) {
+  const S = bgStrat(B.key); const mine = B.units.filter((u) => u.team === B.side && !u.general);
+  const clear = (u) => { delete B.uord[u.id]; if (u.c) delete S.chars[u.c.id]; u.node = null; u.roam = null; };
+  if (sel.kind === 'raid') { S.grp = {}; for (let i = 1; i <= bgGroups(B); i++) if (o !== 'auto') S.grp[i] = o; mine.forEach(clear); }
+  else if (sel.kind === 'grp') { if (o === 'auto') delete S.grp[sel.id]; else S.grp[sel.id] = o; mine.filter((u) => u.grp === +sel.id).forEach(clear); }
+  else { const u = mine.find((x) => String(x.id) === String(sel.id)); if (!u) return; clear(u); if (o !== 'auto' || S.grp[u.grp]) { if (u.c) S.chars[u.c.id] = o; else B.uord[u.id] = o; } }
+  save();
+}
+function bgApplyStrategy(B, grp) { const S = bgStrat(B.key); S.grp = Object.assign({}, grp); S.chars = {}; B.uord = {}; for (const u of B.units) { u.node = null; u.roam = null; } save(); }
+
+/* what a fighter does now: { goal: [x, y, exact], anchor: [x, y, radius] (stays and fights there), hunt: a unit, range } */
+function bgPlan(B, u) {
+  const def = B.def; const foe = u.team === 'Alliance' ? 'Horde' : 'Alliance'; let o = bgOrdOf(B, u);
+  if (o === 'roam') return bgRoam(B, u);
   if (B.key === 'wsg') {
     const myFlag = def.flag[u.team], theirFlag = def.flag[foe];
-    if (u.carry) return [myFlag[0], myFlag[1], true];
-    const enemyCarrier = B.units.find((x) => x.alive && x.carry === u.team);
-    if (enemyCarrier && (u.role !== 'offense' || Math.hypot(enemyCarrier.x - u.x, enemyCarrier.y - u.y) < 120)) { u.tgt = enemyCarrier; return [enemyCarrier.x, enemyCarrier.y, true]; }
-    if (u.role === 'offense') { const mate = B.units.find((x) => x.alive && x.carry === foe); return mate ? [mate.x, mate.y] : [theirFlag[0], theirFlag[1], true]; }
-    if (u.role === 'defense') return [myFlag[0], myFlag[1]];
-    return def.mid;
+    if (u.carry) return { goal: [myFlag[0], myFlag[1], true], range: 10 };
+    const eCar = B.units.find((x) => x.alive && x.carry === u.team), mCar = B.units.find((x) => x.alive && x.carry === foe);
+    if (o === 'auto') {
+      if (eCar && (u.role !== 'offense' || bgDist(eCar, u) < 120)) o = 'wsg:hunt';
+      else o = u.role === 'offense' ? 'wsg:take' : u.role === 'defense' ? 'wsg:def' : mCar ? 'wsg:esc' : (u.jx > 0 ? 'wsg:take' : 'wsg:mid');
+    }
+    if (o === 'wsg:take') { if (eCar && bgDist(eCar, u) < 40) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return mCar ? { goal: [mCar.x, mCar.y], anchor: [mCar.x, mCar.y, 35] } : { goal: [theirFlag[0], theirFlag[1], true], range: 9 }; }          /* runners: straight for the flag room */
+    if (o === 'wsg:esc') { if (mCar) return { goal: [mCar.x + u.jx * 0.4, mCar.y + u.jy * 0.4, true], anchor: [mCar.x, mCar.y, 30] }; if (eCar) return { goal: [eCar.x, eCar.y, true], hunt: eCar }; return { goal: [theirFlag[0], theirFlag[1]] }; }
+    if (o === 'wsg:def') { const g = { goal: [myFlag[0], myFlag[1]], anchor: [myFlag[0], myFlag[1], 45] }; if (eCar && bgDist(eCar, u) < 70) g.hunt = eCar; return g; }
+    if (o === 'wsg:hunt') return eCar ? { goal: [eCar.x, eCar.y, true], hunt: bgDist(eCar, u) < 30 ? eCar : null, range: 22 } : { goal: def.mid };          /* the escort is in the way first */
+    return { goal: def.mid, anchor: [def.mid[0], def.mid[1], 70] };
   }
   if (B.key === 'ab') {
-    if (!u.node || G.gameTime > (u.nodeT || 0)) { u.nodeT = G.gameTime + 20 + Math.random() * 15; u.node = bgPickNode(B, u); }
-    return [u.node.x, u.node.y];
+    const m = /^ab:hold:(\d+)$/.exec(o);
+    if (m) { const n = B.nodes[+m[1]]; return { goal: [n.x, n.y], anchor: [n.x, n.y, 35] }; }
+    if (!u.node || G.gameTime > (u.nodeT || 0) || (o === 'ab:cap' && u.node.owner === u.team)) { u.nodeT = G.gameTime + 20 + Math.random() * 15; u.node = o === 'ab:cap' ? bgCapNode(B, u) : o === 'ab:defall' ? bgDefNode(B, u, B.nodes) : bgPickNode(B, u); }
+    const n = u.node; return o === 'ab:defall' && n.owner === u.team ? { goal: [n.x, n.y], anchor: [n.x, n.y, 35] } : { goal: [n.x, n.y] };
   }
   if (B.key === 'av') {
-    const L = B.gys; const order = u.team === 'Alliance' ? L.slice().reverse() : L.slice();          // from my end towards theirs
+    const m = /^av:hold:(\d+)$/.exec(o); const gen = B.units.find((x) => x.general && x.team === foe);
+    if (m) { const n = B.gys[+m[1]]; return { goal: [n.x, n.y], anchor: [n.x, n.y, 35] }; }
+    if (o === 'av:gen') { if (!gen || !gen.alive) return { goal: def.base[foe] }; const d = bgDist(gen, u); return d < 45 ? { goal: [gen.x, gen.y, true], hunt: gen } : { goal: [gen.x, gen.y], range: 8 }; }
+    if (o === 'av:def') { if (!u.node || G.gameTime > (u.nodeT || 0)) { u.nodeT = G.gameTime + 15; u.node = bgDefNode(B, u, B.gys); } const n = u.node; return { goal: [n.x, n.y], anchor: [n.x, n.y, 35] }; }
+    const order = u.team === 'Alliance' ? B.gys.slice().reverse() : B.gys.slice();          // from my end towards theirs
     const next = order.find((g) => g.owner !== u.team);
-    if (next) return [next.x, next.y];
-    const gen = B.units.find((x) => x.general && x.team === foe); if (gen && gen.alive) { u.tgt = gen; return [gen.x, gen.y, true]; }
-    return def.base[foe];
+    if (next) return { goal: [next.x, next.y] };
+    if (gen && gen.alive) return bgDist(gen, u) < 50 ? { goal: [gen.x, gen.y, true], hunt: gen } : { goal: [gen.x, gen.y] };
+    return { goal: def.base[foe] };
   }
-  return null;
+  return { goal: null };
+}
+/* roaming: the enemy with the fewest friends around it, not too far */
+function bgRoam(B, u) {
+  if (!u.roam || !u.roam.alive || G.gameTime > (u.roamT || 0)) {
+    u.roamT = G.gameTime + 4; let best = null, bs = 1e9;
+    for (const x of B.units) { if (!x.alive || x.team === u.team || x.general) continue; let f = 0; for (const y of B.units) if (y !== x && y.alive && y.team === x.team && !y.general && Math.abs(y.x - x.x) < 20 && Math.abs(y.y - x.y) < 20) f++; const s = bgDist(x, u) + f * 70; if (s < bs) { bs = s; best = x; } }
+    u.roam = best;
+  }
+  return u.roam ? { goal: [u.roam.x, u.roam.y, true], hunt: bgDist(u.roam, u) < 60 ? u.roam : null, range: 20 } : { goal: B.def.mid || B.def.base[u.team] };
 }
 function bgPickNode(B, u) {
   const b = B.def.base[u.team]; let best = null, bs = 1e9;
@@ -259,19 +366,32 @@ function bgPickNode(B, u) {
   }
   return best;
 }
+function bgCapNode(B, u) {
+  const list = B.nodes.filter((n) => n.owner !== u.team); if (!list.length) return bgDefNode(B, u, B.nodes);
+  return list.sort((a, b) => bgDist(a, u) - bgDist(b, u))[0];
+}
+/* the own point to guard: one being taken first, else the one with the fewest guards (the most forward in Alterac) */
+function bgDefNode(B, u, pts) {
+  const own = pts.filter((n) => n.owner === u.team); if (!own.length) return B.key === 'ab' ? bgCapNode(B, u) : pts[u.team === 'Alliance' ? pts.length - 1 : 0];
+  const hit = own.filter((n) => n.capTeam && n.capTeam !== u.team).sort((a, b) => bgDist(a, u) - bgDist(b, u))[0]; if (hit) return hit;
+  const guards = (n) => B.units.filter((x) => x.alive && x.team === u.team && x.node === n).length;
+  if (B.key === 'av') { const fwd = u.team === 'Alliance' ? own[0] : own[own.length - 1]; return guards(fwd) < 8 ? fwd : own.sort((a, b) => guards(a) - guards(b))[0]; }
+  return own.sort((a, b) => guards(a) - guards(b) || bgDist(a, u) - bgDist(b, u))[0];
+}
 /* flags, bases, graveyards; the score */
 function bgObjectives(B, dt, T) {
   const def = B.def;
   if (B.key === 'wsg') {
     for (const team of ['Alliance', 'Horde']) {
       const foe = team === 'Alliance' ? 'Horde' : 'Alliance'; const ff = def.flag[foe], mine = def.flag[team];
-      // taking the enemy flag (nobody of theirs guarding right next to it)
-      if (!B.flag[foe].carrier) { const u = B.units.find((x) => x.alive && x.team === team && !x.carry && x.role === 'offense' && Math.hypot(x.x - ff[0], x.y - ff[1]) < 5); if (u) { u.carry = foe; B.flag[foe].carrier = u.id; bgNote(B, u.name + ' (' + team + ') took the ' + foe + ' flag!'); } }
+      // taking the enemy flag
+      if (!B.flag[foe].carrier) { const u = B.units.find((x) => x.alive && x.team === team && !x.carry && Math.hypot(x.x - ff[0], x.y - ff[1]) < 5); if (u) { u.carry = foe; u.carryT = G.gameTime; B.flag[foe].carrier = u.id; bgNote(B, u.name + ' (' + team + ') took the ' + foe + ' flag!'); } }
       // bringing it home while the own flag is there
       const car = B.units.find((x) => x.alive && x.carry === foe && x.team === team);
       if (car && !B.flag[team].carrier && Math.hypot(car.x - mine[0], car.y - mine[1]) < 6) {
-        car.carry = null; B.flag[foe].carrier = null; B.score[team]++; bgNote(B, car.name + ' captured the ' + foe + ' flag! ' + team + ' ' + B.score[team] + ' : ' + B.score[foe]);
-        for (const u of B.units) if (u.c && u.team === team) pvpGain(u.c, Math.round(bgHonorScale(u.c) * 40));
+        car.carry = null; car.oa++; B.flag[foe].carrier = null; B.score[team]++; if (!B.firstCap) B.firstCap = team;
+        bgNote(B, car.name + ' captured the ' + foe + ' flag! ' + team + ' ' + B.score[team] + ' : ' + B.score[foe]);
+        for (const u of B.units) if (u.team === team && !u.general) bgGive(u, 40 * bgUScale(u));
         if (B.score[team] >= 3) bgFinish(B, team, '3 captures');
       }
     }
@@ -279,10 +399,18 @@ function bgObjectives(B, dt, T) {
   if (B.key === 'ab' || B.key === 'av') {
     const pts = B.key === 'ab' ? B.nodes : B.gys;
     for (const n of pts) {
-      const near = B.units.filter((u) => u.alive && !u.general && Math.hypot(u.x - n.x, u.y - n.y) < 14);
+      const near = B.units.filter((u) => u.alive && !u.general && Math.abs(u.x - n.x) < 14 && Math.abs(u.y - n.y) < 14 && Math.hypot(u.x - n.x, u.y - n.y) < 14);
       const teams = new Set(near.map((u) => u.team));
-      if (teams.size === 1) { const t = [...teams][0]; if (n.owner !== t) { if (n.capTeam !== t) { n.capTeam = t; n.capT = 0; } n.capT += dt; if (n.capT >= (B.key === 'ab' ? 12 : 15)) { n.owner = t; n.capT = 0; n.capTeam = null; bgNote(B, t + ' took the ' + n.n + '.'); for (const u of near) if (u.c) pvpGain(u.c, Math.round(bgHonorScale(u.c) * 20)); } } }
-      else if (teams.size !== 1) { n.capT = 0; n.capTeam = null; }
+      if (teams.size === 1) {
+        const t = [...teams][0];
+        if (n.owner !== t) { if (n.capTeam !== t) { n.capTeam = t; n.capT = 0; } n.capT += dt;
+          if (n.capT >= (B.key === 'ab' ? 12 : 15)) { n.owner = t; n.capT = 0; n.capTeam = null; bgNote(B, t + ' took the ' + n.n + '.'); for (const u of near) { u.oa++; bgGive(u, 20 * bgUScale(u)); } } }
+        else if (n.capTeam) { n.capT = 0; n.capTeam = null; }
+      } else if (teams.size > 1) {
+        // an assault broken up by the owners: they defended it
+        if (n.capTeam && n.owner && n.owner !== n.capTeam && n.capT > 1) { for (const u of near) if (u.team === n.owner) { u.od++; bgGive(u, 10 * bgUScale(u)); } bgNote(B, n.owner + ' defended the ' + n.n + '.'); }
+        n.capT = 0; n.capTeam = null;
+      } else if (n.capTeam) { n.capT = Math.max(0, n.capT - dt); if (!n.capT) n.capTeam = null; }
     }
   }
   if (B.key === 'ab') {
@@ -290,8 +418,10 @@ function bgObjectives(B, dt, T) {
       for (const t of ['Alliance', 'Horde']) { const k = B.nodes.filter((n) => n.owner === t).length; B.res[t] = Math.min(2000, B.res[t] + RATE[k] * 2); if (B.res[t] >= 2000 && !B.over) bgFinish(B, t, '2000 resources'); } }
   }
 }
+/* when the time runs out: Warsong Gulch - more captures, on a tie the first capture; Arathi Basin - more resources;
+   Alterac Valley - more reinforcements */
 function bgTimeWinner(B) {
-  if (B.key === 'wsg') return B.score.Alliance === B.score.Horde ? null : B.score.Alliance > B.score.Horde ? 'Alliance' : 'Horde';
+  if (B.key === 'wsg') return B.score.Alliance === B.score.Horde ? B.firstCap : B.score.Alliance > B.score.Horde ? 'Alliance' : 'Horde';
   if (B.key === 'ab') return B.res.Alliance === B.res.Horde ? null : B.res.Alliance > B.res.Horde ? 'Alliance' : 'Horde';
   if (B.key === 'av') return B.reinf.Alliance === B.reinf.Horde ? null : B.reinf.Alliance > B.reinf.Horde ? 'Alliance' : 'Horde';
   return null;
@@ -300,20 +430,21 @@ function bgHonorScale(c) { return Math.max(0.15, Math.min(1, c.level / 60)); }
 function bgFinish(B, winner, why) {
   if (B.over) return; B.over = { winner, t: G.gameTime, why };
   bgNote(B, (winner ? winner + ' wins' : 'A draw') + ' (' + why + ').');
+  const base = { wsg: [360, 120], ab: [450, 150], av: [700, 250] }[B.key];
   for (const u of B.units) {
-    if (!u.c) continue; const c = u.c; const P = pvpOf(c); const won = winner === u.team;
-    const base = { wsg: [360, 120], ab: [450, 150], av: [700, 250] }[B.key];
+    if (u.general) continue; const won = winner === u.team;
     const extra = B.key === 'ab' ? Math.floor(B.res[u.team] / 330) * 30 : B.key === 'av' ? B.gys.filter((g) => g.owner === u.team).length * 25 : B.score[u.team] * 30;
-    const bonus = Math.round(bgHonorScale(c) * ((won ? base[0] : base[1]) + extra));
-    pvpGain(c, bonus); u.honor += bonus; P.played++; if (won) P.won++;
-    P.hist.unshift({ bg: B.key, won, draw: !winner, hks: u.hks, deaths: u.deaths, honor: u.honor, t: Date.now() }); P.hist = P.hist.slice(0, 15);
-    G.logCtx = c; log(B.def.name + ': ' + (winner ? (won ? 'Victory!' : 'Defeat.') : 'Draw.') + ' ' + u.hks + ' honorable kills, ' + u.deaths + ' deaths, +' + u.honor + ' honor (rank: ' + pvpRankName(c) + ').'); G.logCtx = null;
+    bgGive(u, bgUScale(u) * ((won ? base[0] : base[1]) + extra));
+    if (!u.c || rt(u.c).bg !== B) continue; const c = u.c; const P = pvpOf(c);
+    P.played++; if (won) P.won++;
+    P.hist.unshift({ bg: B.key, won, draw: !winner, hks: u.hks, deaths: u.deaths, honor: Math.round(u.honor), t: Date.now() }); P.hist = P.hist.slice(0, 15);
+    withLogC(c, () => log(B.def.name + ': ' + (winner ? (won ? 'Victory!' : 'Defeat.') : 'Draw.') + ' ' + u.kills + ' killing blows, ' + u.hks + ' honorable kills, ' + u.deaths + ' deaths, +' + Math.round(u.honor) + ' honor (rank: ' + pvpRankName(c) + ').'));
   }
   save();
 }
-/* back to where they were (after the result, or Leave) */
+/* the battleground closes: everyone still in it goes back */
 function bgEnd(B) {
-  for (const u of B.units) if (u.c) bgLeaveChar(u.c, false);
+  for (const u of B.units) if (u.c && rt(u.c).bg === B) bgLeaveChar(u.c, false);
   G.bgs = (G.bgs || []).filter((x) => x !== B);
 }
 function bgLeaveChar(c, early) {
@@ -322,17 +453,20 @@ function bgLeaveChar(c, early) {
   if (back) c.pos = { map: back.map, x: back.x, y: back.y, z: back.z || 0, o: c.pos.o };
   c.hp = charStats(c).maxHp; if (usesMana(c)) c.mana = charStats(c).maxMana;
   c.order = c.bgResume || null; delete c.bgResume; if (c.order && typeof resumeOrder === 'function') resumeOrder(c, c.order);
-  if (early && B) { const u = B.units.find((x) => x.c === c); if (u) { u.c = null; u.name += ' (left)'; } G.logCtx = c; log('Left ' + B.def.name + ' early - no bonus honor.'); G.logCtx = null; if (!B.units.some((x) => x.c)) G.bgs = G.bgs.filter((x) => x !== B); }
+  if (B) {
+    if (early && !B.over) { const u = B.units.find((x) => x.c === c); if (u) { u.c = null; u.name += ' (left)'; } withLogC(c, () => log('Left ' + B.def.name + ' early - no bonus honor.')); }
+    if (!B.units.some((x) => x.c && rt(x.c).bg === B)) G.bgs = (G.bgs || []).filter((x) => x !== B);
+  }
   if (typeof loadGrid === 'function') loadGrid(c.pos.map);
   if (isActive(c) && !G.headless && typeof goToCharacter === 'function') goToCharacter();
   save(); renderOrder();
 }
-function bgLeave(c) { const g = typeof groupOf === 'function' ? groupOf(c) : null; for (const x of g ? groupChars(g) : [c]) if (rt(x).bg) bgLeaveChar(x, true); }
+function bgLeave(c) { const g = typeof groupOf === 'function' ? groupOf(c) : null; const B = rt(c).bg; for (const x of g ? groupChars(g) : [c]) if (rt(x).bg && rt(x).bg === B) bgLeaveChar(x, true); }
 /* a game loaded in the middle of a battleground: back out */
 function pvpMigrate(c) { if (c.bgReturn && !rt(c).bg) { const b = c.bgReturn; c.pos = { map: b.map, x: b.x, y: b.y, z: b.z || 0, o: 0 }; c.order = c.bgResume || null; delete c.bgReturn; delete c.bgResume; } if (c.pvp) delete c.pvp.q; }
 function bgOrderText(c) {
   const B = rt(c).bg; if (!B) return { t: 'Battleground', d: '' };
-  return { t: B.def.name, d: bgScoreText(B) + ' - ' + fmtTime(G.gameTime - B.t0) };
+  return { t: B.def.name, d: B.over ? (B.over.winner ? B.over.winner + ' wins' : 'Draw') + ' - closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) : bgScoreText(B) + ' - ' + fmtTime(G.gameTime - B.t0) };
 }
 function bgScoreText(B) {
   if (B.key === 'wsg') return 'flags ' + B.score.Alliance + ' : ' + B.score.Horde + ' (Alliance : Horde)';
@@ -360,13 +494,17 @@ function bgDraw(ctx, m) {
   }
   // the fighters (your own characters are drawn by the map itself)
   for (const u of B.units) {
-    if (!u.alive || (u.c && G.state.characters.includes(u.c))) continue;
+    if (!u.alive || (u.c && rt(u.c).bg === B)) continue;
     const [x, y] = w2s(u.x, u.y); const R = u.general ? 10 : 6;
     if (!drawClassIcon(ctx, u.cls, x, y, R)) { ctx.fillStyle = BG_TEAM_COL[u.team]; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.3); ctx.fill(); }
     ring(x, y, R + 1.5, BG_TEAM_COL[u.team], u.general ? 3 : 2);
     ctx.fillStyle = '#000'; ctx.fillRect(x - 8, y - R - 6, 16, 3); ctx.fillStyle = '#3fae5a'; ctx.fillRect(x - 8, y - R - 6, 16 * u.hp / u.maxhp, 3);
     if (u.carry) bgFlagIcon(ctx, x + 7, y - 9, BG_TEAM_COL[u.carry], true, 0.7);
   }
+  // what is picked in the raid panel: a gold ring
+  if (RAID.show && B.side) { const sl = RAID.sel; ctx.strokeStyle = '#ffd866'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2]);
+    for (const u of B.units) if (u.alive && u.team === B.side && !u.general && (sl.kind === 'unit' ? String(u.id) === sl.id : sl.kind === 'grp' ? u.grp === +sl.id : false)) { const [x, y] = w2s(u.x, u.y); ctx.beginPath(); ctx.arc(x, y, 11, 0, 6.3); ctx.stroke(); }
+    ctx.setLineDash([]); }
   for (const u of B.units) if (u.c && u.carry && u.alive) { const [x, y] = w2s(u.x, u.y); bgFlagIcon(ctx, x + 9, y - 12, BG_TEAM_COL[u.carry], true, 0.7); }
   ctx.restore();
 }
@@ -378,19 +516,104 @@ function bgFlagIcon(ctx, x, y, col, up, k) {
 /* ------------------------------------------------------------------ the battleground card (right side) */
 function renderBgCard() {
   const el = $('bgCard'); if (!el) return; const c = active(); const r = rt(c); const B = r.bg; const q = c.pvp && c.pvp.q;
-  if (!B && !q) { if (!el.hidden) { el.hidden = true; el.innerHTML = ''; } return; }
+  const rb = $('btnRaid'); if (rb) { rb.hidden = !B; rb.classList.toggle('on', !!(B && RAID.show)); }
+  renderRaidCtl(); renderBgScore();
+  if (!B && !q) { if (!el.hidden) { el.hidden = true; el.innerHTML = ''; el._h = ''; } return; }
   el.hidden = false; let h = '';
-  if (q && !B) { const bg = BGS[q.bg]; h = '<h3>PvP</h3><div class="small">In the queue for <b>' + esc(bg.name) + '</b> (' + fmtTime(G.gameTime - q.t0) + ')</div><button class="mini" data-bgq="leave">Leave queue</button>'; }
+  if (q && !B) { const bg = BGS[q.bg]; h = '<h3>PvP</h3><div class="small">In the queue for <b>' + esc(bg.name) + '</b> (' + fmtTime(G.gameTime - q.t0) + ')' + (cset(c, 'autoBg') ? ' &middot; auto' : '') + '</div><button class="mini" data-bgq="leave">Leave queue</button>'; }
   else {
     const me = B.units.find((u) => u.c === c);
-    h = '<h3>' + esc(B.def.name) + ' <span class="small muted">' + fmtTime(G.gameTime - B.t0) + '</span></h3><div class="small">' + esc(bgScoreText(B)) + '</div>';
-    if (B.over) h += '<div class="bgres ' + (B.over.winner === B.side ? 'won' : 'lost') + '">' + (B.over.winner ? (B.over.winner === B.side ? 'Victory!' : 'Defeat') : 'Draw') + '</div>';
-    if (me) h += '<div class="small">You: ' + me.hks + ' honorable kills, ' + me.deaths + ' deaths, +' + me.honor + ' honor' + (me.alive ? '' : ' - <span style="color:#ff6a5a">dead, back in ' + Math.ceil(Math.max(0, me.resAt - G.gameTime)) + 's</span>') + '</div>';
+    h = '<h3>' + esc(B.def.name) + ' <span class="small muted">' + fmtTime((B.over ? B.over.t : G.gameTime) - B.t0) + '</span></h3><div class="small">' + esc(bgScoreText(B)) + '</div>';
+    if (B.over) h += '<div class="bgres ' + (B.over.winner === B.side ? 'won' : 'lost') + '">' + (B.over.winner ? (B.over.winner === B.side ? 'Victory!' : 'Defeat') : 'Draw') + '</div><div class="small muted">Closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) + '</div>';
+    if (me) h += '<div class="small">You: ' + me.kills + ' killing blows, ' + me.hks + ' honorable kills, ' + me.deaths + ' deaths, +' + Math.round(me.honor) + ' honor' + (me.alive || B.over ? '' : ' - <span style="color:#ff6a5a">dead, back in ' + Math.ceil(Math.max(0, me.resAt - G.gameTime)) + 's</span>') + '</div>';
+    if (me && !B.over) { const o = bgOrdOf(B, me); h += '<div class="small">Order: <b>' + esc((bgOrders(B).find((x) => x[0] === o) || ['', 'Auto'])[1]) + '</b></div>'; }
     h += '<div class="bglog">' + B.logs.slice(0, 4).map(([t, s]) => '<div class="small muted">' + fmtTime(t - B.t0) + ' ' + esc(s) + '</div>').join('') + '</div>';
-    if (!B.over) h += '<button class="mini red" data-bgq="out">Leave battleground</button>';
+    h += '<button class="mini" data-bgq="raid">Raid</button> <button class="mini" data-bgq="score">Scoreboard</button> <button class="mini red" data-bgq="out">Leave battleground</button>';
   }
   if (el._h !== h) { el._h = h; el.innerHTML = h; }
-  el.onclick = (e) => { const b = e.target.closest('[data-bgq]'); if (!b) return; if (b.dataset.bgq === 'leave') bgLeaveQueue(active()); else if (b.dataset.bgq === 'out') bgLeave(active()); renderBgCard(); };
+  el.onclick = (e) => { const b = e.target.closest('[data-bgq]'); if (!b) return; const d = b.dataset.bgq;
+    if (d === 'leave') bgLeaveQueue(active()); else if (d === 'out') bgLeave(active()); else if (d === 'raid') toggleRaid(); else if (d === 'score') { SCORE.show = !SCORE.show; SCORE.forced = SCORE.show; }
+    renderBgCard(); };
+}
+
+/* ------------------------------------------------------------------ the scoreboard */
+const SCORE = { show: false, sort: 'kills', team: 'all', forced: false };
+function bgK(v) { v = Math.round(v); return v >= 100000 ? Math.round(v / 1000) + 'K' : v.toLocaleString(); }
+function bgObjCols(B) { return B.key === 'wsg' ? ['Flags Captured', 'Flags Returned'] : B.key === 'ab' ? ['Bases Assaulted', 'Bases Defended'] : ['Graveyards Assaulted', 'Graveyards Defended']; }
+function renderBgScore() {
+  let el = $('bgScore'); const c = active(); const B = rt(c).bg;
+  if (B && B.over && !B.scoreShown) { B.scoreShown = true; SCORE.show = true; }
+  if (!B || !SCORE.show) { if (el && !el.hidden) { el.hidden = true; el._h = ''; } if (!B) SCORE.show = false; return; }
+  if (!el) { el = document.createElement('div'); el.id = 'bgScore'; $('mapwrap').appendChild(el); el.addEventListener('pointerdown', bgScoreClick); }
+  const oc = bgObjCols(B);
+  const cols = [['kills', 'Killing Blows'], ['deaths', 'Deaths'], ['hks', 'Honorable Kills'], ['dmg', 'Damage Done'], ['healed', 'Healing Done'], ['oa', oc[0]], ['od', oc[1]], ['honor', 'Honor Gained']];
+  const list = B.units.filter((u) => !u.general && (SCORE.team === 'all' || u.team === SCORE.team)).sort((a, b) => (b[SCORE.sort] || 0) - (a[SCORE.sort] || 0) || b.kills - a.kills);
+  const title = B.over ? (B.over.winner ? B.over.winner + ' Wins' : 'Draw') : B.def.name;
+  let h = '<div class="bs-title ' + (B.over && B.over.winner ? B.over.winner.toLowerCase() : '') + '">' + esc(title) + '<button class="mini" data-bsclose="1" title="Close">&#10005;</button></div>' +
+    '<div class="bs-tabs">' + [['all', 'All'], ['Alliance', 'Alliance'], ['Horde', 'Horde']].map(([k, t]) => '<button class="mini' + (SCORE.team === k ? ' on' : '') + '" data-bsteam="' + k + '">' + t + '</button>').join('') + '<span class="small muted">' + esc(bgScoreText(B)) + '</span></div>' +
+    '<div class="bs-wrap"><table class="bs"><thead><tr><th class="bs-n">Name</th>' + cols.map(([k, t]) => '<th data-bssort="' + k + '"' + (SCORE.sort === k ? ' class="on"' : '') + '>' + t + '</th>').join('') + '</tr></thead><tbody>';
+  for (const u of list) {
+    const me = u.c && G.state.characters.includes(u.c);
+    h += '<tr class="' + u.team.toLowerCase() + (me ? ' me' : '') + '"><td class="bs-n"><img src="img/class/' + u.cls + '.png" alt=""><span style="color:' + (CLASS_COLOR[u.cls] || '#fff') + '">' + esc(u.name) + '</span></td>' +
+      cols.map(([k]) => '<td>' + (k === 'dmg' || k === 'healed' || k === 'honor' ? bgK(u[k] || 0) : (u[k] || 0)) + '</td>').join('') + '</tr>';
+  }
+  const n = (t) => B.units.filter((u) => u.team === t && !u.general).length;
+  h += '</tbody></table></div><div class="bs-foot"><span class="small">' + n('Alliance') + ' Alliance Players / ' + n('Horde') + ' Horde Players<br>Time Elapsed: ' + Math.floor(((B.over ? B.over.t : G.gameTime) - B.t0) / 60) + ' Min</span>' +
+    (B.over ? '<span class="small bs-close">Battleground closing in ' + fmtTime(BG_CLOSE - (G.gameTime - B.over.t)) + '</span>' : '<span></span>') + '<button class="act red" data-bsleave="1">Leave Battleground</button></div>';
+  if (el._h !== h) { el._h = h; const sc = el.querySelector('.bs-wrap'); const top = sc ? sc.scrollTop : 0; el.innerHTML = h; const sc2 = el.querySelector('.bs-wrap'); if (sc2) sc2.scrollTop = top; }
+  el.hidden = false;
+}
+function bgScoreClick(e) {
+  const t = e.target.closest('[data-bsclose],[data-bsteam],[data-bssort],[data-bsleave]'); if (!t) return; e.preventDefault(); const d = t.dataset;
+  if (d.bsclose) SCORE.show = false; else if (d.bsteam) SCORE.team = d.bsteam; else if (d.bssort) SCORE.sort = d.bssort; else if (d.bsleave) { SCORE.show = false; bgLeave(active()); }
+  renderBgCard();
+}
+
+/* ------------------------------------------------------------------ the raid panel: orders for groups and players */
+const RAID = { show: false, sel: { kind: 'raid', id: null } };
+function toggleRaid() { RAID.show = !RAID.show; G.state.settings.raidPanel = RAID.show; save(); renderBgCard(); }
+function renderRaidCtl() {
+  let el = $('raidCtl'); const c = active(); const B = rt(c).bg;
+  if (!B || !RAID.show) { if (el && !el.hidden) { el.hidden = true; el._h = ''; } return; }
+  if (!el) { el = document.createElement('div'); el.id = 'raidCtl'; $('mapwrap').appendChild(el); el.addEventListener('pointerdown', raidClick); }
+  const S = bgStrat(B.key); const n = bgGroups(B); const mine = B.units.filter((u) => u.team === B.side && !u.general); const ords = bgOrders(B);
+  if (RAID.sel.kind === 'unit' && !mine.some((u) => String(u.id) === RAID.sel.id)) RAID.sel = { kind: 'raid', id: null };
+  const sel = RAID.sel; const nm = (o) => (ords.find((x) => x[0] === o) || ['', 'Auto'])[1];
+  let h = '<div class="rc-head"><b>Raid</b><span class="small muted">' + esc(B.def.name) + ' &middot; ' + esc(bgScoreText(B)) + '</span><button class="mini" data-rcscore="1">Score</button><button class="mini" data-rcclose="1" title="Close">&#10005;</button></div>';
+  h += '<div class="rc-strat"><span class="small muted">Strategy</span>' + bgStrategies(B).map(([t, tip, g]) => '<button class="mini" data-rcstrat="' + esc(t) + '" title="' + esc(tip) + '">' + esc(t) + '</button>').join('') + '</div>';
+  h += '<div class="rc-grid' + (n > 4 ? ' many' : '') + '">';
+  for (let g = 1; g <= n; g++) {
+    const go = S.grp[g] || 'auto';
+    h += '<div class="rc-g"><div class="rc-gh' + (sel.kind === 'grp' && +sel.id === g ? ' sel' : '') + '" data-rcg="' + g + '">Group ' + g + (go !== 'auto' ? ' <em>' + esc(bgOrdShort(B, go)) + '</em>' : '') + '</div>';
+    for (const u of mine.filter((x) => x.grp === g)) {
+      const own = (u.c && S.chars[u.c.id]) || B.uord[u.id]; const col = CLASS_COLOR[u.cls] || '#bbb'; const me = u.c && G.state.characters.includes(u.c);
+      h += '<div class="rc-m' + (sel.kind === 'unit' && sel.id === String(u.id) ? ' sel' : '') + (u.alive ? '' : ' dead') + (me ? ' me' : '') + '" data-rcu="' + esc(u.id) + '" title="' + esc(u.name + ' - level ' + u.level + ' ' + (CLASS_NAMES[u.cls] || '') + (u.heal ? ' (healer)' : '') + ' - ' + nm(bgOrdOf(B, u))) + '">' +
+        '<i style="width:' + Math.max(0, 100 * u.hp / u.maxhp) + '%;background:' + col + '"></i><span>' + (me ? '&#9733;' : '') + esc(u.name) + '</span>' + (own ? '<em>' + esc(bgOrdShort(B, own)) + '</em>' : u.carry ? '<em>&#9873;</em>' : '') + '</div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  let cur, who;
+  if (sel.kind === 'raid') { who = 'the whole raid'; const v = new Set(); for (let g = 1; g <= n; g++) v.add(S.grp[g] || 'auto'); cur = v.size === 1 ? [...v][0] : null; }
+  else if (sel.kind === 'grp') { who = 'Group ' + sel.id; cur = S.grp[sel.id] || 'auto'; }
+  else { const u = mine.find((x) => String(x.id) === sel.id); who = u.name; cur = bgOrdOf(B, u); }
+  h += '<div class="rc-sel"><span>Orders for <b>' + esc(who) + '</b></span>' + (sel.kind !== 'raid' ? '<button class="mini" data-rcall="1">Whole raid</button>' : '') + '</div><div class="rc-ords">' +
+    ords.map(([k, t, tip]) => '<button class="mini' + (cur === k ? ' on' : '') + '" data-rco="' + k + '" title="' + esc(tip) + '">' + esc(t) + '</button>').join('') + '</div>' +
+    '<div class="small muted">Click a group or a player, then an order. Orders and strategies are kept for the next ' + esc(B.def.name) + '.</div>';
+  if (el._h !== h) { el._h = h; el.innerHTML = h; }
+  el.hidden = false;
+}
+function raidClick(e) {
+  const c = active(); const B = rt(c).bg; if (!B) return;
+  const t = e.target.closest('[data-rcclose],[data-rcscore],[data-rcstrat],[data-rcg],[data-rcu],[data-rco],[data-rcall]'); if (!t) return; e.preventDefault(); const d = t.dataset;
+  if (d.rcclose) { toggleRaid(); return; }
+  if (d.rcscore) { SCORE.show = !SCORE.show; }
+  else if (d.rcstrat) { const s = bgStrategies(B).find((x) => x[0] === d.rcstrat); if (s) { bgApplyStrategy(B, s[2]); withLogC(c, () => log('Raid strategy: ' + s[0] + ' - ' + s[1] + '.')); } }
+  else if (d.rcg) RAID.sel = RAID.sel.kind === 'grp' && RAID.sel.id === d.rcg ? { kind: 'raid', id: null } : { kind: 'grp', id: d.rcg };
+  else if (d.rcu) RAID.sel = RAID.sel.kind === 'unit' && RAID.sel.id === d.rcu ? { kind: 'raid', id: null } : { kind: 'unit', id: d.rcu };
+  else if (d.rcall) RAID.sel = { kind: 'raid', id: null };
+  else if (d.rco) bgSetOrder(B, RAID.sel, d.rco);
+  renderBgCard();
 }
 
 /* ------------------------------------------------------------------ the PvP window (H): Honor, Battlegrounds, Honor vendor */
@@ -417,7 +640,10 @@ function pvpTabHtml(c, tab) {
       h += '<div class="bgrow"><div class="bgname">' + esc(bg.name) + ' <span class="small muted">' + bg.size + ' v ' + bg.size + (br ? ', bracket ' + br[0] + '-' + br[1] : ', from level ' + bg.minL) + '</span></div><div class="small muted">' + esc(bg.text) + '</div>' +
         (why || q ? '<div class="small muted">' + esc(why || 'already in a queue') + '</div>' : '<button class="act" data-bgjoin="' + k + '">' + (typeof groupOf === 'function' && groupOf(c) ? 'Join as group' : 'Join') + '</button>') + '</div>';
     }
-    return h + '<div class="small muted">While in the queue your character keeps doing what it does; it goes in when the queue pops (not in a fight, a dungeon or a flight).</div></div>';
+    const ak = bgAutoKey(c); const on = !!cset(c, 'autoBg');
+    h += '<div class="bgrow bgauto"><div class="bgname">Auto battlegrounds</div><label class="chk"><input type="checkbox" data-bgauto="1"' + (on ? ' checked' : '') + '> Queue by itself, and again after every match (leaves the scoreboard after ' + BG_AUTO_LEAVE + ' seconds)</label>' +
+      '<div class="bgpick">' + [['any', 'Any I can join']].concat(Object.keys(BGS).map((k) => [k, BGS[k].name])).map(([k, t]) => '<button class="mini' + (ak === k ? ' on' : '') + '" data-bgakey="' + k + '">' + esc(t) + '</button>').join('') + '</div></div>';
+    return h + '<div class="small muted">While in the queue your character keeps doing what it does; it goes in when the queue pops (not in a fight, a dungeon or a flight). Inside, the Raid panel gives orders to groups and players.</div></div>';
   }
   if (tab === 'honorv') {
     const items = honorItems(c); const v = honorVendorNear(c); const vs = honorVendorSpot(c);
@@ -433,7 +659,9 @@ function pvpTabHtml(c, tab) {
   return '';
 }
 function pvpClick(e) {
-  const c = active(); const t = e.target.closest('[data-bgjoin],[data-bgleaveq],[data-bgout],[data-hbuy]'); if (!t) return false; const d = t.dataset;
+  const c = active(); const t = e.target.closest('[data-bgjoin],[data-bgleaveq],[data-bgout],[data-hbuy],[data-bgauto],[data-bgakey]'); if (!t) return false; const d = t.dataset;
+  if (d.bgauto) { if (e.type !== 'click' || e.target !== t) return true; c.auto = c.auto || {}; c.auto.autoBg = t.checked; if (!t.checked && c.pvp && c.pvp.q && c.pvp.q.lead === c.id) bgLeaveQueue(c); save(); renderSheet(); renderBgCard(); if (typeof renderSettingsCard === 'function') renderSettingsCard(); return true; }
+  if (d.bgakey) { c.auto = c.auto || {}; c.auto.autoBgKey = d.bgakey; save(); renderSheet(); return true; }
   if (d.bgjoin) bgQueue(c, d.bgjoin); else if (d.bgleaveq) bgLeaveQueue(c); else if (d.bgout) bgLeave(c); else if (d.hbuy) honorBuy(c, +d.hbuy);
   renderSheet(); renderBgCard(); return true;
 }

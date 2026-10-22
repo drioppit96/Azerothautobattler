@@ -1001,7 +1001,7 @@ function updateChar(c, dt) {
   if (r.mounted && typeof mountCheck === 'function') mountCheck(c);          // off the mount when it is time (mounts.js)
   if (r.bg) return;          // in a battleground: pvp.js moves and fights for it (bgTick)
   if (c.order && c.order.type === 'bg') { c.order = c.bgResume || null; delete c.bgResume; }
-  if (c.pvp && c.pvp.q && typeof pvpQueueStep === 'function' && pvpQueueStep(c)) return;          // the battleground queue pops
+  if (typeof pvpQueueStep === 'function' && pvpQueueStep(c)) return;          // the battleground queue pops (and auto battlegrounds queue)
   if (r.ghost) { ghostStep(c, dt); return; }
   if (r.flying) { flyStep(c, dt); return; }
   if (r.riding) { rideStep(c, dt); return; }

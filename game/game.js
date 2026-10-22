@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-22 d (PvP: honor, ranks, battlegrounds)';
+const GAME_VERSION = '2026-10-22 e (BG scoreboard, raid orders, auto battlegrounds)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -454,6 +454,7 @@ const AUTO_GROUPS = [
   ['Quests', [['chainQuests', 'After a single quest, continue with the next one'], ['dungeonQuests', 'Leveling and auto-quest do dungeon quests too', true], ['dungeonSolo', 'Do dungeon quests alone (no group)'], ['groupQuests', 'Do group quests (elites out in the world) with a hired group', true]]],
   ['Gear', [['autoEquip', 'Equip upgrades by itself'], ['autoBuyBags', 'Buy bags at vendors when there is a free bag slot'], ['autoRepair', 'Repair at vendors by itself'], ['autoDisenchant', 'Enchanters: disenchant green gear that is no upgrade (instead of selling it)']]],
   ['Travel', [['autoMount', 'Ride the mount on long ways (from level 40)', true], ['autoRiding', 'Learn riding and buy a mount by itself at level 40 and 60, when there is money for it', true]]],
+  ['PvP', [['autoBg', 'Auto battlegrounds: queue by itself and again after every match (which one: PvP - Battlegrounds)']]],
   ['Fighting', [['rogueStealth', 'Rogues: slip into Stealth when not fighting (creatures rarely notice them)', true]]],
   ['Away', [['offlineProgress', 'Offline progress: keeps playing while the game is closed - up to 2 hours, the first 30 minutes in full, the rest at half rate; no dungeons', true]]],
 ];
@@ -896,6 +897,7 @@ function bindInput() {
   $('btnLoad').onclick = () => $('fileLoad').click();
   $('btnChars').onclick = () => openCharSwitch();
   $('btnMeter').onclick = () => toggleMeter();
+  if ($('btnRaid')) $('btnRaid').onclick = () => { if (typeof toggleRaid === 'function') toggleRaid(); };
   $('shownodes').onchange = () => { G.state.settings.showNodes = $('shownodes').checked; save(); };
   if ($('lightworld') && IS_APP) { $('lightworld').checked = lightWorld(); $('lightworld').onchange = () => { G.state.settings.lightWorld = $('lightworld').checked; save(); location.reload(); }; }
   $('hdmaps').onclick = () => { G.state.settings.hdMaps = !hdOn(); save(); if (hdOn()) loadHd(G.map); renderHdToggle(); };

@@ -17,6 +17,13 @@ function groupOf(c) {
   for (const g of G.state.groups) if (g.members.length > 1 && g.members.some((m) => m.id === c.id)) return g;
   return null;
 }
+/* a full group of 5 becomes a raid (up to 40) when it invites a 6th inside a battleground or a raid */
+function groupMax(g) { return g && g.raid ? 40 : GROUP_MAX; }
+function raidPlace(c) {
+  if (!c) return false; if (rt(c).bg) return true;
+  if (typeof isDungeonMap === 'function' && isDungeonMap(c.pos.map) && typeof dungeonByMap === 'function') { const d = dungeonByMap(c.pos.map); return !!(d && d.kind === 'raid'); }
+  return false;
+}
 function groupLeader(g) { return charById(g.leader); }
 function groupChars(g) { return g.members.map((m) => charById(m.id)).filter(Boolean); }
 function grpRole(c) { const g = groupOf(c); const m = g && g.members.find((x) => x.id === c.id); return m ? m.role : null; }
@@ -33,8 +40,12 @@ function groupInvite(leader, alt) {
   if (groupOf(alt)) { log(alt.name + ' is already in a group.'); return; }
   let g = groupOf(leader) || groups().find((x) => x.leader === leader.id);
   if (!g) { g = { id: 'g' + Date.now().toString(36), leader: leader.id, members: [{ id: leader.id, role: defaultRole(leader) }], questMode: true, formation: 'wedge', dist: 4 }; groups().push(g); }
-  if (g.members.length >= GROUP_MAX) { log('The group is full (5).'); return; }
+  if (g.members.length >= groupMax(g)) {
+    if (g.raid || !raidPlace(leader)) { log(g.raid ? 'The raid is full (40).' : 'The group is full (5) - in a battleground or a raid it becomes a raid.'); return; }
+    g.raid = true; log('The group is now a raid (up to 40, in groups of 5).');
+  }
   g.members.push({ id: alt.id, role: defaultRole(alt) });
+  if (typeof bgJoinRaid === 'function' && bgJoinRaid(leader, alt)) { log(alt.name + ' joins the raid in the battleground.'); save(); renderGroup(); renderCharSwitch(true); return; }
   alt.order = { type: 'follow', label: leader.name, resume: alt.order && alt.order.type !== 'follow' ? alt.order : null };
   rt(alt).mv = null; rt(alt).tgt = null;
   log(alt.name + ' joins the group (' + ROLE_NAMES[g.members[g.members.length - 1].role] + ').'); withLog(alt, () => log('Joined ' + leader.name + "'s group."));
@@ -296,8 +307,10 @@ function renderGroup() {
       : '<div class="small muted">Make another character to group with (Characters - New).</div>';
     el.innerHTML = h; return;
   }
-  const L = groupLeader(g);
+  const L = groupLeader(g); if (g.raid) h = '<h3>Raid <span class="small muted">' + g.members.length + ' / 40</span></h3>';
+  let mi = 0;
   for (const m of g.members) {
+    if (g.raid && mi % 5 === 0) h += '<div class="grp-sub small muted">Group ' + (mi / 5 + 1) + '</div>'; mi++;
     const x = charById(m.id); if (!x) continue; const s = charStats(x); const xr = rt(x);
     const st = xr.ghost ? 'dead' : xr.threats && xr.threats.length ? 'fighting' : xr.resting ? 'resting' : x.id === g.leader ? 'leading' : 'following';
     h += '<div class="grp-m' + (x === c ? ' me' : '') + '"><div class="grp-top"><span class="grp-n" style="color:' + CLASS_COLOR[x.cls] + '">' + (x.id === g.leader ? '&#9813; ' : '') + esc(x.name) + '</span><span class="small muted">' + x.level + ' &middot; ' + st + '</span>' +
@@ -305,7 +318,7 @@ function renderGroup() {
       (x.id !== g.leader ? '<button class="mini" data-glead="' + x.id + '" title="Make leader">&#9813;</button>' : '') + '<button class="mini" data-gkick="' + x.id + '" title="Remove from the group">&#10005;</button></div>' +
       '<div class="grp-bars"><i class="hp" style="width:' + Math.max(0, 100 * x.hp / s.maxHp) + '%"></i></div>' + (usesMana(x) && s.maxMana ? '<div class="grp-bars mp"><i style="width:' + 100 * x.mana / s.maxMana + '%"></i></div>' : '') + '</div>';
   }
-  if (alts.length && g.members.length < GROUP_MAX) h += '<div class="grp-inv"><select id="grpAlt">' + alts.map((a) => '<option value="' + a.id + '">' + esc(a.name) + ' (' + a.level + ' ' + CLASS_NAMES[a.cls] + ')</option>').join('') + '</select><button class="mini" data-ginv="1">Invite</button></div>';
+  if (alts.length && (g.members.length < groupMax(g) || (!g.raid && raidPlace(L)))) h += '<div class="grp-inv"><select id="grpAlt">' + alts.map((a) => '<option value="' + a.id + '">' + esc(a.name) + ' (' + a.level + ' ' + CLASS_NAMES[a.cls] + ')</option>').join('') + '</select><button class="mini" data-ginv="1">Invite</button></div>';
   h += '<label class="chk"><input type="checkbox" data-gq="1"' + (g.questMode ? ' checked' : '') + '> Quest mode - do what the leader does (quests, grinding); the leader goes on only when everyone is done with the objective</label>' +
     '<div class="rgrid"><label>Formation</label><select data-gform="1">' + Object.keys(FORMATIONS).map((k) => '<option value="' + k + '"' + (g.formation === k ? ' selected' : '') + '>' + FORMATIONS[k] + '</option>').join('') + '</select>' +
     '<label>Follow distance</label><span><input type="number" data-gdist="1" min="1" max="20" step="1" value="' + (g.dist || 4) + '"> yards</span></div>' +
