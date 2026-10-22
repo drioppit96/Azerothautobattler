@@ -1,0 +1,57 @@
+CharSections.dbc: 3671 rows, 10 fields
+CharHairGeosets.dbc: 148 rows, 6 fields
+CharacterFacialHairStyles.dbc: 136 rows, 9 fields
+ChrRaces.dbc: 9 rows, 29 fields
+CharSections: 3671 rows, 10 fields, texture columns [6, 7, 8]
+  rows that look right (race 1-8, sex 0-1, section 0-4): 3665 of 3671
+CharHairGeosets rows (first 3): [[21, 1, 0, 0, 0, 1], [22, 1, 0, 1, 2, 0], [23, 1, 0, 2, 3, 0]]
+CharacterFacialHairStyles rows (first 3): [[1, 0, 1, 80190984, 0, 1960, 1, 2, 1], [1, 0, 2, 80190984, 0, 1960, 1, 2, 1], [1, 0, 3, 80190984, 0, 1960, 2, 1, 2]]
+  1_0 camera: head box [0.209, 0.157, 0.241], view half-height 0.331
+  1_0 rows by (section, flags): [((0, 0), 10), ((0, 1), 2), ((1, 0), 120), ((2, 0), 90), ((3, 0), 120), ((4, 0), 10)]
+1_0 Human Male: 28 pieces, skins 12, faces 120, facial hair 90, hair 120
+  1_1 camera: head box [0.206, 0.177, 0.13], view half-height 0.243
+  1_1 rows by (section, flags): [((0, 0), 10), ((0, 1), 2), ((1, 0), 150), ((3, 0), 190), ((4, 0), 10)]
+1_1 Human Female: 33 pieces, skins 12, faces 150, facial hair 0, hair 190
+  2_0 camera: head box [0.299, 0.237, 0.771], view half-height 0.559
+  2_0 rows by (section, flags): [((0, 0), 9), ((0, 1), 5), ((1, 0), 81), ((2, 0), 88), ((3, 0), 56), ((4, 0), 9)]
+2_0 Orc Male: 39 pieces, skins 14, faces 81, facial hair 88, hair 56
+  2_1 camera: head box [0.236, 0.229, 0.219], view half-height 0.315
+  2_1 rows by (section, flags): [((0, 0), 9), ((0, 1), 1), ((1, 0), 81), ((3, 0), 64), ((4, 0), 9)]
+2_1 Orc Female: 22 pieces, skins 10, faces 81, facial hair 0, hair 64
+  3_0 camera: head box [0.271, 0.186, 0.244], view half-height 0.335
+  3_0 rows by (section, flags): [((0, 0), 9), ((0, 1), 10), ((1, 0), 90), ((2, 0), 110), ((3, 0), 110), ((4, 0), 9)]
+3_0 Dwarf Male: 38 pieces, skins 19, faces 90, facial hair 110, hair 110
+  3_1 camera: head box [0.249, 0.18, 0.205], view half-height 0.282
+  3_1 rows by (section, flags): [((0, 0), 9), ((0, 1), 2), ((1, 0), 90), ((3, 0), 140), ((4, 0), 9)]
+3_1 Dwarf Female: 24 pieces, skins 11, faces 90, facial hair 0, hair 140
+  4_0 camera: head box [0.242, 0.134, 0.243], view half-height 0.334
+  4_0 rows by (section, flags): [((0, 0), 9), ((1, 0), 81), ((2, 0), 60), ((3, 0), 56), ((4, 0), 9)]
+4_0 NightElf Male: 23 pieces, skins 9, faces 81, facial hair 60, hair 56
+  4_1 camera: head box [0.362, 0.313, 0.222], view half-height 0.431
+  4_1 rows by (section, flags): [((0, 0), 9), ((1, 0), 81), ((2, 0), 100), ((3, 0), 56), ((4, 0), 9)]
+4_1 NightElf Female: 12 pieces, skins 9, faces 81, facial hair 100, hair 56
+  5_0 camera: head box [0.225, 0.149, 0.271], view half-height 0.372
+  5_0 rows by (section, flags): [((0, 0), 6), ((1, 0), 60), ((2, 0), 170), ((3, 0), 100), ((4, 0), 6)]
+5_0 Scourge Male: 23 pieces, skins 6, faces 60, facial hair 170, hair 100
+  5_1 camera: head box [0.207, 0.146, 0.297], view half-height 0.408
+  5_1 rows by (section, flags): [((0, 0), 6), ((1, 0), 60), ((2, 0), 80), ((3, 0), 100), ((4, 0), 6)]
+5_1 Scourge Female: 17 pieces, skins 6, faces 60, facial hair 80, hair 100
+  6_0 camera: head box [0.376, 0.875, 0.259], view half-height 0.524
+  6_0 rows by (section, flags): [((0, 0), 19), ((1, 0), 95), ((3, 0), 24), ((4, 0), 19)]
+6_0 Tauren Male: 52 pieces, skins 19, faces 95, facial hair 0, hair 24
+  6_1 camera: head box [0.243, 0.464, 0.202], view half-height 0.491
+  6_1 rows by (section, flags): [((0, 0), 11), ((1, 0), 44), ((2, 0), 5), ((3, 0), 21), ((4, 0), 11)]
+6_1 Tauren Female: 26 pieces, skins 11, faces 44, facial hair 5, hair 21
+  7_0 camera: head box [0.285, 0.209, 0.214], view half-height 0.249
+  7_0 rows by (section, flags): [((0, 0), 5), ((0, 1), 2), ((1, 0), 35), ((2, 0), 72), ((3, 0), 63), ((4, 0), 5)]
+7_0 Gnome Male: 29 pieces, skins 7, faces 35, facial hair 72, hair 63
+  7_1 camera: head box [0.262, 0.213, 0.254], view half-height 0.259
+  7_1 rows by (section, flags): [((0, 0), 5), ((0, 1), 2), ((1, 0), 35), ((3, 0), 63), ((4, 0), 5)]
+7_1 Gnome Female: 27 pieces, skins 7, faces 35, facial hair 0, hair 63
+  8_0 camera: head box [0.541, 0.266, 0.502], view half-height 0.691
+  8_0 rows by (section, flags): [((0, 0), 6), ((0, 1), 9), ((1, 0), 30), ((2, 0), 110), ((3, 0), 60), ((4, 0), 6), ((4, 1), 9)]
+8_0 Troll Male: 26 pieces, skins 15, faces 30, facial hair 110, hair 60
+  8_1 camera: head box [0.314, 0.197, 0.213], view half-height 0.293
+  8_1 rows by (section, flags): [((0, 0), 6), ((0, 1), 9), ((1, 0), 36), ((3, 0), 50), ((4, 0), 6), ((4, 1), 9)]
+8_1 Troll Female: 20 pieces, skins 15, faces 36, facial hair 0, hair 50
+Written: C:\wow excel\charlooks (20.2 MB)

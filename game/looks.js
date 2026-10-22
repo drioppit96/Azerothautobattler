@@ -17,7 +17,7 @@ const LOOK_FEATURE = { 1: ['Facial Hair', 'Piercings'], 2: ['Features', 'Piercin
   5: ['Features', 'Features'], 6: ['Facial Hair', 'Hair'], 7: ['Facial Hair', 'Earrings'], 8: ['Tusks', 'Features'] };
 const LOOK_HAIR = { 6: ['Horn Style', 'Horn Color'] };          // tauren: horns instead of hair
 /* framing touch-ups of the painted portrait per race_sex: [shift right, shift down (parts of the picture), zoom] */
-const LOOK_CROP = {};
+const LOOK_CROP = { '2_0': [0, -0.03, 1.2], '4_1': [0.02, 0.06, 1.35], '5_1': [0, 0.03, 1.15], '8_0': [0.03, 0.15, 1.45], '6_0': [0, 0.02, 1.1] };
 
 function looksInit() {
   if (LOOK.loading) return LOOK.loading;
