@@ -503,7 +503,7 @@ function charDie(c, killer) {
   } else if (c.order && c.order.type === 'questing' && c.order.fq) {
     const o = c.order; o.qdeaths = o.qdeaths || {}; o.qdeaths[o.fq] = (o.qdeaths[o.fq] || 0) + 1;
     if (o.qdeaths[o.fq] >= 3) { const q = G.q.byId[o.fq]; log('Died 3 times on "' + (q ? q.title : o.fq) + '" - skipping it until the next level.'); o.skip = o.skip || {}; o.skip[o.fq] = c.level; o.qdeaths[o.fq] = 0; o.fq = null; o.wt = null; }
-  } else if (c.order && c.order.type !== 'questing') { c.order.deaths = (c.order.deaths || 0) + 1; if (c.order.deaths >= 3) { log('Died 3 times on this order - it is too dangerous. Order cancelled.'); c.order = null; } }
+  } else if (c.order && c.order.type !== 'questing' && c.order.type !== 'follow') { c.order.deaths = (c.order.deaths || 0) + 1; if (c.order.deaths >= 3) { log('Died 3 times on this order - it is too dangerous. Order cancelled.'); c.order = null; } }          // (following the group never ends this way)
   durabilityLoss(c, 0.1);
   r.cast = null; r.drinking = null; r.absorb = null; r.totemDmg = null; c.form = null; c.energy = 0;
   if (c.pet) { if (c.pet.kind === 'hunter') c.pet.dead = true; else c.pet = null; }
@@ -1047,6 +1047,11 @@ function updateChar(c, dt) {
   if ((c.cls === 3 || c.cls === 9) && typeof petOoc === 'function' && petOoc(c, dt)) return;      // taming, feeding the pet, Demonic Sacrifice
   if (c.cls !== 1 && oocStep(c)) return;
   if (c.prof && profStep(c)) return;
+  // a group member with nothing to do while its leader is busy (or in a dungeon): back behind the leader
+  if (!c.order && typeof groupOf === 'function' && groupOf(c) && !isLeader(c)) {
+    const L = groupLeader(groupOf(c));
+    if (L && L !== c && (L.order || (typeof isDungeonMap === 'function' && isDungeonMap(L.pos.map)))) { c.order = { type: 'follow', label: L.name }; r.mv = null; log(c.name + ' follows ' + L.name + ' again.'); renderOrder(); }
+  }
   const o = c.order;
   if (!o) { if (c.farm && c.farm.idle && typeof farmIdle === 'function') farmIdle(c); return; }          // farm.js: materials when idle
   if (typeof groupHold === 'function' && groupHold(c, o)) return;      // the leader waits for the group
