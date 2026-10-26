@@ -245,6 +245,25 @@ function walkLine(f, p, q) {
   for (let k = 1; k < n; k++) { const t = k / n; if (!walkAt(f, p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t)) return false; }
   return true;
 }
+/* safety (exact walls): a character standing in rock - a random spot near the leader or the entrance landed in a wall -
+   steps out to the nearest floor; a follower that got nowhere for 8 seconds while its leader is away (a corner it
+   cannot find its way round) joins the leader again, behind it */
+function dgNearestFloor(f, x, y) {
+  for (let rad = 1; rad <= 20; rad += 1) for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2; const px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad; if (walkAt(f, px, py)) return { x: px, y: py }; }
+  return null;
+}
+function dgUnstick(c) {
+  const r = rt(c); if (G.gameTime < (r.usT || 0)) return; r.usT = G.gameTime + 1;
+  const f = dgExactFloor(c.pos.map, c.pos.x, c.pos.y, c.pos.z); if (!f) return;
+  if (!walkAt(f, c.pos.x, c.pos.y)) { const p = dgNearestFloor(f, c.pos.x, c.pos.y); if (p) { c.pos.x = p.x; c.pos.y = p.y; r.mv = null; r.blocked = false; } r.usP = null; return; }
+  const o = c.order; const g = typeof groupOf === 'function' ? groupOf(c) : null; const L = g && groupLeader(g);
+  if (!o || o.type !== 'follow' || !L || L === c || L.pos.map !== c.pos.map || r.resting || r.cast || (r.threats || []).length || Math.hypot(L.pos.x - c.pos.x, L.pos.y - c.pos.y) < 20) { r.usP = null; return; }
+  const P = r.usP; if (!P || Math.hypot(P.x - c.pos.x, P.y - c.pos.y) > 2) { r.usP = { x: c.pos.x, y: c.pos.y, t: G.gameTime }; return; }
+  if (G.gameTime - P.t < 8) return;
+  let q = typeof trailPoint === 'function' ? trailPoint(L, 4) : L.pos; if (!walkAt(f, q.x, q.y)) q = L.pos;
+  c.pos = { map: L.pos.map, x: q.x, y: q.y, z: q.z != null ? q.z : L.pos.z, o: L.pos.o }; r.mv = null; r.blocked = false; r.usP = null;
+  log(c.name + ' could not find the way - back with ' + L.name + '.');
+}
 /* exact walls on this spot of a dungeon (null: not known there) */
 function dgExactFloor(mapId, x, y, z) { const d = dungeonByMap(mapId); if (!d) return null; const f = dungeonFloorAt(d, x, y, z); return f && f.walk && f.walk.exact && floorWalk(f) ? f : null; }
 /* exact walls: can one walk straight from a to b */

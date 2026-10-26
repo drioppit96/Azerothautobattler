@@ -155,10 +155,33 @@ function groupPickTarget(c, threats, cur) {
     if (loose.length) { const m = near(loose); groupTaunt(c, m); return m; }
     return alive(cur) ? cur : near(threats);
   }
-  if (L && L !== c) { const lt = rt(L).tgt; if (alive(lt)) return lt; }
+  const tk = groupTank(c); const lead = tk && tk !== c ? tk : L;          // damage and healers help the tank (else the leader) on its target
+  if (lead && lead !== c) { const lt = rt(lead).tgt; if (alive(lt)) return lt; }
   if (alive(cur)) return cur;
   const healerHit = threats.filter((m) => m.tgt && grpRole(m.tgt) === 'healer');
   return near(healerHit.length ? healerHit : threats);
+}
+/* the group's tank (alive, close by), if it has one */
+function groupTank(c) { const g = groupOf(c); if (!g) return null; for (const m of g.members) if (m.role === 'tank') { const t = charById(m.id); if (t && t.hp > 0 && !rt(t).ghost && t.pos.map === c.pos.map && Math.hypot(t.pos.x - c.pos.x, t.pos.y - c.pos.y) < 60) return t; } return null; }
+/* damage dealers mind their threat: close to the tank's (90% of what takes the creature over - 110% in melee, 130% at
+   range) they hold back - an attack spell being cast is stopped - and drop threat if the class can (Feint, Feign
+   Death, Fade, Cower) */
+const THREAT_DROP = { 4: ['Feint', 10, 0.5], 3: ['Feign Death', 30, 0], 5: ['Fade', 30, 0.5], 11: ['Cower', 10, 0.6] };
+function groupThreatHold(c, m) {
+  if (!m || !m.cThr || m.tgt === c || grpRole(c) === 'tank' || !groupOf(c)) return false;
+  const tk = groupTank(c); if (!tk || m.tgt !== tk) return false;          // no tank on it: nothing to keep
+  const mine = m.cThr[c.id] || 0, tank = m.cThr[tk.id] || 0; const melee = Math.hypot(m.x - c.pos.x, m.y - c.pos.y) <= MELEE_RANGE + 1;
+  // what it is about to add: about 3 seconds of its damage (a big spell, a shot, a few swings) - it waits until the
+  // tank has that much of a lead (at the start of a pull the tank has hardly any yet)
+  const r0 = rt(c); if (!r0.dpsEst || G.gameTime > r0.dpsEst.t) r0.dpsEst = { t: G.gameTime + 10, v: typeof classDps === 'function' ? classDps(c, charStats(c), 0.25) : 20 };
+  if (mine + r0.dpsEst.v * 3 < tank * (melee ? 1.1 : 1.3) * 0.9) return false;
+  const r = rt(c); const dr = THREAT_DROP[c.cls];
+  if (dr && c.known && c.known[dr[0]] && !((r.cd[dr[0]] || 0) > G.gameTime) && (c.cls !== 11 || c.form === 'cat')) {
+    r.cd[dr[0]] = G.gameTime + dr[1]; for (const x of groupThreats(c)) if (x.cThr && x.cThr[c.id]) x.cThr[c.id] *= dr[2];
+    fx(c.pos.x, c.pos.y, dr[0], '#cfc6b0'); return false;
+  }
+  if (G.gameTime > (r.holdFx || 0)) { r.holdFx = G.gameTime + 4; fx(c.pos.x, c.pos.y, 'holding back', '#9fc7ff'); }
+  return true;
 }
 /* Taunt (warrior, defensive stance) or Growl (bear): the creature turns to the tank */
 function groupTaunt(c, m) {

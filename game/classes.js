@@ -325,7 +325,7 @@ function spellHit(c, sp, e, m, opts) {
   if (Math.random() * 100 < miss) { fx(m.x, m.y, 'resist', '#cfc6b0'); if (m.st === 'alive') engage(m, c); return 0; }
   let crit = false; if (Math.random() * 100 < spellMod(c, sp, 7, spellCritChance(c))) { v *= 1.5 + spellMod(c, sp, 15, 0) / 100; crit = true; }
   v = Math.max(1, Math.round(v));
-  m.hp -= v; onMobDamaged(m, v); addThreat(m, c, v); meterDmg(c, v, sp.n);
+  m.hp -= v; onMobDamaged(m, v); if (!opts.noThreat) addThreat(m, c, v); meterDmg(c, v, sp.n);          // (a totem's damage: the totem's threat, not the shaman's)
   if (typeof vfxSpell === 'function') vfxSpell(c, m, sp, v + (crit ? '!' : ''), crit); else fx(m.x, m.y, v + (crit ? '!' : ''), crit ? '#ffd23a' : '#ffe58a');          // flies there, school colours (vfx.js)
   if (m.st === 'alive') engage(m, c);
   if (m.hp <= 0) killMob(c, m);
@@ -349,11 +349,14 @@ function spellHeal(c, sp, e, lo, hi) {
 }
 
 /* ------------------------------------------------------------------ threat (pets tank) */
+/* the tank's threat for its damage: Defensive Stance and Sunder Armor / Revenge (warrior), Bear Form and Maul (druid),
+   Righteous Fury (paladin) */
+function tankThreatMul(c) { return c.cls === 1 ? 2.6 : c.cls === 11 ? (c.form === 'bear' ? 2.4 : 1.8) : c.cls === 2 ? 2.2 : 1.8; }
 function addThreat(m, src, v) {
   if (src && src.isPet) { m.petThreat = (m.petThreat || 0) + v * (src.tank ? 2.2 : 0.6); return; }
   // in a group of your characters: threat per character (the tank makes more); the creature turns to the one it hates most
   if (src && src.id && typeof groupOf === 'function' && groupOf(src)) {
-    m.cThr = m.cThr || {}; m.cThr[src.id] = (m.cThr[src.id] || 0) + v * (grpRole(src) === 'tank' ? 1.8 : 1);
+    m.cThr = m.cThr || {}; m.cThr[src.id] = (m.cThr[src.id] || 0) + v * (grpRole(src) === 'tank' ? tankThreatMul(src) : 1);
     const cur = m.tgt;
     if (cur && cur !== src && m.st === 'chase' && cur.pos && cur.pos.map === src.pos.map && m.cThr[src.id] > (m.cThr[cur.id] || 0) * 1.1) m.tgt = src;
     m.charThreat = m.tgt && m.tgt.id ? m.cThr[m.tgt.id] || 0 : m.cThr[src.id]; return;
@@ -574,7 +577,7 @@ function totemStep(c, dt) {
   if (t.until < G.gameTime) { r.totemDmg = null; return; }
   const m = r.tgt; if (!m || m.st === 'dead' || !r.threats.length) return;
   t.t += dt; if (t.t < t.every) return; t.t = 0;
-  spellHit(c, { n: t.name, sc: 2, fam: [11, 0] }, { lo: t.v * 0.9, hi: t.v * 1.1, coef: 0.08 }, m);
+  spellHit(c, { n: t.name, sc: 2, fam: [11, 0] }, { lo: t.v * 0.9, hi: t.v * 1.1, coef: 0.08 }, m, { noThreat: true });
 }
 
 /* melee swings of paladins and shamans: seals and weapon imbues */

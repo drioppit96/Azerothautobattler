@@ -761,6 +761,7 @@ function fightStep(c, m, dt) {
     if (typeof dgStraight === 'function' && isDungeonMap(c.pos.map) && !dgStraight(c.pos.map, c.pos, m)) { goTo(c, m.x, m.y, want - 0.5, m.z); if (r.blocked) { r.blocked = false; r.mv = null; } return; }      // a wall between: around it
     const step = Math.min(d - want + 0.5, charSpeed(c) * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return;
   }
+  if (typeof groupThreatHold === 'function' && groupThreatHold(c, m)) { if (r.cast && r.cast.tgt === m) r.cast = null; return; }          // too close to the tank's threat: hold back, stop the spell (group.js)
   useAbilities(c, m);
   if (m.hp <= 0 || m.st === 'dead' || r.cast) return;
   if (d > MELEE_RANGE + 0.5) { if (c.cls !== 1) rangedStep(c, m, dt, d); return; }
@@ -1009,6 +1010,7 @@ function updateChar(c, dt) {
   regenStep(c, dt);
   if (c.level >= 40 && typeof ridingAuto === 'function') { ridingAuto(c); classMountNews(c); }          // riding and the mount (mounts.js)
   if (typeof trailStep === 'function' && isLeader(c)) trailStep(c);          // group.js: the way the leader walked (dungeons)
+  if (typeof dgUnstick === 'function' && !r.ghost && isDungeonMap(c.pos.map)) dgUnstick(c);          // dungeons.js: never left standing in a wall
   if (r.charging) { chargeStep(c, dt); return; }
   if (c.cls === 4) stealthStep(c);
   if (typeof charCcStep === 'function' && charCcStep(c, dt)) return;           // stunned or feared by a creature's spell
@@ -1021,6 +1023,7 @@ function updateChar(c, dt) {
   if (dg.length) { fleeStep(c, dt, dg); return; }
   if (c.pet || c.cls === 9) petStep(c, dt);
   if (r.party) { partyStep(c, dt); if (r.partyQ) groupQuestPartyStep(c, threats); }
+  if (r.cast && r.cast.tgt && r.cast.tgt.st === 'chase' && r.cast.tgt !== c && !r.cast.tgt.id && typeof groupThreatHold === 'function' && groupThreatHold(c, r.cast.tgt)) r.cast = null;          // an attack spell that would pull it off the tank: stopped
   if (r.cast && castStep(c, dt)) { if (threats.length && (!r.tgt || r.tgt.st === 'dead')) r.tgt = threats[0]; return; }
   if (r.fleeing) { r.fleeing = null; r.mv = null; const o = c.order; if (o && o.type === 'travel') replanTravel(c, o); }
   if (r.tame && threats.length && typeof petTameFight === 'function' && petTameFight(c)) return;     // the beast being tamed attacks: keep taming

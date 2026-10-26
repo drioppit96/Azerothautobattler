@@ -185,6 +185,7 @@ function tacUse(c, x, n, sp, who, g) {
   if (offensive) mob = g === 'Enemy' ? who : tgt;
   else if (friendly && g === 'Ally') ally = who.self ? null : who;
   if (offensive && !mob && !area) return null;
+  if (offensive && mob && mob.st && typeof groupThreatHold === 'function' && groupThreatHold(c, mob)) return null;          // it would pull that one off the tank (group.js)
   // what the game itself asks (windows, combo points, one of a kind) - and is it worth it
   if (!tacWorth(c, x, n, sp, mob, ally, area, g)) return null;
   if (area && !safeForAoe(c)) return null;
