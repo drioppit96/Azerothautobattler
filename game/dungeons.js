@@ -498,7 +498,7 @@ function dungeonRunTier(c, d, o) {
 function enterDungeon(c, d, o) {
   const r = rt(c); const e = d.enter[o.wing || 0] || d.enter[0]; if (!e) { log('No way into ' + d.name + '.'); c.order = null; return; }
   // a fresh instance: every creature back in place
-  const W = ensureWorld(d.map); for (const m of W.list) { initMob(m); m.gThr = null; } W.dead = []; W.active.clear();
+  const W = ensureWorld(d.map); for (const m of W.list) { initMob(m); m.gThr = null; } W.dead = []; W.active.clear(); dungeonGate(W);
   c.pos = { map: d.map, x: e.x, y: e.y, z: e.z, o: c.pos.o };
   r.mv = null; r.tgt = null; r.threats = []; r.danger = []; r.resting = false; r.interact = null;
   if (o.group) makeParty(c, d); else r.party = null;
@@ -928,7 +928,19 @@ function dungeonKill(c, m) {
   let o = c.order;
   if ((!o || o.type !== 'dungeon') && typeof groupOf === 'function' && groupOf(c)) { const L = groupLeader(groupOf(c)); o = L && L.order; }      // a group member's kill counts for the run
   if (!o || o.type !== 'dungeon') return;
-  o.kills++; const d = dungeonByMap(o.map); if (d && d.bosses.some((b) => b.e === m.e)) { o.bossKills++; log('*** ' + (m.info ? m.info[1] : 'Boss') + ' defeated! ***'); fx(m.x, m.y, 'BOSS DEFEATED', '#ffd23a'); }
+  o.kills++; const d = dungeonByMap(o.map); if (d && d.bosses.some((b) => b.e === m.e)) { o.bossKills++; log('*** ' + (m.info ? m.info[1] : 'Boss') + ' defeated! ***'); fx(m.x, m.y, 'BOSS DEFEATED', '#ffd23a'); dungeonUngate(d); }
+}
+/* bosses that come only when every other boss is dead ("after": "bosses" - Mutanus the Devourer, no escort): out of the
+   instance until then (counted as gone), then they appear at their place */
+function dungeonGate(W) {
+  const d = dungeonByMap(W.id); if (!d) return; const g = new Set(d.bosses.filter((b) => b.after).map((b) => b.e)); if (!g.size) return;
+  for (const m of W.list) if (g.has(m.e)) { m.st = 'dead'; m.hp = 0; m.respAt = Infinity; m.deadAt = -1e9; m.gated = true; m.skinned = true; W.active.delete(m); }
+}
+function dungeonUngate(d) {
+  const W = ensureWorld(d.map); const late = d.bosses.filter((b) => b.after); if (!late.length) return;
+  const ids = new Set(d.bosses.filter((b) => !b.after).map((b) => b.e));
+  if (W.list.some((m) => ids.has(m.e) && m.st !== 'dead' && !m.unreach)) return;          // not yet: another boss is alive
+  for (const m of W.list) if (m.gated) { initMob(m); m.gated = false; W.dead = W.dead.filter((x) => x !== m); log('*** ' + (m.info ? m.info[1] : 'A boss') + ' awakens! ***'); fx(m.x, m.y, (m.info ? m.info[1] : 'Boss') + ' awakens!', '#ff7a3a'); }
 }
 /* the character died inside: everyone runs back from the graveyard at the entrance and goes in again */
 function dungeonDeath(c) {

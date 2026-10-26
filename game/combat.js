@@ -53,6 +53,7 @@ function ensureWorld(mapId) {
     const pool = !dgMap && (rank === 2 || rank === 4) ? lst : null; if (pool) lst = [pool[(Math.random() * pool.length) | 0]];
     for (const sp of lst) makeMob(W, e, sp, pool);
   }
+  if (dgMap && typeof dungeonGate === 'function') dungeonGate(W);          // a boss that comes only when the others are dead (Mutanus)
   return W;
 }
 function makeMob(W, e, s, pool) {

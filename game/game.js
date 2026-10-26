@@ -83,7 +83,7 @@ function levelColor(mob, lvl) {
   return '#9a9a9a';
 }
 /* the version of the game files (shown in the log at the start: after an update it must be the new one) */
-const GAME_VERSION = '2026-10-26 a (Wailing Caverns walls and route)';
+const GAME_VERSION = '2026-10-26 b (Lady Anacondra, Mutanus, Kresh hostile)';
 /* data files: always asked fresh from the server (no old copies from the browser cache after an update) */
 async function J(url) {
   const r = await fetch(url, { cache: 'no-cache' });
@@ -1002,6 +1002,22 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 
+/* gamedata/dungeon_extra.json: creatures (spawns, stats, loot, names), hostility and dungeon bosses the extracted data
+   does not have or has wrong - merged in at load, so a new extraction does not wipe them */
+function applyDungeonExtra(X) {
+  if (!X) return; const Ld = G.d.loot;
+  for (const e in X.creatures || {}) {
+    const c = X.creatures[e];
+    if (c.spawns) G.d.spawns.spawns[e] = (G.d.spawns.spawns[e] || []).filter((s) => !c.spawns.some((t) => t[0] === s[0] && Math.hypot(t[1] - s[1], t[2] - s[2]) < 3)).concat(c.spawns);
+    if (c.stats && G.d.cstats) G.d.cstats[e] = c.stats;
+    if (c.loot && Ld) Ld.creatures[e] = c.loot;
+    if (c.mob && G.d.dungeons) { const ms = G.d.dungeons.mobs || (G.d.dungeons.mobs = []); if (!ms.some((m) => m[0] === +e)) ms.push(c.mob); }
+  }
+  if (Ld && X.loot_tables) { for (const k in X.loot_tables.creature || {}) Ld.tables.creature[k] = X.loot_tables.creature[k]; if (Ld.raw && Ld.raw.creature) for (const k in X.loot_tables.raw_creature || {}) Ld.raw.creature[k] = X.loot_tables.raw_creature[k]; }
+  if (Ld) for (const k in X.loot_items || {}) if (!Ld.items[k]) Ld.items[k] = X.loot_items[k];
+  for (const e in X.hostility || {}) G.d.hostility.creatures[e] = X.hostility[e];
+  if (G.d.dungeons) for (const map in X.bosses || {}) { const d = G.d.dungeons.dungeons.find((x) => x.map === +map); if (!d) continue; for (const b of X.bosses[map]) { const i = d.bosses.findIndex((x) => x.e === b.e); if (i >= 0) d.bosses[i] = Object.assign({}, d.bosses[i], b); else d.bosses.push(b); } }
+}
 /* ------------------------------------------------------------------- boot */
 async function boot() {
   try {
@@ -1030,6 +1046,7 @@ async function boot() {
     try { G.d.talents = await J('../gamedata/talents.json'); } catch (e) { G.d.talents = null; console.warn('talents.json not found - no talents'); }
     try { G.d.go = await J('../gamedata/go_data.json'); } catch (e) { G.d.go = null; console.warn('go_data.json not found - quests with objects are not automated (run: py build_gamedata.py goquest)'); }
     if (typeof looksInit === 'function') looksInit();          // character looks (looks.js), in the background
+    try { applyDungeonExtra(await J('../gamedata/dungeon_extra.json')); } catch (e) { /* no additions */ }          // creatures and changes the extracted data lacks (Lady Anacondra, Mutanus, Kresh hostile)
     G.d.graveyards = DATA.graveyards;
     G.spawnList = Object.entries(G.d.spawns.spawns).map(([e, l]) => [+e, l]);
     G.spawnMap = new Map(G.spawnList);
