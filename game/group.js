@@ -171,10 +171,10 @@ function groupThreatHold(c, m) {
   if (!m || !m.cThr || m.tgt === c || grpRole(c) === 'tank' || !groupOf(c)) return false;
   const tk = groupTank(c); if (!tk || m.tgt !== tk) return false;          // no tank on it: nothing to keep
   const mine = m.cThr[c.id] || 0, tank = m.cThr[tk.id] || 0; const melee = Math.hypot(m.x - c.pos.x, m.y - c.pos.y) <= MELEE_RANGE + 1;
-  // what it is about to add: about 3 seconds of its damage (a big spell, a shot, a few swings) - it waits until the
+  // what it is about to add: about 1.5 seconds of its damage (a big spell, a shot, a swing) - it waits until the
   // tank has that much of a lead (at the start of a pull the tank has hardly any yet)
   const r0 = rt(c); if (!r0.dpsEst || G.gameTime > r0.dpsEst.t) r0.dpsEst = { t: G.gameTime + 10, v: typeof classDps === 'function' ? classDps(c, charStats(c), 0.25) : 20 };
-  if (mine + r0.dpsEst.v * 3 < tank * (melee ? 1.1 : 1.3) * 0.9) return false;
+  if (mine + r0.dpsEst.v * 1.5 < tank * (melee ? 1.1 : 1.3) * 0.9) return false;
   const r = rt(c); const dr = THREAT_DROP[c.cls];
   if (dr && c.known && c.known[dr[0]] && !((r.cd[dr[0]] || 0) > G.gameTime) && (c.cls !== 11 || c.form === 'cat')) {
     r.cd[dr[0]] = G.gameTime + dr[1]; for (const x of groupThreats(c)) if (x.cThr && x.cThr[c.id]) x.cThr[c.id] *= dr[2];

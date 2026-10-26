@@ -761,7 +761,9 @@ function fightStep(c, m, dt) {
     if (typeof dgStraight === 'function' && isDungeonMap(c.pos.map) && !dgStraight(c.pos.map, c.pos, m)) { goTo(c, m.x, m.y, want - 0.5, m.z); if (r.blocked) { r.blocked = false; r.mv = null; } return; }      // a wall between: around it
     const step = Math.min(d - want + 0.5, charSpeed(c) * dt); c.pos.x += dx / d * step; c.pos.y += dy / d * step; return;
   }
-  if (typeof groupThreatHold === 'function' && groupThreatHold(c, m)) { if (r.cast && r.cast.tgt === m) r.cast = null; return; }          // too close to the tank's threat: hold back, stop the spell (group.js)
+  // too close to the tank's threat: no attacks on it (the spell at it stopped) - heals, buffs and defensive abilities
+  // go on (the tactics hold back only their attacks on it) (group.js)
+  if (typeof groupThreatHold === 'function' && groupThreatHold(c, m)) { if (r.cast && r.cast.tgt === m) r.cast = null; if (typeof tacActive === 'function' && tacActive(c)) useAbilities(c, m); return; }
   useAbilities(c, m);
   if (m.hp <= 0 || m.st === 'dead' || r.cast) return;
   if (d > MELEE_RANGE + 0.5) { if (c.cls !== 1) rangedStep(c, m, dt, d); return; }
